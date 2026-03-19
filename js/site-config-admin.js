@@ -17,6 +17,7 @@ const DEFAULT_MENU = [
   { id: "rpa",       label: "RPA Köşesi",    url: "rpa.html",          icon: "🤖", visible: true, order: 3 },
   { id: "linkedin",  label: "LinkedIn Aracı",url: "linkedin-tool.html",icon: "💼", visible: true, order: 4 },
   { id: "dashboard", label: "Araçlarım",     url: "dashboard.html",    icon: "🛠️", visible: true, order: 5 },
+  { id: "iletisim",  label: "İletişim",      url: "iletisim.html",     icon: "📬", visible: true, order: 6 },
 ];
 
 const DEFAULT_TOOLS = [
