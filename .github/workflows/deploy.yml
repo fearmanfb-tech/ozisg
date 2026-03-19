@@ -1,0 +1,25 @@
+name: Deploy to cPanel via FTP
+
+on:
+  push:
+    branches:
+      - master # Eğer varsayılan branch'iniz main ise burayı main yapın.
+
+jobs:
+  web-deploy:
+    name: 🎉 Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
+      
+      - name: 📂 Sync files via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # Dosyaların cPanel'de yükleneceği klasör. Genellikle public_html'dir.
+          # Eğer ana dizine yüklenmesini istiyorsanız burayı public_html/ yapın.
+          # Eğer bir alt klasöre yüklenecekse public_html/ozisg/ gibi düzenleyin.
+          server-dir: public_html/
