@@ -71,6 +71,8 @@ window.initSiteConfigAdmin = async function() {
   renderFooter();
   renderPageDesign();
   renderHomeSections();
+  renderSeo();
+  renderCustomCode();
 };
 
 // ══════════════════════════════════════════════
@@ -242,8 +244,93 @@ function renderGorunum() {
         </div>
       </div>
     </div>
+    <!-- Dark/Light mode ayrı renk ayarları -->
+    <hr style="border-color:var(--border-subtle);margin:var(--space-5) 0;" />
+    <div style="margin-bottom:var(--space-3);">
+      <label class="form-label" style="font-size:var(--text-sm);">🌗 Mod Bazlı Renk Ayarları</label>
+      <p style="font-size:var(--text-xs);color:var(--text-muted);margin-top:2px;">Light ve Dark modda farklı ana renk ve başlık gradyanı kullanabilirsin.</p>
+    </div>
+    <!-- Mod seçici sekmeler -->
+    <div style="display:flex;gap:4px;margin-bottom:var(--space-4);border-bottom:2px solid var(--border-color);">
+      <button id="mode-tab-light" onclick="switchModeTab('light')"
+        style="padding:6px 16px;border:none;border-bottom:2px solid var(--accent-primary);background:none;cursor:pointer;font-weight:600;color:var(--accent-primary);margin-bottom:-2px;font-size:var(--text-sm);">☀️ Light</button>
+      <button id="mode-tab-dark" onclick="switchModeTab('dark')"
+        style="padding:6px 16px;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;font-weight:600;color:var(--text-muted);margin-bottom:-2px;font-size:var(--text-sm);">🌙 Dark</button>
+    </div>
+
+    <!-- Light mode ayarları -->
+    <div id="mode-panel-light">
+      <div style="display:flex;gap:var(--space-4);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--space-4);">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" style="font-size:var(--text-xs);">Ana Renk (Light)</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="color" id="cfg-light-primary" value="${cfg.theme?.light?.primaryColor||cfg.theme?.primaryColor||"#2563eb"}"
+              style="width:44px;height:36px;border:none;cursor:pointer;border-radius:4px;"
+              oninput="document.getElementById('cfg-light-primary-hex').value=this.value;" />
+            <input type="text" id="cfg-light-primary-hex" class="form-control" style="width:90px;font-family:monospace;font-size:var(--text-xs);"
+              value="${cfg.theme?.light?.primaryColor||cfg.theme?.primaryColor||"#2563eb"}"
+              oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))document.getElementById('cfg-light-primary').value=this.value;" />
+          </div>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" style="font-size:var(--text-xs);">Başlık Başlangıç</label>
+          <input type="color" id="cfg-light-header-from" value="${cfg.theme?.light?.headerFrom||cfg.theme?.headerGradientFrom||"#0f172a"}"
+            style="width:44px;height:36px;border:none;cursor:pointer;border-radius:4px;" />
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" style="font-size:var(--text-xs);">Başlık Bitiş</label>
+          <input type="color" id="cfg-light-header-to" value="${cfg.theme?.light?.headerTo||cfg.theme?.headerGradientTo||"#1e3a5f"}"
+            style="width:44px;height:36px;border:none;cursor:pointer;border-radius:4px;" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Dark mode ayarları -->
+    <div id="mode-panel-dark" style="display:none;">
+      <div style="display:flex;gap:var(--space-4);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--space-4);">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" style="font-size:var(--text-xs);">Ana Renk (Dark)</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="color" id="cfg-dark-primary" value="${cfg.theme?.dark?.primaryColor||"#3b82f6"}"
+              style="width:44px;height:36px;border:none;cursor:pointer;border-radius:4px;"
+              oninput="document.getElementById('cfg-dark-primary-hex').value=this.value;" />
+            <input type="text" id="cfg-dark-primary-hex" class="form-control" style="width:90px;font-family:monospace;font-size:var(--text-xs);"
+              value="${cfg.theme?.dark?.primaryColor||"#3b82f6"}"
+              oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))document.getElementById('cfg-dark-primary').value=this.value;" />
+          </div>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" style="font-size:var(--text-xs);">Başlık Başlangıç</label>
+          <input type="color" id="cfg-dark-header-from" value="${cfg.theme?.dark?.headerFrom||"#0f172a"}"
+            style="width:44px;height:36px;border:none;cursor:pointer;border-radius:4px;" />
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label" style="font-size:var(--text-xs);">Başlık Bitiş</label>
+          <input type="color" id="cfg-dark-header-to" value="${cfg.theme?.dark?.headerTo||"#1e3a5f"}"
+            style="width:44px;height:36px;border:none;cursor:pointer;border-radius:4px;" />
+        </div>
+      </div>
+    </div>
+
     <button class="btn btn-primary" style="width:100%;" onclick="saveGorunum()">💾 Görünümü Kaydet</button>`;
 }
+
+window.switchModeTab = function(mode) {
+  document.getElementById("mode-panel-light").style.display = mode === "light" ? "" : "none";
+  document.getElementById("mode-panel-dark").style.display  = mode === "dark"  ? "" : "none";
+  const lightBtn = document.getElementById("mode-tab-light");
+  const darkBtn  = document.getElementById("mode-tab-dark");
+  if (lightBtn) {
+    lightBtn.style.borderBottomColor = mode === "light" ? "var(--accent-primary)" : "transparent";
+    lightBtn.style.color             = mode === "light" ? "var(--accent-primary)" : "var(--text-muted)";
+    lightBtn.style.fontWeight        = mode === "light" ? "600" : "400";
+  }
+  if (darkBtn) {
+    darkBtn.style.borderBottomColor  = mode === "dark"  ? "var(--accent-primary)" : "transparent";
+    darkBtn.style.color              = mode === "dark"  ? "var(--accent-primary)" : "var(--text-muted)";
+    darkBtn.style.fontWeight         = mode === "dark"  ? "600" : "400";
+  }
+};
 
 window.saveGorunum = async function() {
   const ok = await saveSection({
@@ -252,6 +339,16 @@ window.saveGorunum = async function() {
       defaultMode:         document.querySelector('input[name="cfg-theme-mode"]:checked')?.value || "light",
       headerGradientFrom:  document.getElementById("cfg-headerFrom").value,
       headerGradientTo:    document.getElementById("cfg-headerTo").value,
+      light: {
+        primaryColor: document.getElementById("cfg-light-primary")?.value      || null,
+        headerFrom:   document.getElementById("cfg-light-header-from")?.value  || null,
+        headerTo:     document.getElementById("cfg-light-header-to")?.value    || null,
+      },
+      dark: {
+        primaryColor: document.getElementById("cfg-dark-primary")?.value       || null,
+        headerFrom:   document.getElementById("cfg-dark-header-from")?.value   || null,
+        headerTo:     document.getElementById("cfg-dark-header-to")?.value     || null,
+      },
     }
   });
   if (ok) { await loadConfig(); renderGorunum(); }
@@ -1061,6 +1158,180 @@ window.saveHomeSections = async function() {
   });
   const ok = await saveSection({ homeSections });
   if (ok) { await loadConfig(); renderHomeSections(); }
+};
+
+// ══════════════════════════════════════════════
+// 11. SEO & ANALİTİK
+// ══════════════════════════════════════════════
+function renderSeo() {
+  const el = document.getElementById("site-seo-form");
+  if (!el) return;
+  const s = cfg.seo || {};
+  el.innerHTML = `
+    <p style="font-size:var(--text-xs);color:var(--text-muted);margin-bottom:var(--space-4);">
+      Arama motorları ve sosyal medya paylaşımları için temel SEO ayarları.
+      Boş bırakılan alanlar sayfa başlığını kullanır.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+
+      <div class="form-group">
+        <label class="form-label">Varsayılan Site Başlığı</label>
+        <input type="text" id="cfg-seo-title" class="form-control"
+          value="${esc(s.defaultTitle||"")}" placeholder="ozisg.com" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Başlık Ayırıcı <span style="font-size:var(--text-xs);color:var(--text-muted);">(Sayfa | Site)</span></label>
+        <input type="text" id="cfg-seo-separator" class="form-control"
+          value="${esc(s.titleSeparator||"")}" placeholder=" | " style="max-width:80px;" />
+      </div>
+
+      <div class="form-group" style="grid-column:1/-1;">
+        <label class="form-label">Meta Açıklama</label>
+        <textarea id="cfg-seo-description" class="form-control" rows="2"
+          placeholder="İSG uzmanları için dijital araçlar ve otomasyon içerikleri.">${esc(s.defaultDescription||"")}</textarea>
+        <span id="seo-desc-count" style="font-size:10px;color:var(--text-muted);">0 / 160 karakter</span>
+      </div>
+
+      <div class="form-group" style="grid-column:1/-1;">
+        <label class="form-label">Anahtar Kelimeler <span style="font-size:var(--text-xs);color:var(--text-muted);">(virgülle ayır)</span></label>
+        <input type="text" id="cfg-seo-keywords" class="form-control"
+          value="${esc(s.keywords||"")}" placeholder="isg, iş güvenliği, risk analizi, rpa" />
+      </div>
+
+      <div class="form-group" style="grid-column:1/-1;">
+        <label class="form-label">OG Görsel URL <span style="font-size:var(--text-xs);color:var(--text-muted);">(sosyal medya paylaşım görseli)</span></label>
+        <input type="url" id="cfg-seo-ogimage" class="form-control"
+          value="${esc(s.ogImage||"")}" placeholder="https://ozisg.com/img/og-image.jpg" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Google Analytics ID</label>
+        <input type="text" id="cfg-seo-ga" class="form-control"
+          value="${esc(s.googleAnalyticsId||"")}" placeholder="G-XXXXXXXXXX" style="font-family:monospace;" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Google Tag Manager ID</label>
+        <input type="text" id="cfg-seo-gtm" class="form-control"
+          value="${esc(s.googleTagManagerId||"")}" placeholder="GTM-XXXXXXX" style="font-family:monospace;" />
+      </div>
+
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:var(--space-4);" onclick="saveSeo()">💾 SEO Ayarlarını Kaydet</button>`;
+
+  // Açıklama karakter sayacı
+  const desc = document.getElementById("cfg-seo-description");
+  const count = document.getElementById("seo-desc-count");
+  if (desc && count) {
+    const update = () => {
+      const len = desc.value.length;
+      count.textContent = `${len} / 160 karakter`;
+      count.style.color = len > 160 ? "var(--accent-danger)" : len > 120 ? "var(--accent-warning)" : "var(--text-muted)";
+    };
+    update();
+    desc.addEventListener("input", update);
+  }
+}
+
+window.saveSeo = async function() {
+  const ok = await saveSection({
+    seo: {
+      defaultTitle:      document.getElementById("cfg-seo-title").value.trim()       || null,
+      titleSeparator:    document.getElementById("cfg-seo-separator").value           || " | ",
+      defaultDescription:document.getElementById("cfg-seo-description").value.trim() || null,
+      keywords:          document.getElementById("cfg-seo-keywords").value.trim()     || null,
+      ogImage:           document.getElementById("cfg-seo-ogimage").value.trim()      || null,
+      googleAnalyticsId: document.getElementById("cfg-seo-ga").value.trim()          || null,
+      googleTagManagerId:document.getElementById("cfg-seo-gtm").value.trim()         || null,
+    }
+  });
+  if (ok) { await loadConfig(); renderSeo(); }
+};
+
+// ══════════════════════════════════════════════
+// 12. ÖZEL CSS
+// ══════════════════════════════════════════════
+function renderCustomCode() {
+  const el = document.getElementById("site-customcode-form");
+  if (!el) return;
+  const c = cfg.customCode || {};
+  el.innerHTML = `
+    <p style="font-size:var(--text-xs);color:var(--text-muted);margin-bottom:var(--space-3);">
+      Siteye özel CSS kuralları ekleyin. Tüm sayfalarda uygulanır.
+      <strong style="color:var(--accent-warning);">Sadece CSS yazın</strong> — script, event ve URL import'ları güvenlik nedeniyle engellenir.
+    </p>
+
+    <div class="form-group">
+      <label class="form-label">
+        Özel CSS
+        <span id="css-validation-msg" style="margin-left:8px;font-size:10px;font-weight:400;"></span>
+      </label>
+      <div style="position:relative;">
+        <textarea id="cfg-custom-css" class="form-control" rows="14"
+          style="font-family:'Courier New',monospace;font-size:0.8rem;line-height:1.6;resize:vertical;"
+          placeholder="/* Örnek: buton renklerini değiştir */\n.btn-primary {\n  background: #7c3aed;\n  border-color: #7c3aed;\n}"
+          oninput="validateCustomCss(this)">${esc(c.headCSS||"")}</textarea>
+        <div style="position:absolute;bottom:8px;right:10px;font-size:10px;color:var(--text-muted);" id="css-char-count">
+          ${(c.headCSS||"").length} karakter
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--bg-surface-2);border-radius:var(--border-radius);padding:var(--space-3);margin-bottom:var(--space-4);font-size:var(--text-xs);color:var(--text-muted);">
+      <strong>💡 Örnekler:</strong><br>
+      <code style="display:block;margin-top:4px;">:root { --accent-primary: #7c3aed; }</code> — Ana rengi değiştir<br>
+      <code style="display:block;margin-top:2px;">.hero { background: linear-gradient(135deg, #1e1b4b, #3730a3); }</code> — Hero arka planı<br>
+      <code style="display:block;margin-top:2px;">.card { border-radius: 16px; }</code> — Kart köşelerini yuvarlat
+    </div>
+
+    <div style="display:flex;gap:var(--space-3);">
+      <button class="btn btn-primary" style="flex:1;" onclick="saveCustomCode()">💾 CSS Kaydet</button>
+      <button class="btn btn-ghost btn-sm" onclick="if(confirm('Özel CSS silinsin mi?')){document.getElementById('cfg-custom-css').value='';saveCustomCode();}">🗑️ Temizle</button>
+    </div>`;
+}
+
+window.validateCustomCss = function(textarea) {
+  const msg   = document.getElementById("css-validation-msg");
+  const count = document.getElementById("css-char-count");
+  const val   = textarea.value;
+  if (count) count.textContent = val.length + " karakter";
+
+  // Tehlikeli pattern'ler
+  const dangers = [
+    { re: /<script/i,            label: "script etiketi" },
+    { re: /javascript\s*:/i,     label: "javascript: protokolü" },
+    { re: /expression\s*\(/i,    label: "CSS expression()" },
+    { re: /url\s*\(\s*data:/i,   label: "data: URL" },
+    { re: /@import/i,            label: "@import kuralı" },
+    { re: /behavior\s*:/i,       label: "behavior özelliği" },
+  ];
+  const found = dangers.find(d => d.re.test(val));
+  if (msg) {
+    if (found) {
+      msg.textContent = `⛔ Engellendi: ${found.label}`;
+      msg.style.color = "var(--accent-danger)";
+      textarea.style.borderColor = "var(--accent-danger)";
+    } else {
+      msg.textContent = val.length > 0 ? "✅ Geçerli" : "";
+      msg.style.color = "var(--accent-success)";
+      textarea.style.borderColor = "";
+    }
+  }
+};
+
+window.saveCustomCode = async function() {
+  const cssVal = document.getElementById("cfg-custom-css")?.value || "";
+
+  // Güvenlik kontrolü — tehlikeli içerik varsa kaydetme
+  const dangers = [/<script/i, /javascript\s*:/i, /expression\s*\(/i, /url\s*\(\s*data:/i, /@import/i, /behavior\s*:/i];
+  if (dangers.some(re => re.test(cssVal))) {
+    showToast("Güvenli olmayan CSS engellendi. Lütfen düzeltin.", "error");
+    return;
+  }
+
+  const ok = await saveSection({ customCode: { headCSS: cssVal.trim() || null } });
+  if (ok) { await loadConfig(); renderCustomCode(); }
 };
 
 // ══════════════════════════════════════════════

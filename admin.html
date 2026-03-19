@@ -117,9 +117,10 @@
         <button class="admin-tab" data-tab="users"       onclick="switchTab('users')">👥 Kullanıcılar</button>
         <button class="admin-tab" data-tab="permissions" onclick="switchTab('permissions')">🔑 İzinler</button>
         <button class="admin-tab" data-tab="invite"      onclick="switchTab('invite')">✉️ Davet Gönder</button>
-        <button id="blogTabBtn" class="admin-tab" data-tab="blog" onclick="switchTab('blog')">✍️ Blog</button>
-        <button class="admin-tab" data-tab="logs"        onclick="switchTab('logs')">📋 Aktivite</button>
-        <button class="admin-tab" data-tab="site"        onclick="switchTab('site')">🌐 Site</button>
+        <button id="blogTabBtn" class="admin-tab" data-tab="blog"       onclick="switchTab('blog')">✍️ Blog</button>
+        <button class="admin-tab" data-tab="categories" onclick="switchTab('categories')">🏷️ Kategoriler</button>
+        <button class="admin-tab" data-tab="logs"       onclick="switchTab('logs')">📋 Aktivite</button>
+        <button class="admin-tab" data-tab="site"       onclick="switchTab('site')">🌐 Site</button>
       </div>
 
       <!-- TAB: Onay Bekleyenler -->
@@ -220,6 +221,11 @@
         </div>
       </div>
 
+      <!-- TAB: Kategoriler -->
+      <div id="tab-categories" class="tab-content" style="display:none;">
+        <div id="categories-panel"></div>
+      </div>
+
       <!-- TAB: Blog -->
       <div id="tab-blog" class="tab-content" style="display:none;">
 
@@ -301,10 +307,22 @@
             <div id="site-defaults-form"><div class="spinner"></div></div>
           </div>
 
-          <!-- 7. Footer & SEO -->
+          <!-- 7. Footer -->
           <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔗 Footer & SEO</h3>
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔗 Footer</h3>
             <div id="site-footer-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 10. SEO & Analitik -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔍 SEO & Analitik</h3>
+            <div id="site-seo-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 11. Özel Kod (Custom CSS) -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🖌️ Özel CSS</h3>
+            <div id="site-customcode-form"><div class="spinner"></div></div>
           </div>
 
           <!-- 8. Sayfa Tasarımı -->
@@ -550,5 +568,6 @@
   <script type="module" src="js/app.js"></script>
   <script type="module" src="js/admin.js"></script>
   <script type="module" src="js/site-config-admin.js"></script>
+  <script type="module" src="js/categories-admin.js"></script>
 </body>
 </html>

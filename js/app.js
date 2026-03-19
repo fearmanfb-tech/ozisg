@@ -578,15 +578,41 @@ async function applySiteConfig() {
   const brandNameEl = document.querySelector(".navbar-brand-name");
   if (brandNameEl && cfg.siteName) brandNameEl.textContent = cfg.siteName;
 
-  // ── Primary Renk ────────────────────────────
-  if (cfg.theme?.primaryColor) {
-    document.documentElement.style.setProperty("--accent-primary", cfg.theme.primaryColor);
+  // ── Mod Bazlı Renk Uygulayıcı ───────────────
+  function applyThemeColors(theme) {
+    if (!theme) return;
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const modeColors = isDark ? theme.dark : theme.light;
+
+    // Önce genel primary rengi uygula (fallback)
+    if (theme.primaryColor) {
+      document.documentElement.style.setProperty("--accent-primary", theme.primaryColor);
+    }
+    if (theme.headerGradientFrom) {
+      document.documentElement.style.setProperty("--navy-900", theme.headerGradientFrom);
+      document.documentElement.style.setProperty("--navy-700", theme.headerGradientTo || theme.headerGradientFrom);
+    }
+
+    // Mod'a özel renkler varsa üzerine yaz
+    if (modeColors?.primaryColor) {
+      document.documentElement.style.setProperty("--accent-primary", modeColors.primaryColor);
+    }
+    if (modeColors?.headerFrom) {
+      document.documentElement.style.setProperty("--navy-900", modeColors.headerFrom);
+      document.documentElement.style.setProperty("--navy-700", modeColors.headerTo || modeColors.headerFrom);
+    }
   }
 
-  // ── Başlık Gradyanı ─────────────────────────
-  if (cfg.theme?.headerGradientFrom) {
-    document.documentElement.style.setProperty("--navy-900", cfg.theme.headerGradientFrom);
-    document.documentElement.style.setProperty("--navy-700", cfg.theme.headerGradientTo || cfg.theme.headerGradientFrom);
+  applyThemeColors(cfg.theme);
+
+  // Tema toggle'a da bağla — değiştiğinde mod renklerini yeniden uygula
+  const themeToggleBtn = document.getElementById("themeToggle");
+  if (themeToggleBtn && cfg.theme && !themeToggleBtn.dataset.colorBound) {
+    themeToggleBtn.dataset.colorBound = "1";
+    themeToggleBtn.addEventListener("click", () => {
+      // Toggle biraz bekledikten sonra (dom güncellendikten sonra) uygula
+      requestAnimationFrame(() => applyThemeColors(cfg.theme));
+    });
   }
 
   // ── Favicon ─────────────────────────────────
@@ -735,6 +761,66 @@ async function applySiteConfig() {
       });
       if (html) footerLinks.innerHTML = html;
     }
+  }
+
+  // ── SEO Meta Etiketleri ──────────────────────
+  if (cfg.seo && !isAdmin) {
+    const s = cfg.seo;
+    const setMeta = (name, content, attr = "name") => {
+      if (!content) return;
+      let el = document.querySelector(`meta[${attr}="${name}"]`);
+      if (!el) { el = document.createElement("meta"); el.setAttribute(attr, name); document.head.appendChild(el); }
+      el.setAttribute("content", content);
+    };
+
+    if (s.defaultDescription) setMeta("description", s.defaultDescription);
+    if (s.keywords)            setMeta("keywords",    s.keywords);
+
+    if (s.defaultTitle && document.title && !document.title.includes(s.defaultTitle)) {
+      const sep = s.titleSeparator || " | ";
+      document.title = document.title + sep + s.defaultTitle;
+    }
+
+    if (s.defaultDescription) setMeta("og:description", s.defaultDescription, "property");
+    if (s.ogImage)             setMeta("og:image",       s.ogImage,            "property");
+    setMeta("og:title", document.title, "property");
+    setMeta("og:type",  "website",      "property");
+
+    if (s.googleAnalyticsId && !document.getElementById("ga-script")) {
+      const gaSrc = document.createElement("script");
+      gaSrc.id  = "ga-script";
+      gaSrc.src = `https://www.googletagmanager.com/gtag/js?id=${s.googleAnalyticsId}`;
+      gaSrc.async = true;
+      document.head.appendChild(gaSrc);
+      const gaInit = document.createElement("script");
+      gaInit.id = "ga-init";
+      gaInit.textContent = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${s.googleAnalyticsId}');`;
+      document.head.appendChild(gaInit);
+    }
+
+    if (s.googleTagManagerId && !document.getElementById("gtm-script")) {
+      const gtmScript = document.createElement("script");
+      gtmScript.id = "gtm-script";
+      gtmScript.textContent = `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${s.googleTagManagerId}');`;
+      document.head.appendChild(gtmScript);
+    }
+  }
+
+  // ── Özel CSS ─────────────────────────────────
+  if (cfg.customCode?.headCSS) {
+    let styleEl = document.getElementById("ozisg-custom-css");
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = "ozisg-custom-css";
+      document.head.appendChild(styleEl);
+    }
+    let css = cfg.customCode.headCSS;
+    css = css.replace(/<script[\s\S]*?<\/script>/gi, "");
+    css = css.replace(/javascript\s*:/gi, "");
+    css = css.replace(/expression\s*\([^)]*\)/gi, "");
+    css = css.replace(/url\s*\(\s*data:[^)]*\)/gi, "");
+    css = css.replace(/@import[^;]*;/gi, "");
+    styleEl.textContent = css;
   }
 
   // ── Hero İçeriği ─────────────────────────────
