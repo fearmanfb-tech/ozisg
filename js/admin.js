@@ -56,13 +56,16 @@ onAuthStateChanged(auth, async (user) => {
   currentAdmin     = user;
   currentAdminRole = role;
 
-  const badge = document.getElementById("adminRoleBadge");
-  if (badge && role === "superadmin") {
-    badge.textContent = "⭐ Süper Admin";
-    badge.style.cssText = "background:#f97316;color:#fff;padding:4px 14px;border-radius:99px;font-size:var(--text-sm);font-weight:var(--font-semibold);";
-  }
+  ["adminRoleBadge", "adminRoleBadgeMobile"].forEach(id => {
+    const badge = document.getElementById(id);
+    if (badge && role === "superadmin") {
+      badge.textContent = "⭐ Süper Admin";
+      badge.style.cssText = "background:#f97316;color:#fff;padding:4px 14px;border-radius:99px;font-size:.75rem;font-weight:600;";
+    }
+  });
 
   document.getElementById("admin-content").style.display = "block";
+  switchTab("dashboard");
   buildInviteToolsList();
   await Promise.all([loadUsers(), loadPermissions(), loadLogs()]);
 });
@@ -1023,16 +1026,62 @@ window.adminDeletePost = async function(postId, title) {
 // ══════════════════════════════════════════════
 // TAB YÖNETİMİ
 // ══════════════════════════════════════════════
+const TAB_TITLES = {
+  dashboard:   "📊 Genel Bakış",
+  pending:     "⏳ Onay Bekleyenler",
+  users:       "👥 Tüm Kullanıcılar",
+  permissions: "🔑 İzinler",
+  invite:      "✉️ Davet Gönder",
+  blog:        "✍️ Blog Yönetimi",
+  categories:  "🏷️ Kategoriler",
+  forms:       "📬 Formlar",
+  site:        "🌐 Site Ayarları",
+  logs:        "📋 Aktivite Günlüğü",
+};
+
 window.switchTab = function(tab) {
-  document.querySelectorAll(".admin-tab")
-    .forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
+  // ── Sidebar aktif item ───────────────────────
+  document.querySelectorAll(".sidebar-item").forEach(item => {
+    const isActive = item.dataset.sidebar === tab;
+    item.style.borderLeftColor = isActive ? "var(--accent-primary)" : "transparent";
+    item.style.background      = isActive ? "rgba(255,255,255,.1)" : "";
+    item.style.color           = isActive ? "rgba(255,255,255,.95)" : "rgba(255,255,255,.75)";
+  });
+
+  // ── Tab content göster / gizle ───────────────
   document.querySelectorAll(".tab-content")
     .forEach(c => { c.style.display = c.id === `tab-${tab}` ? "block" : "none"; });
 
+  // ── Sayfa başlığını güncelle ─────────────────
+  const titleEl = document.getElementById("admin-area-title");
+  if (titleEl) titleEl.textContent = TAB_TITLES[tab] || tab;
+
+  const mobileTitle = document.getElementById("admin-mobile-title");
+  if (mobileTitle) mobileTitle.textContent = TAB_TITLES[tab] || tab;
+
+  // ── Mobile: sidebar'ı kapat ──────────────────
+  if (window.innerWidth < 769) {
+    const sidebar  = document.getElementById("admin-sidebar");
+    const overlay  = document.getElementById("sidebar-overlay");
+    if (sidebar) sidebar.style.transform = "translateX(-240px)";
+    if (overlay) overlay.style.display   = "none";
+  }
+
+  // ── Veri yükleme ────────────────────────────
   if (tab === "invite") loadInvitations();
   if (tab === "logs")   loadLogs();
   if (tab === "blog")   loadBlogPosts();
   if (tab === "site" && typeof window.initSiteConfigAdmin === "function") window.initSiteConfigAdmin();
+};
+
+// ── Mobil Sidebar Aç/Kapat ───────────────────────
+window.toggleAdminSidebar = function() {
+  const sidebar = document.getElementById("admin-sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  if (!sidebar) return;
+  const isOpen = sidebar.style.transform === "translateX(0px)";
+  sidebar.style.transform = isOpen ? "translateX(-240px)" : "translateX(0px)";
+  if (overlay) overlay.style.display = isOpen ? "none" : "block";
 };
 
 // ══════════════════════════════════════════════
