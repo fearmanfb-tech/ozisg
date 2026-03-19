@@ -1074,6 +1074,16 @@ window.switchTab = function(tab) {
   if (tab === "site" && typeof window.initSiteConfigAdmin === "function") window.initSiteConfigAdmin();
 };
 
+// ── Site Ayarları İç Sekmeleri ───────────────────
+window.switchSiteTab = function(panel) {
+  document.querySelectorAll(".site-panel").forEach(p => { p.style.display = "none"; });
+  document.querySelectorAll(".site-pill").forEach(b => { b.classList.remove("active"); });
+  const panelEl = document.getElementById("sitepanel-" + panel);
+  const pillEl  = document.getElementById("sitePill-" + panel);
+  if (panelEl) panelEl.style.display = "";
+  if (pillEl)  pillEl.classList.add("active");
+};
+
 // ── Mobil Sidebar Aç/Kapat ───────────────────────
 window.toggleAdminSidebar = function() {
   const sidebar = document.getElementById("admin-sidebar");

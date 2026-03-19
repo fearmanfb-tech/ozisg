@@ -62,6 +62,7 @@ async function saveSection(updates) {
 window.initSiteConfigAdmin = async function() {
   await loadConfig();
   renderGenel();
+  renderExtras();
   renderGorunum();
   renderHeroContent();
   renderMenu();
@@ -115,35 +116,7 @@ function renderGenel() {
         <span style="font-size:var(--text-xs);color:var(--text-muted);">Sekme önizlemesi</span>
       </div>
     </div>
-    <hr style="border-color:var(--border-subtle);margin:var(--space-5) 0;" />
-    <div class="form-group">
-      <label class="form-label" style="display:flex;align-items:center;gap:var(--space-3);">
-        <input type="checkbox" id="cfg-ann-active" ${cfg.announcement?.active?"checked":""} style="accent-color:var(--accent-primary);width:16px;height:16px;" />
-        Duyuru Bandını Aktif Et
-      </label>
-      <input type="text" id="cfg-ann-text" class="form-control" style="margin-top:var(--space-2);"
-        value="${esc(cfg.announcement?.text||"")}" placeholder="Duyuru mesajı…" />
-      <div style="display:flex;gap:var(--space-3);margin-top:var(--space-2);flex-wrap:wrap;">
-        <div>
-          <label class="form-label" style="font-size:var(--text-xs);">Arka Plan</label>
-          <input type="color" id="cfg-ann-bg" value="${cfg.announcement?.bgColor||"#f97316"}" style="width:48px;height:32px;border:none;cursor:pointer;border-radius:4px;" />
-        </div>
-        <div>
-          <label class="form-label" style="font-size:var(--text-xs);">Yazı Rengi</label>
-          <input type="color" id="cfg-ann-fg" value="${cfg.announcement?.textColor||"#ffffff"}" style="width:48px;height:32px;border:none;cursor:pointer;border-radius:4px;" />
-        </div>
-      </div>
-    </div>
-    <hr style="border-color:var(--border-subtle);margin:var(--space-5) 0;" />
-    <div class="form-group">
-      <label class="form-label" style="display:flex;align-items:center;gap:var(--space-3);">
-        <input type="checkbox" id="cfg-maint-active" ${cfg.maintenance?.active?"checked":""} style="accent-color:var(--accent-danger);width:16px;height:16px;" />
-        <span style="color:var(--accent-danger);">Bakım Modunu Aktif Et</span>
-      </label>
-      <textarea id="cfg-maint-msg" class="form-control" rows="2" style="margin-top:var(--space-2);"
-        placeholder="Bakım mesajı…">${esc(cfg.maintenance?.message||"Site bakım çalışması yapılmaktadır. Kısa süre içinde geri döneceğiz.")}</textarea>
-    </div>
-    <button class="btn btn-primary" style="width:100%;" onclick="saveGenel()">💾 Genel Ayarları Kaydet</button>`;
+    <button class="btn btn-primary" style="width:100%;margin-top:var(--space-4);" onclick="saveGenel()">💾 Kimlik Bilgilerini Kaydet</button>`;
 }
 
 window.previewLogo = function() {
@@ -172,6 +145,64 @@ window.saveGenel = async function() {
     logoText:    document.getElementById("cfg-logoText").value.trim(),
     logoImageUrl:document.getElementById("cfg-logoImageUrl").value.trim() || null,
     faviconUrl:  document.getElementById("cfg-faviconUrl").value.trim() || null,
+  });
+  if (ok) { await loadConfig(); renderGenel(); }
+};
+
+// ══════════════════════════════════════════════
+// 1b. EKSTRALAR (Duyuru + Bakım)
+// ══════════════════════════════════════════════
+function renderExtras() {
+  const el = document.getElementById("site-extras-form");
+  if (!el) return;
+  el.innerHTML = `
+    <!-- Duyuru Bandı -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3);">
+      <span style="font-weight:var(--font-semibold);font-size:var(--text-sm);">📢 Duyuru Bandı</span>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <span style="font-size:var(--text-xs);color:var(--text-muted);">Aktif</span>
+        <div class="toggle-switch" onclick="this.classList.toggle('on');document.getElementById('cfg-ann-active').checked=this.classList.contains('on');"
+          style="width:40px;height:22px;background:${cfg.announcement?.active?"var(--accent-primary)":"var(--border-color)"};border-radius:99px;position:relative;cursor:pointer;transition:.2s;${cfg.announcement?.active?"":""}">
+          <div style="width:18px;height:18px;background:#fff;border-radius:50%;position:absolute;top:2px;transition:.2s;left:${cfg.announcement?.active?"20px":"2px"};"></div>
+        </div>
+        <input type="checkbox" id="cfg-ann-active" ${cfg.announcement?.active?"checked":""} style="display:none;" />
+      </label>
+    </div>
+    <div class="form-group">
+      <input type="text" id="cfg-ann-text" class="form-control" value="${esc(cfg.announcement?.text||"")}" placeholder="Duyuru mesajı…" />
+    </div>
+    <div style="display:flex;gap:var(--space-3);margin-bottom:var(--space-5);">
+      <div>
+        <label class="form-label" style="font-size:var(--text-xs);">Arka Plan</label>
+        <input type="color" id="cfg-ann-bg" value="${cfg.announcement?.bgColor||"#f97316"}" style="width:48px;height:32px;border:none;cursor:pointer;border-radius:4px;" />
+      </div>
+      <div>
+        <label class="form-label" style="font-size:var(--text-xs);">Yazı Rengi</label>
+        <input type="color" id="cfg-ann-fg" value="${cfg.announcement?.textColor||"#ffffff"}" style="width:48px;height:32px;border:none;cursor:pointer;border-radius:4px;" />
+      </div>
+    </div>
+    <hr style="border-color:var(--border-subtle);margin:var(--space-4) 0;" />
+    <!-- Bakım Modu -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3);">
+      <span style="font-weight:var(--font-semibold);font-size:var(--text-sm);color:var(--accent-danger);">🔧 Bakım Modu</span>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <span style="font-size:var(--text-xs);color:var(--text-muted);">Aktif</span>
+        <div onclick="this.classList.toggle('on');document.getElementById('cfg-maint-active').checked=this.classList.contains('on');"
+          style="width:40px;height:22px;background:${cfg.maintenance?.active?"var(--accent-danger)":"var(--border-color)"};border-radius:99px;position:relative;cursor:pointer;transition:.2s;">
+          <div style="width:18px;height:18px;background:#fff;border-radius:50%;position:absolute;top:2px;transition:.2s;left:${cfg.maintenance?.active?"20px":"2px"};"></div>
+        </div>
+        <input type="checkbox" id="cfg-maint-active" ${cfg.maintenance?.active?"checked":""} style="display:none;" />
+      </label>
+    </div>
+    <div class="form-group">
+      <textarea id="cfg-maint-msg" class="form-control" rows="3"
+        placeholder="Bakım mesajı…">${esc(cfg.maintenance?.message||"Site bakım çalışması yapılmaktadır. Kısa süre içinde geri döneceğiz.")}</textarea>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:var(--space-2);" onclick="saveExtras()">💾 Kaydet</button>`;
+}
+
+window.saveExtras = async function() {
+  const ok = await saveSection({
     announcement: {
       active:    document.getElementById("cfg-ann-active").checked,
       text:      document.getElementById("cfg-ann-text").value.trim(),
@@ -183,7 +214,7 @@ window.saveGenel = async function() {
       message: document.getElementById("cfg-maint-msg").value.trim(),
     },
   });
-  if (ok) { await loadConfig(); renderGenel(); }
+  if (ok) { await loadConfig(); renderExtras(); }
 };
 
 // ══════════════════════════════════════════════

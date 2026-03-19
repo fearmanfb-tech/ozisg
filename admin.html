@@ -370,86 +370,113 @@
 
       <!-- TAB: Site Yönetimi -->
       <div id="tab-site" class="tab-content" style="display:none;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);">
 
-          <!-- 1. Genel Ayarlar -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🌐 Genel Ayarlar</h3>
-            <div id="site-genel-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 2. Görünüm -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🎨 Görünüm</h3>
-            <div id="site-gorunum-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 2b. Hero İçeriği -->
-          <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">✏️ Hero İçeriği <span style="font-size:var(--text-xs);color:var(--text-muted);font-weight:normal;">(Ana Sayfa Başlık Yazıları)</span></h3>
-            <div id="site-hero-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 3. Ana Menü -->
-          <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-5);">
-              <h3 style="font-weight:var(--font-bold);">📋 Ana Menü</h3>
-              <button class="btn btn-ghost btn-sm" onclick="addMenuItem()">➕ Özel Öğe Ekle</button>
-            </div>
-            <div id="site-menu-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);"></div>
-            <button class="btn btn-primary" onclick="saveMenu()">💾 Menüyü Kaydet</button>
-          </div>
-
-          <!-- 4. Hakkımda -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">👤 Hakkımda Sayfası</h3>
-            <div id="site-hakkimda-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 5. Araçlar -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🛠️ Araç Kartları</h3>
-            <div id="site-tools-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);"></div>
-            <button class="btn btn-primary" onclick="saveTools()">💾 Araçları Kaydet</button>
-          </div>
-
-          <!-- 6. Varsayılan Ayarlar -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">⚙️ Varsayılan Ayarlar</h3>
-            <div id="site-defaults-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 7. Footer -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔗 Footer</h3>
-            <div id="site-footer-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 10. SEO & Analitik -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔍 SEO & Analitik</h3>
-            <div id="site-seo-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 11. Özel Kod (Custom CSS) -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🖌️ Özel CSS</h3>
-            <div id="site-customcode-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 8. Sayfa Tasarımı -->
-          <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🎨 Sayfa Bazlı Tasarım</h3>
-            <div id="site-pagedesign-form"><div class="spinner"></div></div>
-          </div>
-
-          <!-- 9. Ana Sayfa Bölümleri -->
-          <div class="card" style="padding:var(--space-5);">
-            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🏠 Ana Sayfa Bölümleri</h3>
-            <div id="site-home-sections-form"><div class="spinner"></div></div>
-          </div>
-
+        <!-- ── Pill Navigasyon ── -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding:6px;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:12px;margin-bottom:24px;">
+          <button class="site-pill active" id="sitePill-kimlik"    onclick="switchSiteTab('kimlik')">🏷️ Site Kimliği</button>
+          <button class="site-pill"        id="sitePill-tasarim"   onclick="switchSiteTab('tasarim')">🎨 Tasarım & Tema</button>
+          <button class="site-pill"        id="sitePill-ekstralar" onclick="switchSiteTab('ekstralar')">⚙️ Ekstralar & Durum</button>
+          <button class="site-pill"        id="sitePill-footer"    onclick="switchSiteTab('footer')">🔗 Alt Bilgi & SEO</button>
         </div>
+
+        <!-- ══ PANEL 1: Site Kimliği ══ -->
+        <div id="sitepanel-kimlik" class="site-panel">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🌐 Temel Bilgiler</h3>
+              <div id="site-genel-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">👤 Hakkımda Sayfası</h3>
+              <div id="site-hakkimda-form"><div class="spinner"></div></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ══ PANEL 2: Tasarım & Tema ══ -->
+        <div id="sitepanel-tasarim" class="site-panel" style="display:none;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🎨 Renk & Tema</h3>
+              <div id="site-gorunum-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">✏️ Hero İçeriği <span style="font-size:var(--text-xs);color:var(--text-muted);font-weight:normal;">(Ana Sayfa Başlık Yazıları)</span></h3>
+              <div id="site-hero-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-5);">
+                <h3 style="font-weight:var(--font-bold);">📋 Ana Menü</h3>
+                <button class="btn btn-ghost btn-sm" onclick="addMenuItem()">➕ Özel Öğe Ekle</button>
+              </div>
+              <div id="site-menu-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);"></div>
+              <button class="btn btn-primary" onclick="saveMenu()">💾 Menüyü Kaydet</button>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🖼️ Sayfa Bazlı Tasarım</h3>
+              <div id="site-pagedesign-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🏠 Ana Sayfa Bölümleri</h3>
+              <div id="site-home-sections-form"><div class="spinner"></div></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ══ PANEL 3: Ekstralar & Durum ══ -->
+        <div id="sitepanel-ekstralar" class="site-panel" style="display:none;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">📢 Duyuru & Bakım</h3>
+              <div id="site-extras-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">⚙️ Varsayılan Ayarlar</h3>
+              <div id="site-defaults-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🛠️ Araç Kartları</h3>
+              <div id="site-tools-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);"></div>
+              <button class="btn btn-primary" onclick="saveTools()">💾 Araçları Kaydet</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ══ PANEL 4: Alt Bilgi & SEO ══ -->
+        <div id="sitepanel-footer" class="site-panel" style="display:none;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔗 Footer</h3>
+              <div id="site-footer-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔍 SEO & Analitik</h3>
+              <div id="site-seo-form"><div class="spinner"></div></div>
+            </div>
+
+            <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+              <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🖌️ Özel CSS</h3>
+              <div id="site-customcode-form"><div class="spinner"></div></div>
+            </div>
+
+          </div>
+        </div>
+
       </div>
 
       </div><!-- /content-body -->
@@ -675,6 +702,28 @@
 
     .btn-success { background: var(--accent-success); color: #fff; border: none; }
     .btn-success:hover { opacity: .9; }
+
+    /* ── Site Ayarları Pill Sekmeleri ── */
+    .site-pill {
+      padding: 8px 18px;
+      border: none;
+      border-radius: 8px;
+      font-size: .875rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: var(--text-muted);
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .site-pill:hover:not(.active) {
+      background: var(--bg-surface-2);
+      color: var(--text-primary);
+    }
+    .site-pill.active {
+      background: var(--accent-primary);
+      color: #fff;
+    }
 
     /* ── Sidebar Responsive ── */
     @media (max-width: 768px) {
