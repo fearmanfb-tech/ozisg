@@ -665,63 +665,65 @@ async function applySiteConfig() {
     }
   }
 
-  // ── Menü Görünürlük & Sıralama ──────────────
+  // ── Menü: Firestore'dan tamamen yeniden çiz ──
   if (cfg.menu?.length) {
-    const navUl    = document.querySelector(".navbar-nav");
+    const navUl     = document.querySelector(".navbar-nav");
     const mobileNav = document.getElementById("mobileNav");
-    if (navUl) navUl.style.display = "flex";
+    const curPage   = window.location.pathname.split("/").pop() || "index.html";
 
-    cfg.menu.forEach((item) => {
-      // Desktop
-      if (navUl) {
-        navUl.querySelectorAll("li a.nav-link").forEach(a => {
-          const href = a.getAttribute("href") || "";
-          if (href === item.url || href.endsWith("/" + item.url)) {
-            const li = a.closest("li");
-            if (li) {
-              li.style.display = item.visible === false ? "none" : "";
-              li.style.order   = item.order ?? "";
-              if (item.label) a.textContent = item.label;
-            }
-          }
-        });
-      }
-      // Mobile
-      if (mobileNav) {
-        mobileNav.querySelectorAll("a.nav-link").forEach(a => {
-          const href = a.getAttribute("href") || "";
-          if (href === item.url || href.endsWith("/" + item.url)) {
-            a.style.display = item.visible === false ? "none" : "";
-            a.style.order   = item.order ?? "";
-            if (item.label) a.textContent = `${item.icon || ""} ${item.label}`.trim();
-          }
-        });
-      }
-    });
+    // Sırala
+    const sorted = [...cfg.menu].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
 
-    // Özel (custom) menü öğesi ekle
-    cfg.menu?.filter(i => i.custom && i.visible !== false).forEach((item) => {
-      if (navUl) {
-        const exists = [...navUl.querySelectorAll("a")].some(a => a.getAttribute("href") === item.url);
-        if (!exists) {
-          const li = document.createElement("li");
-          li.style.order = item.order ?? "";
-          li.innerHTML = `<a href="${item.url}" class="nav-link">${item.label}</a>`;
-          navUl.appendChild(li);
+    // ── Desktop Navbar ──────────────────────────
+    if (navUl) {
+      navUl.innerHTML = "";
+      sorted.forEach(item => {
+        if (item.visible === false) return;
+        const isActive = curPage === item.url || (curPage === "" && item.url === "index.html");
+        const li = document.createElement("li");
+        const a  = document.createElement("a");
+        a.href      = item.url;
+        a.className = "nav-link" + (isActive ? " active" : "");
+        a.textContent = item.label;
+        if (item.id === "dashboard") a.id = "nav-dashboard";
+        li.appendChild(a);
+
+        // Alt menü desteği
+        if (item.children?.length) {
+          li.style.position = "relative";
+          const sub = document.createElement("ul");
+          sub.className = "dropdown-menu";
+          sub.style.cssText = "display:none;position:absolute;top:100%;left:0;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:8px;min-width:180px;padding:4px 0;z-index:500;box-shadow:var(--shadow-lg);";
+          item.children.forEach(ch => {
+            const cli = document.createElement("li");
+            cli.innerHTML = `<a href="${ch.url}" class="dropdown-item" style="display:block;padding:8px 16px;font-size:.875rem;">${ch.label}</a>`;
+            sub.appendChild(cli);
+          });
+          li.appendChild(sub);
+          li.addEventListener("mouseenter", () => sub.style.display = "block");
+          li.addEventListener("mouseleave", () => sub.style.display = "none");
         }
-      }
-      if (mobileNav) {
-        const exists = [...mobileNav.querySelectorAll("a")].some(a => a.getAttribute("href") === item.url);
-        if (!exists) {
-          const a = document.createElement("a");
-          a.href = item.url;
-          a.className = "nav-link";
-          a.style.order = item.order ?? "";
-          a.textContent = `${item.icon || "🔗"} ${item.label}`;
-          mobileNav.appendChild(a);
-        }
-      }
-    });
+
+        navUl.appendChild(li);
+      });
+    }
+
+    // ── Mobile Nav ──────────────────────────────
+    if (mobileNav) {
+      // Sabit olmayan nav-link'leri temizle (auth butonunu koru)
+      const authDiv = mobileNav.querySelector("div");
+      mobileNav.innerHTML = "";
+      sorted.forEach(item => {
+        if (item.visible === false) return;
+        const isActive = curPage === item.url || (curPage === "" && item.url === "index.html");
+        const a = document.createElement("a");
+        a.href      = item.url;
+        a.className = "nav-link" + (isActive ? " active" : "");
+        a.textContent = `${item.icon || ""} ${item.label}`.trim();
+        mobileNav.appendChild(a);
+      });
+      if (authDiv) mobileNav.appendChild(authDiv);
+    }
   }
 
   // ── Footer ───────────────────────────────────
