@@ -311,6 +311,36 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────
+    // KATEGORİLER  /categories/{catId}
+    // ─────────────────────────────────────────────
+    // Yapı: { name, slug, type, color, parentId, createdAt }
+    // type: "blog" | "library" | "tool"
+    match /categories/{catId} {
+      allow read: if true;        // herkes okuyabilir (blog filtreleme için)
+      allow write: if isAdmin();  // sadece admin yazabilir
+    }
+
+    // ─────────────────────────────────────────────
+    // FORMLAR  /forms/{formId}
+    // ─────────────────────────────────────────────
+    // Yapı: { title, fields[], active, createdAt, createdBy }
+    match /forms/{formId} {
+      allow read: if true;        // ön yüzde form göstermek için herkese açık
+      allow write: if isAdmin();  // sadece admin oluşturur/düzenler/siler
+    }
+
+    // ─────────────────────────────────────────────
+    // FORM GÖNDERİMLERİ  /form_submissions/{subId}
+    // ─────────────────────────────────────────────
+    // Yapı: { formId, data{}, submittedAt, read, starred }
+    match /form_submissions/{subId} {
+      allow read:   if isAdmin();       // sadece admin okur (inbox)
+      allow create: if true;            // herkes gönderebilir (public form)
+      allow update: if isAdmin();       // okundu/yıldız işaretleri
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────
     // VARSAYİLAN KURAL: DİĞER HER ŞEYİ REDDET
     // ─────────────────────────────────────────────
     match /{document=**} {

@@ -228,5 +228,11 @@
     }
   </style>
 
+  <script type="module">
+    import { injectSEO, injectArticleSchema } from "./js/seo-injector.js";
+    // Başlık ve açıklama blog-post.js tarafından doldurulunca override edilir
+    injectSEO({ title: "Blog Yazısı", ogType: "article" });
+  </script>
+
 </body>
 </html>

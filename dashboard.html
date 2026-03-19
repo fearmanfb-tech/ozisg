@@ -302,5 +302,10 @@
   <script type="module" src="js/app.js"></script>
   <script type="module" src="js/dashboard.js"></script>
 
+  <script type="module">
+    import { injectSEO } from "./js/seo-injector.js";
+    injectSEO({ title: "Araçlarım", description: "İSG, otomasyon ve verimlilik için geliştirilen mini web uygulamaları.", ogType: "website" });
+  </script>
+
 </body>
 </html>
