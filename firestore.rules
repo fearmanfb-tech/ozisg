@@ -311,6 +311,15 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────
+    // İLETİŞİM MESAJLARI  /messages/{msgId}
+    // ─────────────────────────────────────────────
+    // Yapı: { name, email, subject, message, status, starred, createdAt, source }
+    match /messages/{msgId} {
+      allow create: if true;          // herkes mesaj gönderebilir
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────
     // KATEGORİLER  /categories/{catId}
     // ─────────────────────────────────────────────
     // Yapı: { name, slug, type, color, parentId, createdAt }

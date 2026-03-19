@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>İletişim — ozisg.com</title>
+
+  <!-- SEO Statik Fallback -->
+  <meta name="description"  content="Oğuzhan Çetin ile iletişime geçin. İSG araçları, işbirliği ve öneri için mesaj gönderin." />
+  <meta name="robots"       content="index, follow" />
+  <link rel="canonical"     href="https://ozisg.com/iletisim.html" />
+  <meta property="og:type"        content="website" />
+  <meta property="og:title"       content="İletişim — ozisg.com" />
+  <meta property="og:description" content="Oğuzhan Çetin ile iletişime geçin." />
+  <meta property="og:url"         content="https://ozisg.com/iletisim.html" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+
+  <style>
+    /* ── Sayfa Başlık Bandı ── */
+    .page-hero {
+      background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%);
+      padding: var(--space-14) 0 var(--space-10);
+      text-align: center;
+    }
+    .page-hero h1 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: var(--font-extrabold);
+      color: #fff;
+      margin-bottom: var(--space-3);
+    }
+    .page-hero p {
+      color: rgba(255,255,255,.75);
+      font-size: var(--text-lg);
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* ── İletişim Grid ── */
+    .contact-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: var(--space-8);
+      align-items: start;
+      padding: var(--space-12) 0 var(--space-16);
+    }
+    @media (max-width: 860px) {
+      .contact-grid { grid-template-columns: 1fr; }
+      .contact-card-col { order: -1; }
+    }
+
+    /* ── Form Kartı ── */
+    .contact-form-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--border-radius-lg);
+      padding: var(--space-8);
+      box-shadow: var(--shadow-md);
+    }
+    .contact-form-card h2 {
+      font-size: 1.25rem;
+      font-weight: var(--font-bold);
+      margin-bottom: var(--space-6);
+      color: var(--text-primary);
+    }
+
+    /* ── Honeypot (Spam Koruması) ── */
+    .hp-field {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      opacity: 0;
+      pointer-events: none;
+      tab-index: -1;
+    }
+
+    /* ── Gönder Butonu ── */
+    .submit-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: var(--font-semibold);
+      border-radius: var(--border-radius);
+      border: none;
+      background: var(--accent-primary);
+      color: #fff;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: var(--space-5);
+    }
+    .submit-btn:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
+    .submit-btn:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+    .submit-btn .btn-spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+    .submit-btn.loading .btn-spinner { display: block; }
+    .submit-btn.loading .btn-text { opacity: .7; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Başarı Mesajı ── */
+    .success-box {
+      display: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--accent-success);
+      border-radius: var(--border-radius-lg);
+      padding: var(--space-10);
+      text-align: center;
+      box-shadow: var(--shadow-md);
+    }
+    .success-box .success-icon {
+      font-size: 3.5rem;
+      margin-bottom: var(--space-4);
+      animation: bounceIn .5s ease;
+    }
+    .success-box h3 {
+      font-size: 1.25rem;
+      font-weight: var(--font-bold);
+      color: var(--accent-success);
+      margin-bottom: var(--space-3);
+    }
+    .success-box p { color: var(--text-muted); font-size: var(--text-sm); }
+    @keyframes bounceIn {
+      0%   { transform: scale(.5); opacity: 0; }
+      70%  { transform: scale(1.1); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── Hata Mesajı ── */
+    .form-error-msg {
+      display: none;
+      padding: var(--space-3) var(--space-4);
+      background: rgba(239,68,68,.08);
+      border: 1px solid var(--accent-danger);
+      border-radius: var(--border-radius);
+      color: var(--accent-danger);
+      font-size: var(--text-sm);
+      margin-top: var(--space-4);
+    }
+
+    /* ── Bilgi Kartı ── */
+    .info-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--border-radius-lg);
+      padding: var(--space-6);
+      box-shadow: var(--shadow-md);
+      margin-bottom: var(--space-4);
+    }
+    .info-card h3 {
+      font-size: .875rem;
+      font-weight: var(--font-bold);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: var(--space-5);
+    }
+    .contact-info-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--border-subtle);
+      text-decoration: none;
+      color: var(--text-secondary);
+      transition: color .15s;
+    }
+    .contact-info-item:last-child { border-bottom: none; }
+    .contact-info-item:hover { color: var(--accent-primary); }
+    .contact-info-item .ci-icon {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: var(--bg-surface-2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; flex-shrink: 0;
+    }
+    .contact-info-item .ci-body { flex: 1; min-width: 0; }
+    .contact-info-item .ci-label { font-size: var(--text-xs); color: var(--text-muted); }
+    .contact-info-item .ci-value { font-size: var(--text-sm); font-weight: var(--font-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Yanıt Süresi Kartı ── */
+    .response-card {
+      background: linear-gradient(135deg, var(--accent-primary) 0%, #7c3aed 100%);
+      border-radius: var(--border-radius-lg);
+      padding: var(--space-5);
+      color: #fff;
+    }
+    .response-card .rc-title { font-weight: var(--font-bold); margin-bottom: 4px; }
+    .response-card .rc-sub   { font-size: var(--text-sm); opacity: .85; }
+
+    /* ── Alan Validasyon ── */
+    .form-control.is-invalid { border-color: var(--accent-danger); }
+    .form-control.is-invalid:focus { box-shadow: 0 0 0 3px rgba(239,68,68,.15); }
+    .field-error { font-size: var(--text-xs); color: var(--accent-danger); margin-top: 4px; display: none; }
+    .field-error.show { display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- ── NAVBAR ── -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html"          class="nav-link">Ana Sayfa</a></li>
+        <li><a href="blog.html"           class="nav-link">Blog</a></li>
+        <li><a href="kutuphane.html"      class="nav-link">Kütüphane</a></li>
+        <li><a href="rpa.html"            class="nav-link">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html"  class="nav-link">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html"      class="nav-link" id="nav-dashboard">Araçlarım</a></li>
+        <li><a href="iletisim.html"       class="nav-link active">İletişim</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="auth-buttons">
+          <a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a>
+        </div>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn" aria-haspopup="true">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <a href="profile.html"   class="dropdown-item">👤 Profilim</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Mobile Nav -->
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html"         class="nav-link">🏠 Ana Sayfa</a>
+    <a href="blog.html"          class="nav-link">✍️ Blog</a>
+    <a href="kutuphane.html"     class="nav-link">📚 Kütüphane</a>
+    <a href="rpa.html"           class="nav-link">🤖 RPA Köşesi</a>
+    <a href="linkedin-tool.html" class="nav-link">💼 LinkedIn Aracı</a>
+    <a href="dashboard.html"     class="nav-link">🛠️ Araçlarım</a>
+    <a href="iletisim.html"      class="nav-link active">📬 İletişim</a>
+    <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:var(--space-3);margin-top:var(--space-2);">
+      <a href="login.html" class="btn btn-primary btn-full" id="mobile-auth-btn">Giriş Yap</a>
+    </div>
+  </nav>
+
+  <!-- ── SAYFA BAŞLIK BANDI ── -->
+  <header class="page-hero" role="banner">
+    <div class="container">
+      <p style="color:rgba(255,255,255,.6);font-size:var(--text-sm);margin-bottom:var(--space-2);">📬 Bana Ulaşın</p>
+      <h1>İletişime Geçin</h1>
+      <p>Sorularınız, önerileriniz veya işbirliği teklifleri için mesaj gönderin.<br>En kısa sürede dönüş yapacağım.</p>
+    </div>
+  </header>
+
+  <!-- ── ANA İÇERİK ── -->
+  <main class="page-content">
+    <div class="container">
+      <div class="contact-grid">
+
+        <!-- ════ FORM TARAFI ════ -->
+        <div>
+          <!-- Başarı Kutusu (gönderim sonrası gösterilir) -->
+          <div class="success-box" id="successBox" role="alert" aria-live="polite">
+            <div class="success-icon">✅</div>
+            <h3>Mesajınız İletildi!</h3>
+            <p>En kısa sürede size dönüş yapılacaktır.<br>İlginiz için teşekkürler.</p>
+            <button class="btn btn-primary" style="margin-top:var(--space-5);" onclick="resetContactForm()">
+              ✉️ Yeni Mesaj Gönder
+            </button>
+          </div>
+
+          <!-- Form Kartı -->
+          <div class="contact-form-card" id="contactFormCard">
+            <h2>📝 Mesaj Gönder</h2>
+
+            <form id="contactForm" novalidate>
+
+              <!-- Honeypot — Botlar doldurur, insanlar görmez -->
+              <div class="hp-field" aria-hidden="true">
+                <label for="hp-website">Website (boş bırakın)</label>
+                <input type="text" id="hp-website" name="website" tabindex="-1" autocomplete="off" />
+              </div>
+
+              <!-- Ad Soyad -->
+              <div class="form-group">
+                <label class="form-label" for="cf-name">
+                  Ad Soyad <span style="color:var(--accent-danger);">*</span>
+                </label>
+                <input type="text" id="cf-name" class="form-control"
+                  placeholder="Adınız Soyadınız"
+                  autocomplete="name" maxlength="80" />
+                <div class="field-error" id="err-name">Lütfen adınızı girin.</div>
+              </div>
+
+              <!-- E-posta -->
+              <div class="form-group">
+                <label class="form-label" for="cf-email">
+                  E-posta Adresi <span style="color:var(--accent-danger);">*</span>
+                </label>
+                <input type="email" id="cf-email" class="form-control"
+                  placeholder="ornek@mail.com"
+                  autocomplete="email" maxlength="120" />
+                <div class="field-error" id="err-email">Geçerli bir e-posta adresi girin.</div>
+              </div>
+
+              <!-- Konu -->
+              <div class="form-group">
+                <label class="form-label" for="cf-subject">Konu</label>
+                <select id="cf-subject" class="form-control">
+                  <option value="Genel Bilgi">💬 Genel Bilgi</option>
+                  <option value="İSG Araçları Hakkında">🛡️ İSG Araçları Hakkında</option>
+                  <option value="Hata Bildirimi">🐛 Hata Bildirimi</option>
+                  <option value="İşbirliği / Öneri">🤝 İşbirliği / Öneri</option>
+                </select>
+              </div>
+
+              <!-- Mesaj -->
+              <div class="form-group">
+                <label class="form-label" for="cf-message">
+                  Mesajınız <span style="color:var(--accent-danger);">*</span>
+                </label>
+                <textarea id="cf-message" class="form-control" rows="6"
+                  placeholder="Mesajınızı buraya yazın…"
+                  maxlength="2000"></textarea>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                  <div class="field-error" id="err-message" style="margin-top:0;">Lütfen mesajınızı girin.</div>
+                  <span id="charCount" style="font-size:var(--text-xs);color:var(--text-muted);margin-left:auto;">0 / 2000</span>
+                </div>
+              </div>
+
+              <!-- Hata Mesajı -->
+              <div class="form-error-msg" id="formErrorMsg" role="alert">
+                ⚠️ <span id="formErrorText">Bir hata oluştu, lütfen tekrar deneyin.</span>
+              </div>
+
+              <!-- Gönder Butonu -->
+              <button type="submit" class="submit-btn" id="submitBtn">
+                <div class="btn-spinner"></div>
+                <span class="btn-text">📨 Mesajı Gönder</span>
+              </button>
+
+              <p style="font-size:var(--text-xs);color:var(--text-muted);text-align:center;margin-top:var(--space-3);">
+                Bilgileriniz yalnızca iletişim amacıyla kullanılır ve üçüncü taraflarla paylaşılmaz.
+              </p>
+
+            </form>
+          </div>
+        </div>
+
+        <!-- ════ BİLGİ KARTI TARAFI ════ -->
+        <aside class="contact-card-col">
+
+          <!-- İletişim Bilgileri -->
+          <div class="info-card">
+            <h3>İletişim Bilgileri</h3>
+
+            <a href="mailto:info@ozisg.com" class="contact-info-item">
+              <div class="ci-icon">📧</div>
+              <div class="ci-body">
+                <div class="ci-label">E-posta</div>
+                <div class="ci-value">info@ozisg.com</div>
+              </div>
+            </a>
+
+            <a href="https://linkedin.com/in/oguzhancetin" target="_blank" rel="noopener" class="contact-info-item">
+              <div class="ci-icon">💼</div>
+              <div class="ci-body">
+                <div class="ci-label">LinkedIn</div>
+                <div class="ci-value">linkedin.com/in/oguzhancetin</div>
+              </div>
+            </a>
+
+            <a href="https://github.com/fearmanfb-tech" target="_blank" rel="noopener" class="contact-info-item">
+              <div class="ci-icon">🐙</div>
+              <div class="ci-body">
+                <div class="ci-label">GitHub</div>
+                <div class="ci-value">github.com/fearmanfb-tech</div>
+              </div>
+            </a>
+          </div>
+
+          <!-- Yanıt Süresi -->
+          <div class="response-card">
+            <div class="rc-title">⚡ Yanıt Süresi</div>
+            <div class="rc-sub">Genellikle 24–48 saat içinde yanıt veriyorum. Acil konular için LinkedIn üzerinden ulaşabilirsiniz.</div>
+          </div>
+
+        </aside>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- ── FOOTER ── -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="navbar-brand" style="margin-bottom:var(--space-3);">
+            <div class="navbar-logo">OZ</div>
+            <span class="navbar-brand-name">ozisg.com</span>
+          </div>
+          <p class="footer-brand-text">İş güvenliği, otomasyon ve teknoloji üzerine yazılar, araçlar ve kaynaklar.</p>
+        </div>
+        <div>
+          <div class="footer-title">İçerik</div>
+          <ul class="footer-links">
+            <li><a href="blog.html">Blog & Makaleler</a></li>
+            <li><a href="kutuphane.html">Kütüphanem</a></li>
+            <li><a href="rpa.html">RPA Köşesi</a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="footer-title">Araçlar</div>
+          <ul class="footer-links">
+            <li><a href="dashboard.html">Araç Paneli</a></li>
+            <li><a href="linkedin-tool.html">LinkedIn Formatör</a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="footer-title">Bağlantı</div>
+          <ul class="footer-links">
+            <li><a href="https://linkedin.com/in/oguzhancetin" target="_blank" rel="noopener">LinkedIn</a></li>
+            <li><a href="https://github.com/fearmanfb-tech"   target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="mailto:info@ozisg.com">E-posta</a></li>
+            <li><a href="iletisim.html">İletişim Formu</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2025 ozisg.com — Tüm hakları saklıdır.</span>
+        <span>Oğuzhan Çetin tarafından ❤️ ile yapıldı</span>
+      </div>
+    </div>
+  </footer>
+
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/contact.js"></script>
+
+  <!-- SEO -->
+  <script type="module">
+    import { injectSEO } from "./js/seo-injector.js";
+    injectSEO({ title: "İletişim", description: "Oğuzhan Çetin ile iletişime geçin. İSG araçları, işbirliği ve öneri için mesaj gönderin." });
+  </script>
+
+</body>
+</html>
