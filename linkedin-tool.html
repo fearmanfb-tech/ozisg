@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkedIn İçerik Formatörü — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="blog.html" class="nav-link">Blog</a></li>
+        <li><a href="kutuphane.html" class="nav-link">Kütüphane</a></li>
+        <li><a href="rpa.html" class="nav-link">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html" class="nav-link active">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html" class="nav-link">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="auth-buttons"><a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <button class="hamburger" id="hamburger" aria-label="Menü">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="blog.html" class="nav-link">✍️ Blog</a>
+    <a href="linkedin-tool.html" class="nav-link active">💼 LinkedIn Aracı</a>
+    <a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a>
+  </nav>
+
+  <main class="page-content">
+
+    <!-- Hero -->
+    <div style="background: linear-gradient(135deg, var(--navy-900), var(--navy-700)); color:#fff; padding: var(--space-12) 0;">
+      <div class="container text-center">
+        <div style="font-size:3rem; margin-bottom:var(--space-4);">💼</div>
+        <h1 style="font-size:var(--text-3xl); font-weight:var(--font-extrabold); margin-bottom:var(--space-3);">
+          LinkedIn İçerik Formatörü
+        </h1>
+        <p style="color:rgba(255,255,255,0.7); font-size:var(--text-lg); max-width:540px; margin:0 auto;">
+          Ham metninizi LinkedIn'in dikkat çeken formatına dönüştürün: kancalı giriş, madde işaretleri ve hashtagler.
+        </p>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="container">
+        <div class="linkedin-layout">
+
+          <!-- Sol: Giriş Paneli -->
+          <div class="linkedin-input-panel">
+            <div class="card">
+              <div class="card-header">
+                <h2 style="font-size:var(--text-lg); font-weight:var(--font-bold);">✍️ İçerik Oluşturucu</h2>
+                <button class="btn btn-ghost btn-sm" id="clearAllBtn">Temizle</button>
+              </div>
+              <div class="card-body">
+
+                <!-- Kanca (Hook) -->
+                <div class="form-group">
+                  <label class="form-label">
+                    🎣 Kancalı Giriş (Hook)
+                    <span class="badge badge-danger" style="margin-left:var(--space-2);">Zorunlu</span>
+                  </label>
+                  <input type="text" id="hookInput" class="form-control"
+                    placeholder="Okuyucuyu durduracak tek bir cümle…"
+                    maxlength="150" />
+                  <span class="form-hint">
+                    <span id="hookCount">0</span>/150 karakter — Merak uyandıran, cesur bir açılış yapın.
+                  </span>
+                </div>
+
+                <!-- Ana Metin -->
+                <div class="form-group">
+                  <label class="form-label">📝 Ana İçerik</label>
+                  <textarea id="bodyInput" class="form-control" rows="8"
+                    placeholder="Ana fikrinizi buraya yazın. Her satır otomatik olarak madde haline gelecek. Boş satır bırakarak paragraf oluşturabilirsiniz."></textarea>
+                </div>
+
+                <!-- Madde Stili -->
+                <div class="form-group">
+                  <label class="form-label">📌 Madde İşareti Stili</label>
+                  <div class="bullet-options" id="bulletOptions">
+                    <button class="bullet-opt active" data-bullet="▶">▶ Üçgen</button>
+                    <button class="bullet-opt" data-bullet="✅">✅ Onay</button>
+                    <button class="bullet-opt" data-bullet="🔹">🔹 Elmas</button>
+                    <button class="bullet-opt" data-bullet="→">→ Ok</button>
+                    <button class="bullet-opt" data-bullet="•">• Nokta</button>
+                    <button class="bullet-opt" data-bullet="⚡">⚡ Şimşek</button>
+                    <button class="bullet-opt" data-bullet="🎯">🎯 Hedef</button>
+                    <button class="bullet-opt" data-bullet="💡">💡 Ampul</button>
+                  </div>
+                </div>
+
+                <!-- Kapanış Sorusu / CTA -->
+                <div class="form-group">
+                  <label class="form-label">💬 Kapanış / Soru / CTA</label>
+                  <input type="text" id="ctaInput" class="form-control"
+                    placeholder="Siz ne düşünüyorsunuz? Yorumlarda paylaşın…" />
+                </div>
+
+                <!-- Hashtagler -->
+                <div class="form-group">
+                  <label class="form-label">🏷️ Hashtagler</label>
+                  <input type="text" id="hashtagInput" class="form-control"
+                    placeholder="isg, otomasyon, linkedin, kariyer (virgülle ayırın)" />
+                  <span class="form-hint">Maksimum 5 hashtag önerilir.</span>
+                </div>
+
+                <!-- Emojiler -->
+                <div class="form-group">
+                  <label class="form-label">🎨 Başlığa Emoji Ekle</label>
+                  <div class="emoji-picker" id="emojiPicker">
+                    <button class="emoji-opt" data-emoji="">❌ Yok</button>
+                    <button class="emoji-opt" data-emoji="🔥">🔥</button>
+                    <button class="emoji-opt" data-emoji="💡">💡</button>
+                    <button class="emoji-opt" data-emoji="🚀">🚀</button>
+                    <button class="emoji-opt" data-emoji="⚡">⚡</button>
+                    <button class="emoji-opt" data-emoji="🎯">🎯</button>
+                    <button class="emoji-opt" data-emoji="✅">✅</button>
+                    <button class="emoji-opt" data-emoji="📌">📌</button>
+                    <button class="emoji-opt" data-emoji="💪">💪</button>
+                    <button class="emoji-opt" data-emoji="🧠">🧠</button>
+                    <button class="emoji-opt" data-emoji="📊">📊</button>
+                    <button class="emoji-opt" data-emoji="🛡️">🛡️</button>
+                  </div>
+                </div>
+
+                <button class="btn btn-primary btn-full btn-lg" id="generateBtn">
+                  ✨ LinkedIn Formatını Oluştur
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sağ: Önizleme Paneli -->
+          <div class="linkedin-preview-panel">
+
+            <!-- LinkedIn Önizleme -->
+            <div class="card" id="previewCard">
+              <div class="card-header">
+                <h2 style="font-size:var(--text-lg); font-weight:var(--font-bold);">👁️ LinkedIn Önizlemesi</h2>
+                <div class="flex" style="gap:var(--space-2);">
+                  <button class="btn btn-ghost btn-sm" id="copyBtn">📋 Kopyala</button>
+                </div>
+              </div>
+              <div class="card-body">
+
+                <!-- Sahte LinkedIn Post -->
+                <div class="linkedin-post-preview">
+                  <div class="linkedin-post-header">
+                    <div class="linkedin-avatar">OÇ</div>
+                    <div>
+                      <div class="linkedin-name">Oğuzhan Çetin</div>
+                      <div class="linkedin-meta">İSG Uzmanı · RPA Geliştiricisi</div>
+                    </div>
+                  </div>
+                  <div class="linkedin-post-body" id="previewBody">
+                    <p style="color:var(--text-muted); text-align:center; padding: var(--space-8);">
+                      Sol taraftaki formu doldurun ve butona basın.<br>
+                      Önizleme burada görünecek.
+                    </p>
+                  </div>
+                  <div class="linkedin-post-footer">
+                    <span>👍 Beğen</span>
+                    <span>💬 Yorum Yap</span>
+                    <span>🔁 Paylaş</span>
+                  </div>
+                </div>
+
+                <!-- Karakter Sayacı -->
+                <div class="linkedin-char-counter">
+                  <span>Karakter Sayısı: <strong id="charCount">0</strong></span>
+                  <span id="charWarning" class="hidden" style="color:var(--accent-warning); font-size:var(--text-xs);">
+                    ⚠️ LinkedIn limiti aşıldı (3000)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ham Metin (Kopyalama için) -->
+            <div class="card" style="margin-top:var(--space-4);">
+              <div class="card-header">
+                <h3 style="font-size:var(--text-base); font-weight:var(--font-semibold);">📄 Düz Metin (Kopyalanabilir)</h3>
+                <button class="btn btn-primary btn-sm" id="copyRawBtn">Kopyala</button>
+              </div>
+              <div class="card-body">
+                <textarea id="rawOutput" class="form-control" rows="12" readonly
+                  placeholder="Format oluşturduktan sonra burada görünecek…"
+                  style="font-size:var(--text-sm); font-family:var(--font-sans); resize:none; background:var(--bg-surface-2);"></textarea>
+              </div>
+            </div>
+
+            <!-- İpuçları -->
+            <div class="card" style="margin-top:var(--space-4); border-left:4px solid var(--accent-primary);">
+              <div class="card-body">
+                <h3 style="font-size:var(--text-base); font-weight:var(--font-bold); margin-bottom:var(--space-3);">
+                  💡 LinkedIn'de Viral Olmanın Sırları
+                </h3>
+                <ul style="display:flex; flex-direction:column; gap:var(--space-2); font-size:var(--text-sm); color:var(--text-secondary);">
+                  <li>✅ İlk 2 satır dikkat çekici olmalı — "Daha fazla gör" tıklatın</li>
+                  <li>✅ Kısa paragraflar kullanın (2-3 satır max)</li>
+                  <li>✅ Soru sorarak etkileşimi artırın</li>
+                  <li>✅ 3-5 hashtag yeterli; fazlası spam görünür</li>
+                  <li>✅ İş günleri sabah 7-9 veya akşam 17-19 arasında paylaşın</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer (basit) -->
+  <footer class="footer" style="padding: var(--space-8) 0;">
+    <div class="container">
+      <div class="footer-bottom">
+        <span>© 2025 ozisg.com</span>
+        <a href="index.html" style="color:rgba(232,240,252,0.5);">Ana Sayfaya Dön</a>
+      </div>
+    </div>
+  </footer>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/linkedin-tool.js"></script>
+
+  <style>
+    .linkedin-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-8);
+      align-items: flex-start;
+    }
+    @media (max-width: 900px) {
+      .linkedin-layout { grid-template-columns: 1fr; }
+    }
+
+    .bullet-options, .emoji-picker {
+      display: flex; flex-wrap: wrap; gap: var(--space-2);
+    }
+    .bullet-opt, .emoji-opt {
+      padding: var(--space-2) var(--space-3);
+      border: 1.5px solid var(--border-color);
+      border-radius: var(--border-radius);
+      background: none;
+      font-size: var(--text-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      color: var(--text-secondary);
+    }
+    .bullet-opt:hover, .emoji-opt:hover {
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
+    }
+    .bullet-opt.active, .emoji-opt.active {
+      background: var(--navy-50);
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
+      font-weight: var(--font-semibold);
+    }
+    [data-theme="dark"] .bullet-opt.active,
+    [data-theme="dark"] .emoji-opt.active {
+      background: rgba(46,108,209,0.15);
+    }
+
+    .linkedin-post-preview {
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-md);
+      overflow: hidden;
+      background: var(--bg-surface);
+    }
+    .linkedin-post-header {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-4);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .linkedin-avatar {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, var(--navy-600), var(--navy-400));
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: var(--font-bold); font-size: var(--text-sm);
+      flex-shrink: 0;
+    }
+    .linkedin-name { font-weight: var(--font-bold); font-size: var(--text-sm); }
+    .linkedin-meta { font-size: var(--text-xs); color: var(--text-muted); }
+    .linkedin-post-body {
+      padding: var(--space-4);
+      font-size: var(--text-sm);
+      line-height: var(--leading-relaxed);
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 120px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .linkedin-post-footer {
+      display: flex; gap: var(--space-6); padding: var(--space-3) var(--space-4);
+      border-top: 1px solid var(--border-subtle);
+      font-size: var(--text-xs); color: var(--text-muted);
+    }
+    .linkedin-char-counter {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: var(--space-3);
+      font-size: var(--text-xs); color: var(--text-muted);
+    }
+  </style>
+
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kütüphanem — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="blog.html" class="nav-link">Blog</a></li>
+        <li><a href="kutuphane.html" class="nav-link active">Kütüphane</a></li>
+        <li><a href="rpa.html" class="nav-link">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html" class="nav-link">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html" class="nav-link">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="auth-buttons"><a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <button class="hamburger" id="hamburger" aria-label="Menü">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="blog.html" class="nav-link">✍️ Blog</a>
+    <a href="kutuphane.html" class="nav-link active">📚 Kütüphane</a>
+    <a href="rpa.html" class="nav-link">🤖 RPA Köşesi</a>
+    <a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a>
+  </nav>
+
+  <main class="page-content">
+
+    <!-- Hero -->
+    <div style="background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:var(--space-16) 0 var(--space-12);color:#fff;">
+      <div class="container">
+        <div class="title-accent"></div>
+        <h1 style="font-size:var(--text-4xl);font-weight:var(--font-extrabold);margin-bottom:var(--space-3);">📚 Kütüphanem</h1>
+        <p style="color:rgba(255,255,255,0.7);font-size:var(--text-lg);max-width:540px;">
+          Okuduğum kitaplar, yıldızlı puanlarım ve kısa yorumlarım.
+        </p>
+        <div id="admin-add-book-btn" class="hidden" style="margin-top:var(--space-6);">
+          <button class="btn btn-primary" id="openBookModal">📖 Kitap Ekle</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="container">
+
+        <!-- Arama -->
+        <div style="margin-bottom:var(--space-5);">
+          <div style="position:relative;max-width:420px;">
+            <span style="position:absolute;left:var(--space-3);top:50%;transform:translateY(-50%);font-size:1rem;pointer-events:none;">🔍</span>
+            <input type="text" id="bookSearch" class="form-input" placeholder="Kitap adı, yazar veya yorum ara…"
+              style="padding-left:2.5rem;" />
+          </div>
+        </div>
+
+        <!-- Filtreler -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-4);margin-bottom:var(--space-8);">
+          <div class="category-tabs" id="genreTabs">
+            <button class="cat-tab active" data-genre="all">Tümü</button>
+            <button class="cat-tab" data-genre="teknoloji">Teknoloji</button>
+            <button class="cat-tab" data-genre="isg">İSG</button>
+            <button class="cat-tab" data-genre="kisisel-gelisim">Kişisel Gelişim</button>
+            <button class="cat-tab" data-genre="roman">Roman</button>
+            <button class="cat-tab" data-genre="bilim">Bilim</button>
+          </div>
+          <!-- Sıralama -->
+          <select id="sortSelect" class="form-control" style="width:180px;">
+            <option value="createdAt">En Yeni</option>
+            <option value="rating">En Yüksek Puan</option>
+            <option value="title">İsme Göre</option>
+          </select>
+        </div>
+
+        <!-- İstatistik -->
+        <div class="books-stats" id="booksStats" style="display:none;">
+          <div class="stat-card">
+            <span class="stat-num" id="totalBooks">0</span>
+            <span class="stat-lbl">Kitap</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-num" id="avgRating">0</span>
+            <span class="stat-lbl">Ort. Puan</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-num" id="fiveStarCount">0</span>
+            <span class="stat-lbl">5 Yıldızlı</span>
+          </div>
+        </div>
+
+        <!-- Kitap Grid -->
+        <div id="books-grid" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:var(--space-6);">
+          <!-- Skeletonlar -->
+          <div class="card skeleton-card" style="padding:var(--space-6);text-align:center;">
+            <div class="skeleton" style="width:120px;height:180px;margin:0 auto var(--space-4);"></div>
+            <div class="skeleton mb-4" style="height:16px;"></div>
+            <div class="skeleton" style="height:12px;width:70%;margin:0 auto;"></div>
+          </div>
+          <div class="card skeleton-card" style="padding:var(--space-6);text-align:center;">
+            <div class="skeleton" style="width:120px;height:180px;margin:0 auto var(--space-4);"></div>
+            <div class="skeleton mb-4" style="height:16px;"></div>
+            <div class="skeleton" style="height:12px;width:70%;margin:0 auto;"></div>
+          </div>
+          <div class="card skeleton-card" style="padding:var(--space-6);text-align:center;">
+            <div class="skeleton" style="width:120px;height:180px;margin:0 auto var(--space-4);"></div>
+            <div class="skeleton mb-4" style="height:16px;"></div>
+            <div class="skeleton" style="height:12px;width:70%;margin:0 auto;"></div>
+          </div>
+        </div>
+
+        <div id="books-empty" class="hidden" style="text-align:center;padding:var(--space-16);color:var(--text-muted);">
+          <div style="font-size:3rem;margin-bottom:var(--space-4);">📭</div>
+          <p>Bu kategoride henüz kitap yok.</p>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" style="padding:var(--space-8) 0;">
+    <div class="container">
+      <div class="footer-bottom">
+        <span>© 2025 ozisg.com</span>
+        <a href="index.html" style="color:rgba(232,240,252,0.5);">Ana Sayfaya Dön</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- KİTAP MODAL -->
+  <div class="modal-overlay" id="bookModal" style="display:none;">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="bookModalTitle">Kitap Ekle</h3>
+        <button class="modal-close" id="closeBookModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editBookId" />
+
+        <div class="form-group">
+          <label class="form-label">Kitap Adı <span style="color:var(--accent-danger);">*</span></label>
+          <input type="text" id="bookTitle" class="form-control" placeholder="Örn: Sapiens" />
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+          <div class="form-group">
+            <label class="form-label">Yazar <span style="color:var(--accent-danger);">*</span></label>
+            <input type="text" id="bookAuthor" class="form-control" placeholder="Yuval Noah Harari" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Okuma Yılı</label>
+            <input type="number" id="bookYear" class="form-control" placeholder="2024" min="1900" max="2099" />
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+          <div class="form-group">
+            <label class="form-label">Tür</label>
+            <select id="bookGenre" class="form-control">
+              <option value="teknoloji">Teknoloji</option>
+              <option value="isg">İSG</option>
+              <option value="kisisel-gelisim">Kişisel Gelişim</option>
+              <option value="roman">Roman</option>
+              <option value="bilim">Bilim</option>
+              <option value="diger">Diğer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Puanım</label>
+            <div class="star-input" id="starInput">
+              <button type="button" class="star-btn" data-val="1">★</button>
+              <button type="button" class="star-btn" data-val="2">★</button>
+              <button type="button" class="star-btn" data-val="3">★</button>
+              <button type="button" class="star-btn" data-val="4">★</button>
+              <button type="button" class="star-btn" data-val="5">★</button>
+            </div>
+            <input type="hidden" id="bookRating" value="0" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Kapak Görseli URL (opsiyonel)</label>
+          <input type="url" id="bookCover" class="form-control" placeholder="https://…" />
+          <span class="form-hint">Öneri: OpenLibrary veya Amazon kapak URL'si</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Yorumum</label>
+          <textarea id="bookReview" class="form-control" rows="3"
+            placeholder="Kısaca düşünceleriniz…" maxlength="500"></textarea>
+          <span class="form-hint"><span id="reviewCharCount">0</span>/500</span>
+        </div>
+
+        <div id="bookFormError" class="alert alert-danger hidden">
+          <span class="alert-icon">⚠️</span>
+          <span id="bookFormErrorText"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelBookModal">İptal</button>
+        <button class="btn btn-danger hidden" id="deleteBookBtn">🗑️ Sil</button>
+        <button class="btn btn-primary" id="saveBookBtn">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/kutuphane.js"></script>
+
+  <style>
+    .cat-tab { padding: var(--space-2) var(--space-4); border: 1.5px solid var(--border-color); border-radius: var(--border-radius-full); background: none; font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-secondary); cursor: pointer; transition: all var(--transition-fast); }
+    .cat-tab:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .cat-tab.active { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
+
+    .books-stats { display: flex; gap: var(--space-6); margin-bottom: var(--space-8); flex-wrap: wrap; }
+    .stat-card { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--border-radius-md); padding: var(--space-4) var(--space-6); display: flex; flex-direction: column; align-items: center; gap: var(--space-1); min-width: 100px; box-shadow: var(--shadow-xs); }
+    .stat-num { font-size: var(--text-3xl); font-weight: var(--font-extrabold); color: var(--accent-primary); }
+    .stat-lbl { font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .star-input { display: flex; gap: 4px; }
+    .star-btn { background: none; border: none; font-size: 1.6rem; color: var(--border-strong); cursor: pointer; transition: color var(--transition-fast); padding: 0; }
+    .star-btn.active { color: var(--accent-warning); }
+    .star-btn:hover { color: var(--accent-warning); }
+  </style>
+
+</body>
+</html>

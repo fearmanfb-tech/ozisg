@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Oğuzhan Çetin — İSG Uzmanı, RPA Geliştiricisi ve Teknoloji Meraklısı" />
+  <title>Oğuzhan Çetin — ozisg.com</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Master CSS -->
+  <link rel="stylesheet" href="css/master.css" />
+  <link rel="stylesheet" href="css/index.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════
+       NAVBAR
+  ══════════════════════════════════════════ -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+
+      <!-- Logo -->
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+
+      <!-- Desktop Nav Links -->
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link active">Ana Sayfa</a></li>
+        <li><a href="blog.html" class="nav-link">Blog</a></li>
+        <li><a href="kutuphane.html" class="nav-link">Kütüphane</a></li>
+        <li><a href="rpa.html" class="nav-link">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html" class="nav-link">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html" class="nav-link" id="nav-dashboard">Araçlarım</a></li>
+      </ul>
+
+      <!-- Actions -->
+      <div class="navbar-actions">
+        <!-- Dark Mode Toggle -->
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir" title="Karanlık/Aydınlık Mod">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+
+        <!-- Auth Buttons (giriş yapılmadıysa) -->
+        <div id="auth-buttons">
+          <a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a>
+        </div>
+
+        <!-- User Menu (giriş yapıldıysa) -->
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn" aria-haspopup="true">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+
+        <!-- Hamburger -->
+        <button class="hamburger" id="hamburger" aria-label="Menü">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Mobile Nav -->
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link active">🏠 Ana Sayfa</a>
+    <a href="blog.html" class="nav-link">✍️ Blog</a>
+    <a href="kutuphane.html" class="nav-link">📚 Kütüphane</a>
+    <a href="rpa.html" class="nav-link">🤖 RPA Köşesi</a>
+    <a href="linkedin-tool.html" class="nav-link">💼 LinkedIn Aracı</a>
+    <a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a>
+    <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top: var(--space-3); margin-top: var(--space-2);">
+      <a href="login.html" class="btn btn-primary btn-full" id="mobile-auth-btn">Giriş Yap</a>
+    </div>
+  </nav>
+
+  <!-- ══════════════════════════════════════════
+       PAGE CONTENT
+  ══════════════════════════════════════════ -->
+  <main class="page-content">
+
+    <!-- ── HERO ── -->
+    <section class="hero" id="section-hero">
+      <div class="container hero-content">
+        <p class="hero-eyebrow">
+          <span>🛡️</span> <span id="hero-eyebrow-text">İSG Uzmanı · RPA Geliştiricisi · İçerik Üreticisi</span>
+        </p>
+        <h1 class="hero-title" style="color:#fff;">
+          <span id="hero-title-text">Merhaba, Ben</span><br>
+          <span id="hero-name-text">Oğuzhan Çetin</span>
+        </h1>
+        <p class="hero-subtitle" id="hero-subtitle-text" style="color:rgba(255,255,255,0.9);">
+          İş güvenliği uzmanlığını teknoloji ile harmanlıyor, süreçleri otomatikleştiriyor
+          ve öğrendiklerimi burada paylaşıyorum.
+        </p>
+        <div class="flex" style="flex-wrap:wrap; gap:var(--space-4);">
+          <a href="blog.html" class="btn btn-primary btn-lg" id="hero-btn1">Blog'u Oku →</a>
+          <a href="dashboard.html" class="btn btn-secondary btn-lg" id="hero-btn2" style="border-color:rgba(255,255,255,0.4); color:#fff;">
+            🛠️ Araçları Keşfet
+          </a>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="hero-stats">
+          <div class="stat-item">
+            <span class="stat-value" id="stat-posts">—</span>
+            <span class="stat-label">Makale</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="stat-books">—</span>
+            <span class="stat-label">Kitap</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">6+</span>
+            <span class="stat-label">Araç</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="stat-snippets">—</span>
+            <span class="stat-label">Snippet</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SON BLOG YAZILARI ── -->
+    <section class="section" id="section-posts">
+      <div class="container">
+        <div class="section-header" style="display:flex; align-items:flex-end; justify-content:space-between;">
+          <div>
+            <div class="title-accent"></div>
+            <h2 class="section-title">Son Yazılar</h2>
+            <p class="section-subtitle mb-0">Teknoloji, İSG ve kişisel gelişim üzerine notlar.</p>
+          </div>
+          <a href="blog.html" class="btn btn-ghost" style="flex-shrink:0;">Tümünü Gör →</a>
+        </div>
+
+        <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-6);">
+          <!-- Skeleton yükleyici (JS ile değiştirilecek) -->
+          <div class="card post-card" id="post-skeleton-1">
+            <div class="skeleton" style="height:200px;"></div>
+            <div class="card-body">
+              <div class="skeleton mb-4" style="height:12px; width:60%;"></div>
+              <div class="skeleton mb-4" style="height:24px;"></div>
+              <div class="skeleton" style="height:60px;"></div>
+            </div>
+          </div>
+          <div class="card post-card" id="post-skeleton-2">
+            <div class="skeleton" style="height:200px;"></div>
+            <div class="card-body">
+              <div class="skeleton mb-4" style="height:12px; width:60%;"></div>
+              <div class="skeleton mb-4" style="height:24px;"></div>
+              <div class="skeleton" style="height:60px;"></div>
+            </div>
+          </div>
+          <div class="card post-card" id="post-skeleton-3">
+            <div class="skeleton" style="height:200px;"></div>
+            <div class="card-body">
+              <div class="skeleton mb-4" style="height:12px; width:60%;"></div>
+              <div class="skeleton mb-4" style="height:24px;"></div>
+              <div class="skeleton" style="height:60px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gerçek içerik JS tarafından buraya render edilecek -->
+        <div id="posts-container" class="grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-6);"></div>
+      </div>
+    </section>
+
+    <!-- ── SON KİTAPLAR ── -->
+    <section class="section" id="section-books" style="background: var(--bg-surface-2);">
+      <div class="container">
+        <div class="section-header" style="display:flex; align-items:flex-end; justify-content:space-between;">
+          <div>
+            <div class="title-accent"></div>
+            <h2 class="section-title">Kütüphanem</h2>
+            <p class="section-subtitle mb-0">Son okuduklarım ve notlarım.</p>
+          </div>
+          <a href="kutuphane.html" class="btn btn-ghost" style="flex-shrink:0;">Tümünü Gör →</a>
+        </div>
+        <div id="books-container" class="grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-6);"></div>
+      </div>
+    </section>
+
+    <!-- ── ARAÇLAR VİTRİNİ ── -->
+    <section class="section" id="section-tools">
+      <div class="container">
+        <div class="section-header centered">
+          <div class="title-accent" style="margin: 0 auto var(--space-4);"></div>
+          <h2 class="section-title">Araçlarım</h2>
+          <p class="section-subtitle">
+            İSG, otomasyon ve verimlilik için geliştirdiğim mini web uygulamaları.
+            Kullanmak için giriş yapmanız yeterli.
+          </p>
+        </div>
+
+        <div class="tools-grid">
+          <a href="dashboard.html" class="tool-card">
+            <div class="tool-icon">🛡️</div>
+            <div>
+              <div class="tool-name">İSG Günlük Rapor</div>
+              <div class="tool-description">Saha gözlem ve bulgu raporlarını kolayca oluşturun, saklayın ve dışa aktarın.</div>
+            </div>
+            <div class="tool-meta">
+              <span class="badge badge-success">Aktif</span>
+              <span style="font-size:var(--text-xs);color:var(--text-muted);">→</span>
+            </div>
+          </a>
+
+          <a href="dashboard.html" class="tool-card">
+            <div class="tool-icon">📋</div>
+            <div>
+              <div class="tool-name">İş İzni Takip</div>
+              <div class="tool-description">Yüksekte çalışma, sıcak çalışma ve diğer izin türlerini dijital ortamda yönetin.</div>
+            </div>
+            <div class="tool-meta">
+              <span class="badge badge-success">Aktif</span>
+              <span style="font-size:var(--text-xs);color:var(--text-muted);">→</span>
+            </div>
+          </a>
+
+          <a href="dashboard.html" class="tool-card">
+            <div class="tool-icon">💰</div>
+            <div>
+              <div class="tool-name">Bütçe Takip</div>
+              <div class="tool-description">Gelir-gider dengesini takip edin, kategori bazlı harcama analizleri görün.</div>
+            </div>
+            <div class="tool-meta">
+              <span class="badge badge-success">Aktif</span>
+              <span style="font-size:var(--text-xs);color:var(--text-muted);">→</span>
+            </div>
+          </a>
+
+          <a href="dashboard.html" class="tool-card">
+            <div class="tool-icon">🏗️</div>
+            <div>
+              <div class="tool-name">Kat Planı Çizici</div>
+              <div class="tool-description">Basit bir arayüzle bina kat planlarını çizin ve kaydedin.</div>
+            </div>
+            <div class="tool-meta">
+              <span class="badge badge-warning">Yakında</span>
+              <span style="font-size:var(--text-xs);color:var(--text-muted);">→</span>
+            </div>
+          </a>
+
+          <a href="linkedin-tool.html" class="tool-card">
+            <div class="tool-icon">💼</div>
+            <div>
+              <div class="tool-name">LinkedIn Formatör</div>
+              <div class="tool-description">Metninizi LinkedIn için kancalı giriş, maddeler ve hashtaglerle formatlandırın.</div>
+            </div>
+            <div class="tool-meta">
+              <span class="badge badge-success">Aktif</span>
+              <span style="font-size:var(--text-xs);color:var(--text-muted);">→</span>
+            </div>
+          </a>
+
+          <a href="rpa.html" class="tool-card">
+            <div class="tool-icon">🤖</div>
+            <div>
+              <div class="tool-name">RPA Snippet Kütüphanesi</div>
+              <div class="tool-description">UiPath ve Power Automate için hazır kod parçacıkları ve iş akışı şemaları.</div>
+            </div>
+            <div class="tool-meta">
+              <span class="badge badge-success">Aktif</span>
+              <span style="font-size:var(--text-xs);color:var(--text-muted);">→</span>
+            </div>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── HAKKIMDA TEASER ── -->
+    <section class="section" id="section-about" style="background: linear-gradient(135deg, var(--navy-900), var(--navy-700)); color:#fff;">
+      <div class="container">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap: var(--space-16); align-items:center;">
+          <div>
+            <div class="title-accent"></div>
+            <h2 class="section-title" style="color:#fff;">Benim Hakkımda</h2>
+            <p style="color:rgba(255,255,255,0.75); line-height:var(--leading-relaxed); font-size:var(--text-lg); margin-bottom:var(--space-6);">
+              İş güvenliği mühendisliği ve yazılım geliştirme kesişiminde çalışıyorum.
+              UiPath ile süreç otomasyonu, Power Automate ile iş akışları ve
+              web tabanlı araçlar geliştirerek İSG'yi daha verimli hale getirmeye çalışıyorum.
+            </p>
+            <div class="flex" style="flex-wrap:wrap; gap:var(--space-3);">
+              <span class="badge" style="background:rgba(255,255,255,0.1); color:var(--navy-100); padding:8px 16px; font-size:var(--text-sm);">🛡️ İSG Uzmanlığı</span>
+              <span class="badge" style="background:rgba(255,255,255,0.1); color:var(--navy-100); padding:8px 16px; font-size:var(--text-sm);">🤖 RPA / UiPath</span>
+              <span class="badge" style="background:rgba(255,255,255,0.1); color:var(--navy-100); padding:8px 16px; font-size:var(--text-sm);">⚡ Power Automate</span>
+              <span class="badge" style="background:rgba(255,255,255,0.1); color:var(--navy-100); padding:8px 16px; font-size:var(--text-sm);">💻 Web Geliştirme</span>
+            </div>
+          </div>
+          <div style="text-align:center;">
+            <div style="width:200px; height:200px; background:linear-gradient(135deg,var(--navy-500),var(--accent-secondary)); border-radius:50%; margin:0 auto; display:flex; align-items:center; justify-content:center; font-size:5rem; box-shadow:var(--shadow-xl);">
+              👤
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════
+       FOOTER
+  ══════════════════════════════════════════ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="navbar-brand" style="margin-bottom:var(--space-3);">
+            <div class="navbar-logo">OZ</div>
+            <span class="navbar-brand-name">ozisg.com</span>
+          </div>
+          <p class="footer-brand-text">
+            İş güvenliği, otomasyon ve teknoloji üzerine yazılar, araçlar ve kaynaklar.
+          </p>
+        </div>
+        <div>
+          <div class="footer-title">İçerik</div>
+          <ul class="footer-links">
+            <li><a href="blog.html">Blog & Makaleler</a></li>
+            <li><a href="kutuphane.html">Kütüphanem</a></li>
+            <li><a href="rpa.html">RPA Köşesi</a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="footer-title">Araçlar</div>
+          <ul class="footer-links">
+            <li><a href="dashboard.html">Araç Paneli</a></li>
+            <li><a href="linkedin-tool.html">LinkedIn Formatör</a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="footer-title">Bağlantı</div>
+          <ul class="footer-links">
+            <li><a href="https://linkedin.com" target="_blank" rel="noopener">LinkedIn</a></li>
+            <li><a href="https://github.com" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="mailto:info@ozisg.com">E-posta</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2025 ozisg.com — Tüm hakları saklıdır.</span>
+        <span>Oğuzhan Çetin tarafından ❤️ ile yapıldı</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Firebase SDK -->
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/index.js"></script>
+
+</body>
+</html>

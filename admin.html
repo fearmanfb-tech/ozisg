@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Paneli — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a></li>
+        <li><a href="admin.html" class="nav-link active">⚙️ Admin</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">A</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Admin</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="dashboard.html" class="dropdown-item">🛠️ Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <div id="auth-buttons"><a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a>
+    <a href="admin.html" class="nav-link">⚙️ Admin</a>
+  </nav>
+
+  <!-- Erişim Engeli -->
+  <div id="access-denied" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:var(--bg-page);">
+    <div style="text-align:center;padding:var(--space-8);">
+      <div style="font-size:4rem;margin-bottom:var(--space-4);">🚫</div>
+      <h2 style="margin-bottom:var(--space-4);">Erişim Reddedildi</h2>
+      <p style="color:var(--text-muted);margin-bottom:var(--space-6);">Bu sayfa yalnızca admin kullanıcılara açıktır.</p>
+      <a href="index.html" class="btn btn-primary">Ana Sayfaya Dön</a>
+    </div>
+  </div>
+
+  <!-- Yükleniyor -->
+  <div id="page-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Ana İçerik -->
+  <div id="admin-content" style="display:none;">
+  <main class="page-content">
+
+    <!-- Başlık -->
+    <div style="background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:var(--space-10) 0 var(--space-8);color:#fff;">
+      <div class="container">
+        <div style="display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap;">
+          <div>
+            <h1 style="font-size:var(--text-3xl);font-weight:var(--font-extrabold);margin-bottom:var(--space-2);color:#fff;">⚙️ Admin Paneli</h1>
+            <p style="color:rgba(255,255,255,0.7);">Kullanıcıları yönetin, araç erişimlerini ve sürelerini belirleyin.</p>
+          </div>
+          <span id="adminRoleBadge" style="margin-left:auto;background:rgba(255,255,255,.15);color:#fff;padding:4px 14px;border-radius:99px;font-size:var(--text-sm);font-weight:var(--font-semibold);">🔑 Admin</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="container" style="padding-top:var(--space-8);padding-bottom:var(--space-16);">
+
+      <!-- Özet Kartları -->
+      <div class="stat-grid-admin" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:var(--space-4);margin-bottom:var(--space-8);">
+        <div class="card stat-card">
+          <div class="stat-num" id="statTotalUsers">—</div>
+          <div class="stat-lbl">Toplam Kullanıcı</div>
+        </div>
+        <div class="card stat-card" style="border-top:3px solid var(--accent-warning);">
+          <div class="stat-num" style="color:var(--accent-warning);" id="statPendingUsers">—</div>
+          <div class="stat-lbl">Onay Bekleyen</div>
+        </div>
+        <div class="card stat-card" style="border-top:3px solid var(--accent-success);">
+          <div class="stat-num" style="color:var(--accent-success);" id="statActiveUsers">—</div>
+          <div class="stat-lbl">Aktif Kullanıcı</div>
+        </div>
+        <div class="card stat-card" style="border-top:3px solid var(--accent-danger);">
+          <div class="stat-num" style="color:var(--accent-danger);" id="statSuspended">—</div>
+          <div class="stat-lbl">Askıya Alınmış</div>
+        </div>
+        <div class="card stat-card" style="border-top:3px solid var(--accent-primary);">
+          <div class="stat-num" style="color:var(--accent-primary);" id="statActivePerms">—</div>
+          <div class="stat-lbl">Aktif Erişim</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-num" style="color:var(--accent-warning);" id="statExpiredPerms">—</div>
+          <div class="stat-lbl">Süresi Dolmuş</div>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div style="display:flex;gap:4px;margin-bottom:var(--space-6);border-bottom:2px solid var(--border-color);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
+        <button id="pendingTabBtn" class="admin-tab active" data-tab="pending" onclick="switchTab('pending')">⏳ Onay Bekleyenler</button>
+        <button class="admin-tab" data-tab="users"       onclick="switchTab('users')">👥 Kullanıcılar</button>
+        <button class="admin-tab" data-tab="permissions" onclick="switchTab('permissions')">🔑 İzinler</button>
+        <button class="admin-tab" data-tab="invite"      onclick="switchTab('invite')">✉️ Davet Gönder</button>
+        <button id="blogTabBtn" class="admin-tab" data-tab="blog" onclick="switchTab('blog')">✍️ Blog</button>
+        <button class="admin-tab" data-tab="logs"        onclick="switchTab('logs')">📋 Aktivite</button>
+        <button class="admin-tab" data-tab="site"        onclick="switchTab('site')">🌐 Site</button>
+      </div>
+
+      <!-- TAB: Onay Bekleyenler -->
+      <div id="tab-pending" class="tab-content">
+        <div id="pending-list"></div>
+      </div>
+
+      <!-- TAB: Kullanıcılar -->
+      <div id="tab-users" class="tab-content" style="display:none;">
+        <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-5);">
+          <input type="text" id="searchUsers" class="form-control" placeholder="Ad veya e-posta ara…" style="max-width:260px;" />
+          <select id="usersFilter" class="form-control" style="max-width:160px;" onchange="renderUsersTable()">
+            <option value="all">Tümü</option>
+            <option value="active">Aktif</option>
+            <option value="suspended">Askıda</option>
+            <option value="pending">Bekliyor</option>
+            <option value="admin">Adminler</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="refreshUsers()">🔄 Yenile</button>
+        </div>
+        <div style="overflow-x:auto;" id="users-table"></div>
+      </div>
+
+      <!-- TAB: İzinler -->
+      <div id="tab-permissions" class="tab-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-5);">
+          <div style="display:flex;gap:var(--space-3);align-items:center;">
+            <span style="font-size:var(--text-sm);color:var(--text-muted);">Aktif: <strong id="statTotalPerms">—</strong></span>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openGrantModal()">➕ Yeni İzin Ver</button>
+        </div>
+        <div id="perms-table" style="overflow-x:auto;"></div>
+      </div>
+
+      <!-- TAB: Davet -->
+      <div id="tab-invite" class="tab-content" style="display:none;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-8);">
+
+          <!-- Sol: Form -->
+          <div class="card" style="padding:var(--space-6);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">✉️ Yeni Davet Oluştur</h3>
+
+            <div class="form-group">
+              <label class="form-label">E-posta <span style="color:var(--accent-danger);">*</span></label>
+              <input type="email" id="inviteEmail" class="form-control" placeholder="kullanici@sirket.com" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Rol</label>
+              <select id="inviteRole" class="form-control">
+                <option value="user">👤 Kullanıcı</option>
+                <option value="editor">✍️ Editör</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Erişim Süresi</label>
+              <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
+                <button type="button" class="duration-pill invite-duration" data-months="1"  onclick="selectInviteDuration(this)">1 Ay</button>
+                <button type="button" class="duration-pill invite-duration" data-months="3"  onclick="selectInviteDuration(this)">3 Ay</button>
+                <button type="button" class="duration-pill invite-duration" data-months="6"  onclick="selectInviteDuration(this)">6 Ay</button>
+                <button type="button" class="duration-pill invite-duration" data-months="12" onclick="selectInviteDuration(this)">1 Yıl</button>
+                <button type="button" class="duration-pill invite-duration active" data-months="" onclick="selectInviteDuration(this)">Süresiz</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Araçlar <span style="color:var(--accent-danger);">*</span></label>
+              <div id="inviteToolsList" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);"></div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Mesaj <span style="font-size:var(--text-xs);color:var(--text-muted);">(opsiyonel)</span></label>
+              <textarea id="inviteMessage" class="form-control" rows="2" placeholder="Kullanıcıya özel not…"></textarea>
+            </div>
+
+            <button class="btn btn-primary" style="width:100%;" onclick="createInvite()">🔗 Davet Linki Oluştur</button>
+
+            <!-- Sonuç -->
+            <div id="inviteResult" style="display:none;margin-top:var(--space-4);padding:var(--space-4);background:var(--bg-surface-2);border-radius:var(--border-radius);border:1px solid var(--accent-success);">
+              <p style="font-size:var(--text-sm);color:var(--accent-success);font-weight:var(--font-semibold);margin-bottom:var(--space-2);">✅ Davet linki hazır!</p>
+              <div style="display:flex;gap:var(--space-2);">
+                <input type="text" id="inviteResultUrl" class="form-control" readonly style="font-size:var(--text-xs);" />
+                <button class="btn btn-primary btn-sm" onclick="copyInviteUrl()">📋</button>
+              </div>
+              <p style="font-size:var(--text-xs);color:var(--text-muted);margin-top:var(--space-2);">Link 7 gün geçerlidir. Kopyalayıp kullanıcıya gönderin.</p>
+            </div>
+          </div>
+
+          <!-- Sağ: Aktif davetler -->
+          <div>
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-4);">📬 Aktif Davetler</h3>
+            <div class="card" style="padding:0;overflow:hidden;" id="invite-list">
+              <div style="text-align:center;padding:var(--space-8);color:var(--text-muted);font-size:var(--text-sm);">Yükleniyor…</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- TAB: Blog -->
+      <div id="tab-blog" class="tab-content" style="display:none;">
+
+        <!-- Alt sekmeler -->
+        <div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-5);border-bottom:1px solid var(--border-subtle);">
+          <button class="blog-subtab active" data-sub="pending" onclick="switchBlogSub('pending')"
+            id="blogSubPendingBtn" style="padding:var(--space-2) var(--space-4);background:none;border:none;border-bottom:2px solid var(--accent-primary);font-weight:var(--font-semibold);cursor:pointer;color:var(--accent-primary);font-size:var(--text-sm);">
+            ⏳ İnceleme Bekleyen
+          </button>
+          <button class="blog-subtab" data-sub="all" onclick="switchBlogSub('all')"
+            style="padding:var(--space-2) var(--space-4);background:none;border:none;border-bottom:2px solid transparent;font-weight:var(--font-semibold);cursor:pointer;color:var(--text-muted);font-size:var(--text-sm);">
+            📄 Tüm Yazılar
+          </button>
+        </div>
+
+        <!-- Pending yazılar -->
+        <div id="blog-pending-list"></div>
+
+        <!-- Tüm yazılar -->
+        <div id="blog-all-list" style="display:none;overflow-x:auto;"></div>
+
+      </div>
+
+      <!-- TAB: Aktivite -->
+      <div id="tab-logs" class="tab-content" style="display:none;">
+        <div class="card" style="padding:0;overflow:hidden;" id="logs-list">
+          <div style="text-align:center;padding:var(--space-8);"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB: Site Yönetimi -->
+      <div id="tab-site" class="tab-content" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);">
+
+          <!-- 1. Genel Ayarlar -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🌐 Genel Ayarlar</h3>
+            <div id="site-genel-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 2. Görünüm -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🎨 Görünüm</h3>
+            <div id="site-gorunum-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 2b. Hero İçeriği -->
+          <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">✏️ Hero İçeriği <span style="font-size:var(--text-xs);color:var(--text-muted);font-weight:normal;">(Ana Sayfa Başlık Yazıları)</span></h3>
+            <div id="site-hero-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 3. Ana Menü -->
+          <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-5);">
+              <h3 style="font-weight:var(--font-bold);">📋 Ana Menü</h3>
+              <button class="btn btn-ghost btn-sm" onclick="addMenuItem()">➕ Özel Öğe Ekle</button>
+            </div>
+            <div id="site-menu-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);"></div>
+            <button class="btn btn-primary" onclick="saveMenu()">💾 Menüyü Kaydet</button>
+          </div>
+
+          <!-- 4. Hakkımda -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">👤 Hakkımda Sayfası</h3>
+            <div id="site-hakkimda-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 5. Araçlar -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🛠️ Araç Kartları</h3>
+            <div id="site-tools-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-4);"></div>
+            <button class="btn btn-primary" onclick="saveTools()">💾 Araçları Kaydet</button>
+          </div>
+
+          <!-- 6. Varsayılan Ayarlar -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">⚙️ Varsayılan Ayarlar</h3>
+            <div id="site-defaults-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 7. Footer & SEO -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🔗 Footer & SEO</h3>
+            <div id="site-footer-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 8. Sayfa Tasarımı -->
+          <div class="card" style="padding:var(--space-5);grid-column:1/-1;">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🎨 Sayfa Bazlı Tasarım</h3>
+            <div id="site-pagedesign-form"><div class="spinner"></div></div>
+          </div>
+
+          <!-- 9. Ana Sayfa Bölümleri -->
+          <div class="card" style="padding:var(--space-5);">
+            <h3 style="font-weight:var(--font-bold);margin-bottom:var(--space-5);">🏠 Ana Sayfa Bölümleri</h3>
+            <div id="site-home-sections-form"><div class="spinner"></div></div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+  </div><!-- /admin-content -->
+
+
+  <!-- ══════════ ONAY MODALİ ══════════ -->
+  <div class="modal-overlay" id="approvalModal" style="display:none;">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h3 class="modal-title">✅ Kullanıcıyı Onayla</h3>
+        <button class="modal-close" onclick="closeApprovalModal()">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Kullanıcı bilgisi -->
+        <div style="display:flex;align-items:center;gap:var(--space-4);padding:var(--space-4);background:var(--bg-surface-2);border-radius:var(--border-radius);margin-bottom:var(--space-5);">
+          <div class="user-avatar-mini" id="approvalUserAvatar" style="width:48px;height:48px;font-size:1.1rem;">?</div>
+          <div>
+            <div style="font-weight:var(--font-bold);font-size:var(--text-base);" id="approvalUserName">—</div>
+            <div style="font-size:var(--text-sm);color:var(--text-muted);" id="approvalUserEmail">—</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);">
+
+          <div class="form-group">
+            <label class="form-label">Rol</label>
+            <select id="approvalRole" class="form-control">
+              <option value="user">👤 Kullanıcı</option>
+              <option value="editor">✍️ Editör</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Erişim Süresi</label>
+            <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;" id="approvalDurationList"></div>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Araçlar <span style="color:var(--accent-danger);">*</span></label>
+            <div id="approvalToolsList" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);"></div>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Admin Notu <span style="font-size:var(--text-xs);color:var(--text-muted);">(kullanıcıya görünmez)</span></label>
+            <input type="text" id="approvalNote" class="form-control" placeholder="Örn: 3 aylık ISG uzmanı erişimi" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeApprovalModal()">İptal</button>
+        <button class="btn btn-primary" id="confirmApprovalBtn" onclick="confirmApproval()">✅ Onayla ve Aktifleştir</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════ İZİN VER / DÜZENLE MODAL ══════════ -->
+  <div class="modal-overlay" id="grantModal" style="display:none;">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="grantModalTitle">Araç Erişimi Ver</h3>
+        <button class="modal-close" onclick="closeGrantModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editPermId" />
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Kullanıcı <span style="color:var(--accent-danger);">*</span></label>
+            <select id="grantUserId" class="form-control">
+              <option value="">Kullanıcı seçin…</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Araç <span style="color:var(--accent-danger);">*</span></label>
+            <select id="grantToolId" class="form-control">
+              <option value="">Araç seçin…</option>
+              <option value="tool_isg_reports">🛡️ İSG Günlük Rapor</option>
+              <option value="tool_work_permits">📋 İş İzni Takip</option>
+              <option value="tool_ptk">📊 PTK Kontrol</option>
+              <option value="tool_levha">🪧 Levha Merkezi</option>
+              <option value="tool_kroki">🗺️ Acil Durum Krokisi</option>
+              <option value="tool_kkd">🦺 KKD Yönetim</option>
+              <option value="tool_budget">💰 Bütçe Takip</option>
+              <option value="all_tools">⭐ Tüm Araçlar</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Başlangıç</label>
+            <input type="date" id="grantStartDate" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Bitiş <span style="font-size:var(--text-xs);color:var(--text-muted);">(boş = süresiz)</span></label>
+            <input type="date" id="grantEndDate" class="form-control" />
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Not</label>
+            <input type="text" id="grantNote" class="form-control" placeholder="Örn: 3 aylık deneme" />
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;display:flex;align-items:center;gap:var(--space-3);">
+            <input type="checkbox" id="grantActive" checked style="width:18px;height:18px;accent-color:var(--accent-primary);" />
+            <label for="grantActive" style="font-weight:var(--font-semibold);cursor:pointer;">Erişim aktif</label>
+          </div>
+        </div>
+
+        <div id="grantError" class="alert alert-danger hidden" style="margin-top:var(--space-4);">
+          <span class="alert-icon">⚠️</span>
+          <span id="grantErrorText"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeGrantModal()">İptal</button>
+        <button class="btn btn-danger hidden" id="deletePermBtn" onclick="deletePerm()">🗑️ Sil</button>
+        <button class="btn btn-primary" onclick="savePerm()">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ BLOG RED MODALİ ══════════ -->
+  <div class="modal-overlay" id="rejectPostModal" style="display:none;">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">❌ Yazıyı Reddet</h3>
+        <button class="modal-close" onclick="closeRejectModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-muted);font-size:var(--text-sm);margin-bottom:var(--space-4);">
+          Reddetme gerekçesi editöre iletilecektir.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Gerekçe <span style="color:var(--accent-danger);">*</span></label>
+          <textarea id="rejectReason" class="form-control" rows="3"
+            placeholder="Örn: Konu site kapsamı dışında, içerik yetersiz…"></textarea>
+        </div>
+        <input type="hidden" id="rejectPostId" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeRejectModal()">İptal</button>
+        <button class="btn btn-danger" onclick="confirmRejectPost()">❌ Reddet</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <style>
+    .site-row {
+      display: flex; align-items: center; gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      background: var(--bg-surface-2); border: 1px solid var(--border-subtle);
+      border-radius: var(--border-radius); transition: opacity .2s;
+    }
+    .site-row:hover { border-color: var(--accent-primary); }
+
+    .admin-tab {
+      padding: var(--space-3) var(--space-5);
+      background: none; border: none;
+      border-bottom: 3px solid transparent;
+      font-weight: var(--font-semibold); font-size: var(--text-sm);
+      color: var(--text-muted); cursor: pointer;
+      transition: all var(--transition-fast);
+      margin-bottom: -2px; white-space: nowrap;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .admin-tab:hover { color: var(--text-primary); }
+    .admin-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+    .tab-badge {
+      background: var(--accent-danger); color: #fff;
+      font-size: 11px; font-weight: 700;
+      padding: 1px 7px; border-radius: 99px;
+    }
+
+    .stat-card { padding: var(--space-5); text-align: center; border-top: 3px solid var(--border-color); }
+    .stat-num { font-size: 2rem; font-weight: var(--font-extrabold); color: var(--accent-primary); }
+    .stat-lbl { font-size: var(--text-sm); color: var(--text-muted); margin-top: 2px; }
+
+    .admin-table { width:100%; border-collapse:collapse; font-size:var(--text-sm); }
+    .admin-table thead th { background:var(--bg-surface-3); padding:var(--space-3) var(--space-4); text-align:left; font-weight:var(--font-semibold); color:var(--text-secondary); white-space:nowrap; }
+    .admin-table tbody tr { border-bottom:1px solid var(--border-subtle); }
+    .admin-table tbody tr:hover { background:var(--bg-surface-2); }
+    .admin-table tbody td { padding:var(--space-3) var(--space-4); vertical-align:middle; }
+
+    .user-avatar-cell { display:flex; align-items:center; gap:var(--space-3); }
+    .user-avatar-mini { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--navy-600),var(--navy-400)); color:#fff; display:flex; align-items:center; justify-content:center; font-size:var(--text-sm); font-weight:var(--font-bold); flex-shrink:0; }
+
+    .pending-card {
+      display: flex; align-items: center; gap: var(--space-4);
+      padding: var(--space-4); background: var(--bg-surface);
+      border: 1px solid var(--border-subtle); border-radius: var(--border-radius);
+      margin-bottom: var(--space-3);
+    }
+    .pending-card:hover { border-color: var(--accent-primary); }
+
+    .empty-state { text-align:center; padding:var(--space-12); color:var(--text-muted); }
+    .empty-state div { font-size:2.5rem; margin-bottom:var(--space-3); }
+
+    .tool-check-item {
+      display: flex; align-items: center; gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border-subtle); border-radius: var(--border-radius);
+      cursor: pointer; font-size: var(--text-sm);
+      transition: all var(--transition-fast);
+    }
+    .tool-check-item:hover { border-color: var(--accent-primary); background: var(--bg-surface-2); }
+    .tool-check-item input { accent-color: var(--accent-primary); }
+
+    .duration-pill {
+      padding: 5px 14px; border: 1px solid var(--border-color);
+      border-radius: 99px; font-size: var(--text-sm); cursor: pointer;
+      background: var(--bg-surface); color: var(--text-secondary);
+      transition: all var(--transition-fast);
+    }
+    .duration-pill:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .duration-pill.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+
+    .btn-success { background: var(--accent-success); color: #fff; border: none; }
+    .btn-success:hover { opacity: .9; }
+  </style>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/admin.js"></script>
+  <script type="module" src="js/site-config-admin.js"></script>
+</body>
+</html>

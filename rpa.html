@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RPA & Otomasyon Köşesi — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="blog.html" class="nav-link">Blog</a></li>
+        <li><a href="kutuphane.html" class="nav-link">Kütüphane</a></li>
+        <li><a href="rpa.html" class="nav-link active">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html" class="nav-link">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html" class="nav-link">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="auth-buttons"><a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <button class="hamburger" id="hamburger" aria-label="Menü">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="blog.html" class="nav-link">✍️ Blog</a>
+    <a href="rpa.html" class="nav-link active">🤖 RPA Köşesi</a>
+    <a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a>
+  </nav>
+
+  <main class="page-content">
+
+    <!-- Hero -->
+    <div style="background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:var(--space-16) 0 var(--space-12);color:#fff;">
+      <div class="container">
+        <div class="title-accent"></div>
+        <h1 style="font-size:var(--text-4xl);font-weight:var(--font-extrabold);margin-bottom:var(--space-3);">🤖 RPA & Otomasyon</h1>
+        <p style="color:rgba(255,255,255,0.7);font-size:var(--text-lg);max-width:600px;">
+          UiPath, Power Automate ve Python ile hazırladığım kod parçacıkları,
+          iş akışı şemaları ve otomasyon notları.
+        </p>
+        <div id="admin-add-snippet-btn" class="hidden" style="margin-top:var(--space-6);">
+          <button class="btn btn-primary" id="openSnippetModal">➕ Snippet Ekle</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="container">
+
+        <!-- Filtreler -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-4);margin-bottom:var(--space-8);">
+          <div class="category-tabs" id="toolTabs">
+            <button class="cat-tab active" data-tool="all">Tümü</button>
+            <button class="cat-tab" data-tool="uipath">UiPath</button>
+            <button class="cat-tab" data-tool="power_automate">Power Automate</button>
+            <button class="cat-tab" data-tool="python">Python</button>
+            <button class="cat-tab" data-tool="other">Diğer</button>
+          </div>
+          <div style="position:relative;">
+            <input type="text" id="snippetSearch" class="form-control"
+              placeholder="Snippet ara…" style="padding-left:var(--space-10);width:240px;" />
+            <span style="position:absolute;left:var(--space-3);top:50%;transform:translateY(-50%);color:var(--text-muted);">🔍</span>
+          </div>
+        </div>
+
+        <!-- Snippet Listesi -->
+        <div id="snippets-list">
+          <!-- Skeletonlar -->
+          <div class="card skeleton-card" style="margin-bottom:var(--space-4);">
+            <div class="card-body">
+              <div class="skeleton mb-4" style="height:20px;width:40%;"></div>
+              <div class="skeleton mb-4" style="height:12px;width:70%;"></div>
+              <div class="skeleton" style="height:120px;border-radius:var(--border-radius-md);"></div>
+            </div>
+          </div>
+          <div class="card skeleton-card" style="margin-bottom:var(--space-4);">
+            <div class="card-body">
+              <div class="skeleton mb-4" style="height:20px;width:40%;"></div>
+              <div class="skeleton mb-4" style="height:12px;width:70%;"></div>
+              <div class="skeleton" style="height:120px;border-radius:var(--border-radius-md);"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="snippets-empty" class="hidden" style="text-align:center;padding:var(--space-16);color:var(--text-muted);">
+          <div style="font-size:3rem;margin-bottom:var(--space-4);">📭</div>
+          <p>Bu kategoride henüz snippet yok.</p>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" style="padding:var(--space-8) 0;">
+    <div class="container">
+      <div class="footer-bottom">
+        <span>© 2025 ozisg.com</span>
+        <a href="index.html" style="color:rgba(232,240,252,0.5);">Ana Sayfaya Dön</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SNIPPET MODAL -->
+  <div class="modal-overlay" id="snippetModal" style="display:none;">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="snippetModalTitle">Snippet Ekle</h3>
+        <button class="modal-close" id="closeSnippetModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editSnippetId" />
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Başlık <span style="color:var(--accent-danger);">*</span></label>
+            <input type="text" id="snippetTitle" class="form-control" placeholder="Örn: Excel'den Veri Oku ve Filtrele" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Araç</label>
+            <select id="snippetTool" class="form-control">
+              <option value="uipath">UiPath</option>
+              <option value="power_automate">Power Automate</option>
+              <option value="python">Python</option>
+              <option value="other">Diğer</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Kategori</label>
+            <input type="text" id="snippetCategory" class="form-control" placeholder="Örn: Excel, E-posta, Web" />
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Açıklama</label>
+            <textarea id="snippetDesc" class="form-control" rows="2"
+              placeholder="Bu snippet ne işe yarar?"></textarea>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Kod <span style="color:var(--accent-danger);">*</span></label>
+            <textarea id="snippetCode" class="form-control" rows="12"
+              style="font-family:var(--font-mono);font-size:var(--text-sm);"
+              placeholder="// Kodu buraya yapıştırın…"></textarea>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Etiketler (virgülle)</label>
+            <input type="text" id="snippetTags" class="form-control" placeholder="excel, okuma, filtreleme" />
+          </div>
+        </div>
+
+        <div id="snippetFormError" class="alert alert-danger hidden">
+          <span class="alert-icon">⚠️</span>
+          <span id="snippetFormErrorText"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelSnippetModal">İptal</button>
+        <button class="btn btn-danger hidden" id="deleteSnippetBtn">🗑️ Sil</button>
+        <button class="btn btn-primary" id="saveSnippetBtn">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/rpa.js"></script>
+
+  <style>
+    .cat-tab { padding:var(--space-2) var(--space-4); border:1.5px solid var(--border-color); border-radius:var(--border-radius-full); background:none; font-size:var(--text-sm); font-weight:var(--font-semibold); color:var(--text-secondary); cursor:pointer; transition:all var(--transition-fast); }
+    .cat-tab:hover { border-color:var(--accent-primary); color:var(--accent-primary); }
+    .cat-tab.active { background:var(--accent-primary); border-color:var(--accent-primary); color:#fff; }
+    @media(max-width:640px) { .category-tabs { flex-wrap:wrap; } #snippetSearch { width:100% !important; } }
+  </style>
+
+</body>
+</html>

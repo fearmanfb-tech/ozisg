@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title id="pageTitle">Yazı — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="blog.html" class="nav-link active">Blog</a></li>
+        <li><a href="kutuphane.html" class="nav-link">Kütüphane</a></li>
+        <li><a href="rpa.html" class="nav-link">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html" class="nav-link">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html" class="nav-link">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="auth-buttons"><a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <button class="hamburger" id="hamburger" aria-label="Menü">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="blog.html" class="nav-link active">✍️ Blog</a>
+    <a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a>
+  </nav>
+
+  <main class="page-content">
+
+    <!-- Yükleniyor -->
+    <div id="post-loading" style="display:flex;align-items:center;justify-content:center;min-height:60vh;">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Bulunamadı -->
+    <div id="post-not-found" class="hidden" style="text-align:center;padding:var(--space-24);color:var(--text-muted);">
+      <div style="font-size:3rem;margin-bottom:var(--space-4);">🔍</div>
+      <h2>Yazı bulunamadı</h2>
+      <p style="margin:var(--space-4) 0 var(--space-8);">Bu yazı kaldırılmış veya yayından alınmış olabilir.</p>
+      <a href="blog.html" class="btn btn-primary">← Blog'a Dön</a>
+    </div>
+
+    <!-- Yazı İçeriği -->
+    <article id="post-content" class="hidden">
+
+      <!-- Kapak -->
+      <div id="post-cover-wrap"></div>
+
+      <!-- Yazı Başlık Alanı -->
+      <div style="background:var(--bg-surface-2);border-bottom:1px solid var(--border-color);">
+        <div class="container" style="padding-top:var(--space-12);padding-bottom:var(--space-10);">
+          <a href="blog.html" style="display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);color:var(--text-muted);margin-bottom:var(--space-6);text-decoration:none;">
+            ← Blog'a Dön
+          </a>
+          <div id="post-category-badge" style="margin-bottom:var(--space-4);"></div>
+          <h1 id="post-title" style="font-size:clamp(1.75rem,4vw,var(--text-4xl));font-weight:var(--font-extrabold);line-height:1.2;max-width:800px;margin-bottom:var(--space-5);"></h1>
+          <div id="post-meta" style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-4);color:var(--text-muted);font-size:var(--text-sm);"></div>
+          <!-- Admin Düzenle Butonu -->
+          <div id="post-admin-actions" class="hidden" style="margin-top:var(--space-6);">
+            <button class="btn btn-ghost btn-sm" id="editPostBtn">✏️ Düzenle</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Yazı Gövdesi -->
+      <div class="container" style="padding-top:var(--space-12);padding-bottom:var(--space-16);">
+        <div style="display:grid;grid-template-columns:1fr 280px;gap:var(--space-12);align-items:flex-start;">
+
+          <!-- Sol: İçerik -->
+          <div>
+            <div id="post-body" class="post-body"></div>
+            <div id="post-tags-wrap" style="margin-top:var(--space-10);padding-top:var(--space-6);border-top:1px solid var(--border-color);"></div>
+
+            <!-- Paylaş -->
+            <div style="margin-top:var(--space-8);padding:var(--space-6);background:var(--bg-surface-2);border-radius:var(--border-radius-lg);text-align:center;">
+              <p style="font-weight:var(--font-semibold);margin-bottom:var(--space-4);">Bu yazıyı beğendiyseniz paylaşın</p>
+              <div style="display:flex;gap:var(--space-3);justify-content:center;flex-wrap:wrap;">
+                <button class="btn btn-ghost btn-sm" id="shareLinkedIn">💼 LinkedIn</button>
+                <button class="btn btn-ghost btn-sm" id="shareTwitter">🐦 Twitter</button>
+                <button class="btn btn-ghost btn-sm" id="copyLink">🔗 Linki Kopyala</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sağ: Sidebar -->
+          <aside style="position:sticky;top:calc(var(--navbar-height) + var(--space-6));">
+            <div class="card" style="margin-bottom:var(--space-4);">
+              <div class="card-body">
+                <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4);">
+                  <div class="avatar avatar-md avatar-placeholder">OÇ</div>
+                  <div>
+                    <div style="font-weight:var(--font-bold);">Oğuzhan Çetin</div>
+                    <div style="font-size:var(--text-xs);color:var(--text-muted);">İSG Uzmanı · RPA Geliştiricisi</div>
+                  </div>
+                </div>
+                <a href="index.html" class="btn btn-secondary btn-full btn-sm">Profili Gör</a>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header" style="padding:var(--space-4) var(--space-5);">
+                <span style="font-weight:var(--font-bold);font-size:var(--text-sm);">Son Yazılar</span>
+              </div>
+              <div id="sidebar-recent" class="card-body" style="padding:var(--space-3);">
+                <div class="spinner" style="width:24px;height:24px;margin:var(--space-4) auto;"></div>
+              </div>
+            </div>
+          </aside>
+
+        </div>
+      </div>
+    </article>
+
+  </main>
+
+  <!-- Admin Düzenleme Modal (blog.html'deki ile aynı mantık) -->
+  <div class="modal-overlay" id="editModal" style="display:none;">
+    <div class="modal" style="max-width:720px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Yazıyı Düzenle</h3>
+        <button class="modal-close" id="closeEditModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editPostId" />
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Başlık</label>
+            <input type="text" id="editTitle" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kategori</label>
+            <select id="editCategory" class="form-control">
+              <option value="personal">Kişisel</option>
+              <option value="scientific">Bilimsel Makale</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Durum</label>
+            <select id="editPublished" class="form-control">
+              <option value="true">Yayınlandı</option>
+              <option value="false">Taslak</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Kapak Görseli URL</label>
+            <input type="url" id="editCover" class="form-control" />
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Özet</label>
+            <textarea id="editExcerpt" class="form-control" rows="2"></textarea>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">İçerik</label>
+            <textarea id="editContent" class="form-control" rows="12"></textarea>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Etiketler</label>
+            <input type="text" id="editTags" class="form-control" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelEditModal">İptal</button>
+        <button class="btn btn-primary" id="saveEditBtn">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/blog-post.js"></script>
+
+  <style>
+    /* Yazı içerik stilleri */
+    .post-body { max-width: 720px; }
+    .post-body h2 { font-size: var(--text-2xl); margin: var(--space-8) 0 var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
+    .post-body h3 { font-size: var(--text-xl); margin: var(--space-6) 0 var(--space-3); }
+    .post-body p  { margin-bottom: var(--space-5); color: var(--text-secondary); line-height: var(--leading-loose); }
+    .post-body ul, .post-body ol { margin: var(--space-4) 0 var(--space-5) var(--space-6); display: flex; flex-direction: column; gap: var(--space-2); }
+    .post-body li { color: var(--text-secondary); line-height: var(--leading-relaxed); list-style: disc; }
+    .post-body ol li { list-style: decimal; }
+    .post-body strong { color: var(--text-primary); font-weight: var(--font-bold); }
+    .post-body a { color: var(--accent-primary); text-decoration: underline; }
+    .post-body blockquote { border-left: 4px solid var(--accent-primary); padding: var(--space-4) var(--space-6); background: var(--bg-surface-2); margin: var(--space-6) 0; border-radius: 0 var(--border-radius) var(--border-radius) 0; font-style: italic; color: var(--text-secondary); }
+    .post-body code { background: var(--bg-code); color: var(--accent-secondary); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.9em; }
+    .post-body pre { background: var(--bg-code); padding: var(--space-5); border-radius: var(--border-radius-md); overflow-x: auto; margin: var(--space-6) 0; }
+    .post-body pre code { background: none; padding: 0; color: var(--text-code); }
+    .post-body img { border-radius: var(--border-radius-md); margin: var(--space-6) 0; box-shadow: var(--shadow-md); }
+    .post-body table { width: 100%; border-collapse: collapse; margin: var(--space-6) 0; font-size: var(--text-sm); }
+    .post-body th { background: var(--bg-surface-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--border-color); font-weight: var(--font-bold); text-align: left; }
+    .post-body td { padding: var(--space-3) var(--space-4); border: 1px solid var(--border-color); color: var(--text-secondary); }
+
+    @media (max-width: 900px) {
+      .post-layout-grid { grid-template-columns: 1fr !important; }
+      aside { display: none; }
+    }
+  </style>
+
+</body>
+</html>

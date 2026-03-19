@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Araç Paneli — ozisg.com" />
+  <title>Araçlarım — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+</head>
+<body>
+
+  <!-- NAVBAR (aynı navbar.js ile dinamik yüklenir; burada tekrar yazılmış) -->
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="blog.html" class="nav-link">Blog</a></li>
+        <li><a href="kutuphane.html" class="nav-link">Kütüphane</a></li>
+        <li><a href="rpa.html" class="nav-link">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html" class="nav-link">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html" class="nav-link active">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="auth-buttons"><a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <div style="padding: var(--space-3) var(--space-3) var(--space-2); font-size:var(--text-xs); color:var(--text-muted);">
+              Hesabım
+            </div>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <button class="hamburger" id="hamburger" aria-label="Menü">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="blog.html" class="nav-link">✍️ Blog</a>
+    <a href="kutuphane.html" class="nav-link">📚 Kütüphane</a>
+    <a href="rpa.html" class="nav-link">🤖 RPA Köşesi</a>
+    <a href="linkedin-tool.html" class="nav-link">💼 LinkedIn Aracı</a>
+    <a href="dashboard.html" class="nav-link active">🛠️ Araçlarım</a>
+  </nav>
+
+  <!-- ══════════════════════════════════════════
+       GİRİŞ YAPILMAMIş EKRANI (auth-gate)
+  ══════════════════════════════════════════ -->
+  <div id="auth-gate" class="page-content" style="display:none;">
+    <div class="auth-page" style="background: var(--bg-page);">
+      <div style="text-align:center; max-width:480px;">
+        <div style="font-size:4rem; margin-bottom:var(--space-6);">🔐</div>
+        <h1 class="section-title" style="margin-bottom:var(--space-4);">Giriş Gerekli</h1>
+        <p style="color:var(--text-muted); margin-bottom:var(--space-8); font-size:var(--text-lg);">
+          Araçlara erişmek için hesabınıza giriş yapmanız gerekmektedir.
+          Verileriniz yalnızca size özeldir.
+        </p>
+        <div class="flex" style="gap:var(--space-4); justify-content:center; flex-wrap:wrap;">
+          <a href="login.html" class="btn btn-primary btn-lg">Giriş Yap</a>
+          <a href="login.html?tab=register" class="btn btn-secondary btn-lg">Üye Ol</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       YÜKLENİYOR
+  ══════════════════════════════════════════ -->
+  <div id="dashboard-loading" class="page-content" style="display:flex; align-items:center; justify-content:center; min-height:100vh;">
+    <div class="text-center">
+      <div class="spinner"></div>
+      <p class="text-muted mt-4">Yükleniyor…</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       DASHBOARD (giriş yapılmış)
+  ══════════════════════════════════════════ -->
+  <div id="dashboard-content" class="page-content" style="display:none;">
+
+    <!-- Dashboard Header -->
+    <div class="dashboard-header">
+      <div class="container">
+        <div class="dashboard-header-inner">
+          <div>
+            <h1 class="dashboard-title">Merhaba, <span id="dashboardUserName">Kullanıcı</span> 👋</h1>
+            <p class="text-muted">Araçlarınız ve kayıtlarınız burada toplanıyor.</p>
+          </div>
+          <div class="flex" style="gap:var(--space-3); align-items:center; flex-wrap:wrap;">
+            <div class="dashboard-stat-badge">
+              📊 <strong id="totalRecords">0</strong> Kayıt
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container" style="padding-top: var(--space-10); padding-bottom: var(--space-16);">
+
+      <!-- ── ARAÇLAR GRID ── -->
+      <div class="section-header" style="margin-bottom: var(--space-8);">
+        <div class="title-accent"></div>
+        <h2 class="section-title">Araçlarım</h2>
+        <p class="section-subtitle mb-0">Bir araca tıklayarak kullanmaya başlayın.</p>
+      </div>
+
+      <div class="tools-grid" style="margin-bottom: var(--space-16);">
+
+        <!-- İSG Günlük Rapor -->
+        <a href="tools/isg-rapor.html" class="tool-card" id="tool-isg">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);">🛡️</div>
+          <div>
+            <div class="tool-name">İSG Günlük Rapor Jeneratörü</div>
+            <div class="tool-description">
+              Saha gözlem bulgu raporlarını oluşturun, düzenleyin ve PDF olarak dışa aktarın.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span class="tool-record-count" data-collection="tool_isg_reports">— kayıt</span>
+          </div>
+        </a>
+
+        <!-- İş Takip -->
+        <a href="tools/is-izni.html" class="tool-card" id="tool-permit">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#d1fae5,#a7f3d0);">📋</div>
+          <div>
+            <div class="tool-name">Teknik İş Takip & İSG</div>
+            <div class="tool-description">
+              Günlük teknik çalışmaları, İSG izin kapsamlarını ve haftalık iş durumlarını takip edin.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span class="tool-record-count" data-collection="tool_work_permits">— kayıt</span>
+          </div>
+        </a>
+
+        <!-- Bütçe Takip -->
+        <a href="tools/butce.html" class="tool-card" id="tool-budget">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#fef3c7,#fde68a);">💰</div>
+          <div>
+            <div class="tool-name">Bütçe Takip Aracı</div>
+            <div class="tool-description">
+              Gelir ve giderlerinizi kategorize edin, aylık bütçe analizinizi takip edin.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span class="tool-record-count" data-collection="tool_budget">— kayıt</span>
+          </div>
+        </a>
+
+        <!-- PTK -->
+        <a href="tools/ptk.html" class="tool-card" id="tool-ptk">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#fce7f3,#fbcfe8);">📊</div>
+          <div>
+            <div class="tool-name">Periyodik Teknik Kontrol (PTK)</div>
+            <div class="tool-description">
+              Ekipman denetimleri, CSV toplu giriş, planlama takvimi ve arşiv yönetimi.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span class="tool-record-count" data-collection="tool_ptk_reports">— kayıt</span>
+          </div>
+        </a>
+
+        <!-- Levha Merkezi -->
+        <a href="tools/levha.html" class="tool-card" id="tool-levha">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#fef9c3,#fef08a);">🪧</div>
+          <div>
+            <div class="tool-name">İSG Levha Merkezi</div>
+            <div class="tool-description">
+              AI destekli ISO 7010 uyumlu güvenlik levhası tasarlayın ve yazdırın.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span class="tool-record-count" data-collection="tool_levha_designs">— tasarım</span>
+          </div>
+        </a>
+
+        <!-- Kroki -->
+        <a href="tools/kroki.html" class="tool-card" id="tool-kroki">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);">🗺️</div>
+          <div>
+            <div class="tool-name">Acil Durum Krokisi</div>
+            <div class="tool-description">
+              Tahliye planları ve acil durum krokileri oluşturun, kaydedin, yazdırın.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span class="tool-record-count" data-collection="tool_kroki_maps">— kroki</span>
+          </div>
+        </a>
+
+        <!-- Kat Planı Çizici -->
+        <a href="tools/kat-plani.html" class="tool-card" id="tool-floor">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#ede9fe,#ddd6fe);">🏗️</div>
+          <div>
+            <div class="tool-name">Kat Planı Çizici</div>
+            <div class="tool-description">
+              Basit bir canvas arayüzü ile bina kat planlarını çizin ve kaydedin.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-warning">Yakında</span>
+            <span style="font-size:var(--text-xs); color:var(--text-muted);">Geliştiriliyor</span>
+          </div>
+        </a>
+
+        <!-- LinkedIn Formatör -->
+        <a href="linkedin-tool.html" class="tool-card">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#dbeafe,#93c5fd);">💼</div>
+          <div>
+            <div class="tool-name">LinkedIn İçerik Formatörü</div>
+            <div class="tool-description">
+              Metninizi profesyonel LinkedIn formatına dönüştürün, önizleyin ve kopyalayın.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span style="font-size:var(--text-xs); color:var(--text-muted);">Giriş gerektirmez</span>
+          </div>
+        </a>
+
+        <!-- Blog Editörü — sadece editor/admin rolü için gösterilir -->
+        <a href="tools/blog-editor.html" class="tool-card" id="tool-blog-editor" style="display:none;">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#f0fdf4,#bbf7d0);">✍️</div>
+          <div>
+            <div class="tool-name">Blog Editörü</div>
+            <div class="tool-description">
+              Yeni blog yazısı oluşturun, taslak kaydedin veya yayınlanmak üzere gönderin.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Editör</span>
+            <span style="font-size:var(--text-xs); color:var(--text-muted);">Onay gerekli</span>
+          </div>
+        </a>
+
+        <!-- RPA Kütüphanesi -->
+        <a href="rpa.html" class="tool-card">
+          <div class="tool-icon" style="background:linear-gradient(135deg,#fce7f3,#fbcfe8);">🤖</div>
+          <div>
+            <div class="tool-name">RPA Snippet Kütüphanesi</div>
+            <div class="tool-description">
+              UiPath ve Power Automate için hazır kod parçacıkları ve iş akışı şemaları.
+            </div>
+          </div>
+          <div class="tool-meta">
+            <span class="badge badge-success">Aktif</span>
+            <span style="font-size:var(--text-xs); color:var(--text-muted);">Herkese açık</span>
+          </div>
+        </a>
+
+      </div>
+
+      <!-- ── SON AKTİVİTE ── -->
+      <div>
+        <div class="section-header" style="margin-bottom: var(--space-6);">
+          <h2 class="section-title" style="font-size:var(--text-2xl);">Son Aktivite</h2>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div id="recent-activity-list">
+              <div class="spinner"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/dashboard.js"></script>
+
+</body>
+</html>

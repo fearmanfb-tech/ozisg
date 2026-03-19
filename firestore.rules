@@ -1,0 +1,320 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────
+    // YARDIMCI FONKSİYONLAR
+    // ─────────────────────────────────────────────
+
+    // Kullanıcı giriş yapmış mı?
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // İstek sahibi admin veya superadmin mi?
+    // Firebase Console > Firestore > users/{uid} → role: "admin" veya "superadmin"
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["admin", "superadmin"];
+    }
+
+    // Sadece superadmin mi?
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "superadmin";
+    }
+
+    // Dokümanın sahibi mevcut kullanıcı mı?
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Yeni yazılan dokümanın userId alanı, giriş yapan kullanıcıyla eşleşiyor mu?
+    function isWritingOwnData() {
+      return isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // KULLANICI PROFİLLERİ  /users/{userId}
+    // ─────────────────────────────────────────────
+    // Yapı: { email, displayName, photoURL, role, createdAt, lastLogin }
+    match /users/{userId} {
+      // Sadece kendi profilini okuyabilir; admin hepsini okuyabilir
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Kayıt anında kendi dokümanını oluşturabilir (role: "user", status: "pending" ile)
+      allow create: if isOwner(userId) &&
+        request.resource.data.role == "user" &&
+        request.resource.data.keys().hasAll(["email", "displayName", "role", "createdAt"]);
+
+      // Güncelleme:
+      //   - Kullanıcı kendi profilini güncelleyebilir (role ve status alanlarına dokunamaz)
+      //   - Admin her şeyi güncelleyebilir
+      //   - Superadmin role alanını da değiştirebilir (normal admin değiştiremez → rule ile zaten admin kısıtı var)
+      allow update: if (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(["role", "status"])
+      ) || isAdmin();
+
+      // Silme sadece admin
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────
+    // DAVETLER  /invitations/{token}
+    // ─────────────────────────────────────────────
+    // Yapı: { email, role, tools[], durationMonths, invitedBy, createdAt,
+    //         expiresAt, used, usedBy, usedAt }
+    match /invitations/{token} {
+      // Herkese okuma (token biliniyorsa erişilebilir — UUID tahmin edilemez)
+      allow read: if true;
+
+      // Oluşturma sadece admin
+      allow create: if isAdmin();
+
+      // Güncelleme: admin veya yeni kayıt olan kullanıcı (used: true yapabilmek için)
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        request.resource.data.used == true &&
+        request.resource.data.usedBy == request.auth.uid
+      );
+
+      // Silme sadece admin
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────
+    // SİTE AYARLARI  /site_config/{docId}
+    // ─────────────────────────────────────────────
+    // Yapı: { colors, typography, maintenance, updatedBy, updatedAt }
+    match /site_config/{docId} {
+      // Herkes okuyabilir (tema renkleri public)
+      allow read: if true;
+      // Sadece admin yazabilir
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────
+    // BLOG / MAKALELER  /posts/{postId}
+    // ─────────────────────────────────────────────
+    // Yapı: { title, content, excerpt, category, tags[], coverImage,
+    //         authorId, createdAt, updatedAt, published,
+    //         status: "draft"|"pending_review"|"published"|"rejected",
+    //         rejectionReason }
+    match /posts/{postId} {
+      // Yayınlanmış → herkes okur
+      // Taslak/bekleyen/reddedilmiş → sadece sahibi veya admin okur
+      allow read: if resource.data.published == true
+        || isAdmin()
+        || (isAuthenticated() && resource.data.authorId == request.auth.uid);
+
+      // Editör kendi yazısını oluşturabilir (published:false, status:draft/pending)
+      allow create: if isAdmin() || (
+        isAuthenticated() &&
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.published == false &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+          in ["editor", "admin", "superadmin"]
+      );
+
+      // Editör kendi YAYINLANMAMIŞ yazısını güncelleyebilir
+      // Admin her şeyi güncelleyebilir (onay/red dahil)
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        resource.data.authorId == request.auth.uid &&
+        resource.data.published == false &&
+        request.resource.data.authorId == resource.data.authorId &&
+        request.resource.data.published == false
+      );
+
+      // Silme: admin veya yazının sahibi (sadece yayınlanmamışları)
+      allow delete: if isAdmin() ||
+        (isAuthenticated() && resource.data.authorId == request.auth.uid
+          && resource.data.published == false);
+    }
+
+    // ─────────────────────────────────────────────
+    // KÜTÜPHANEMDEKİ KİTAPLAR  /books/{bookId}
+    // ─────────────────────────────────────────────
+    // Yapı: { title, author, coverImage, rating (1-5),
+    //         review, genre, readYear, createdAt }
+    match /books/{bookId} {
+      allow read: if true;        // herkes okuyabilir
+      allow write: if isAdmin();  // sadece admin ekler/günceller/siler
+    }
+
+    // ─────────────────────────────────────────────
+    // RPA / OTOMASYON SNIPPETLERİ  /rpa_snippets/{snippetId}
+    // ─────────────────────────────────────────────
+    // Yapı: { title, description, code, tool, category,
+    //         tags[], authorId, createdAt }
+    // tool: "uipath" | "power_automate" | "python" | diğer
+    match /rpa_snippets/{snippetId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────
+    // ARAÇ: İSG GÜNLÜK RAPOR JENERATÖRü  /tool_isg_reports/{reportId}
+    // ─────────────────────────────────────────────
+    // Yapı: { userId, date, location, findings, corrective_actions,
+    //         status, createdAt, updatedAt }
+    match /tool_isg_reports/{reportId} {
+      // Sadece sahibi okuyabilir
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Sadece giriş yapan kendi kaydını oluşturabilir
+      allow create: if isWritingOwnData();
+
+      // Sadece sahibi güncelleyebilir (userId alanını değiştiremez)
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+
+      // Sadece sahibi silebilir
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // ARAÇ: İŞ İZNİ TAKİP SİSTEMİ  /tool_work_permits/{permitId}
+    // ─────────────────────────────────────────────
+    // Yapı: { userId, title, description, risk_level,
+    //         start_date, end_date, status, workers[],
+    //         location, equipment, createdAt, updatedAt }
+    // risk_level: "low" | "medium" | "high" | "critical"
+    // status: "draft" | "active" | "completed" | "cancelled"
+    match /tool_work_permits/{permitId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isWritingOwnData();
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // ARAÇ: BÜTÇE TAKİP  /tool_budget/{itemId}
+    // ─────────────────────────────────────────────
+    // Yapı: { userId, description, amount, category,
+    //         type ("income"|"expense"), date, createdAt }
+    match /tool_budget/{itemId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isWritingOwnData();
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // ARAÇ: KAT PLANI ÇİZİCİ  /tool_floor_plans/{planId}
+    // ─────────────────────────────────────────────
+    // Yapı: { userId, name, description, planData (JSON),
+    //         width, height, createdAt, updatedAt }
+    match /tool_floor_plans/{planId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isWritingOwnData();
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // KULLANICI İZİNLERİ  /user_permissions/{permId}
+    // ─────────────────────────────────────────────
+    // Yapı: { userId, toolId, active, expiresAt, startsAt,
+    //         grantedBy, grantedAt, note }
+    match /user_permissions/{permId} {
+      // Kullanıcı kendi iznini okuyabilir; admin hepsini okur
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Sadece admin yazabilir
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────
+    // ARAÇ: PTK RAPORLARI  /tool_ptk_reports/{reportId}
+    // ─────────────────────────────────────────────
+    match /tool_ptk_reports/{reportId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isWritingOwnData();
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // ARAÇ: LEVHA  /tool_levha_designs/{designId}
+    // ─────────────────────────────────────────────
+    match /tool_levha_designs/{designId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isWritingOwnData();
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // ARAÇ: KROKİ  /tool_kroki_maps/{mapId}
+    // ─────────────────────────────────────────────
+    match /tool_kroki_maps/{mapId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isWritingOwnData();
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────
+    // ADMİN LOGLARI  /admin_logs/{logId}
+    // ─────────────────────────────────────────────
+    match /admin_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────
+    // BİLDİRİMLER  /notifications/{notifId}
+    // ─────────────────────────────────────────────
+    // Yapı: { userId, type, title, message, read, createdAt }
+    match /notifications/{notifId} {
+      // Kullanıcı sadece kendi bildirimlerini okuyabilir
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Sadece admin oluşturabilir
+      allow create: if isAdmin();
+
+      // Kullanıcı sadece read:true yapabilir, başka alan değiştiremez
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.read == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"]);
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────
+    // VARSAYİLAN KURAL: DİĞER HER ŞEYİ REDDET
+    // ─────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Profilim — ozisg.com" />
+  <title>Profilim — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="blog.html" class="nav-link">Blog</a></li>
+        <li><a href="kutuphane.html" class="nav-link">Kütüphane</a></li>
+        <li><a href="rpa.html" class="nav-link">RPA Köşesi</a></li>
+        <li><a href="linkedin-tool.html" class="nav-link">LinkedIn Aracı</a></li>
+        <li><a href="dashboard.html" class="nav-link">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="auth-buttons"><a href="login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <button class="hamburger" id="hamburger" aria-label="Menü">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="blog.html" class="nav-link">✍️ Blog</a>
+    <a href="kutuphane.html" class="nav-link">📚 Kütüphane</a>
+    <a href="rpa.html" class="nav-link">🤖 RPA Köşesi</a>
+    <a href="dashboard.html" class="nav-link">🛠️ Araçlarım</a>
+    <a href="profile.html" class="nav-link active">👤 Profilim</a>
+  </nav>
+
+  <!-- Yükleniyor -->
+  <div id="profile-loading" class="page-content" style="display:flex;align-items:center;justify-content:center;min-height:100vh;">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Giriş Gerekli -->
+  <div id="profile-gate" class="page-content" style="display:none;">
+    <div class="auth-page" style="background:var(--bg-page);">
+      <div style="text-align:center;max-width:400px;">
+        <div style="font-size:3.5rem;margin-bottom:var(--space-5);">🔐</div>
+        <h2 style="margin-bottom:var(--space-4);">Giriş Gerekli</h2>
+        <p style="color:var(--text-muted);margin-bottom:var(--space-6);">Profil sayfasını görüntülemek için giriş yapmalısınız.</p>
+        <a href="login.html" class="btn btn-primary">Giriş Yap</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profil İçeriği -->
+  <div id="profile-content" class="page-content" style="display:none;">
+
+    <!-- Başlık -->
+    <div style="background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:var(--space-12) 0 var(--space-10);color:#fff;">
+      <div class="container">
+        <div style="display:flex;align-items:center;gap:var(--space-6);flex-wrap:wrap;">
+          <div id="profileAvatarLarge" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--navy-400),var(--accent-secondary));display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:#fff;flex-shrink:0;overflow:hidden;">
+            ?
+          </div>
+          <div>
+            <h1 id="profileHeaderName" style="font-size:var(--text-2xl);font-weight:var(--font-extrabold);margin-bottom:var(--space-1);color:#fff;">
+              Yükleniyor…
+            </h1>
+            <p id="profileHeaderEmail" style="color:rgba(255,255,255,0.7);font-size:var(--text-sm);">—</p>
+            <div style="margin-top:var(--space-2);">
+              <span id="profileRoleBadge" class="badge" style="background:rgba(255,255,255,0.2);color:#fff;font-size:var(--text-xs);">—</span>
+              <span id="profileStatusBadge" class="badge" style="background:rgba(255,255,255,0.2);color:#fff;font-size:var(--text-xs);margin-left:var(--space-2);">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container" style="padding-top:var(--space-10);padding-bottom:var(--space-16);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);">
+
+        <!-- Sol: Profil Düzenle -->
+        <div>
+          <div class="card" style="padding:var(--space-6);">
+            <h2 style="font-size:var(--text-xl);font-weight:var(--font-bold);margin-bottom:var(--space-6);">Profil Bilgileri</h2>
+
+            <div class="form-group">
+              <label class="form-label">Ad Soyad</label>
+              <input type="text" id="profileDisplayName" class="form-input" placeholder="Adınız" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">E-posta (değiştirilemez)</label>
+              <input type="email" id="profileEmail" class="form-input" disabled style="opacity:0.6;" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Profil Fotoğrafı URL</label>
+              <input type="url" id="profilePhotoURL" class="form-input" placeholder="https://..." />
+              <div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:var(--space-1);">
+                Bir resim URL'si girin. Değişiklik kaydedilince üst kısımda görünecek.
+              </div>
+            </div>
+
+            <div id="profileSaveAlert" class="hidden" style="padding:var(--space-3);border-radius:var(--border-radius);margin-bottom:var(--space-4);font-size:var(--text-sm);"></div>
+
+            <button id="saveProfileBtn" class="btn btn-primary" style="width:100%;">
+              Kaydet
+            </button>
+          </div>
+
+          <!-- Hesap Bilgileri -->
+          <div class="card" style="padding:var(--space-6);margin-top:var(--space-4);">
+            <h2 style="font-size:var(--text-xl);font-weight:var(--font-bold);margin-bottom:var(--space-5);">Hesap Bilgileri</h2>
+            <div style="display:flex;flex-direction:column;gap:var(--space-3);">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-3) 0;border-bottom:1px solid var(--border-subtle);">
+                <span style="color:var(--text-muted);font-size:var(--text-sm);">Kayıt Tarihi</span>
+                <span id="profileCreatedAt" style="font-size:var(--text-sm);font-weight:var(--font-medium);">—</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-3) 0;border-bottom:1px solid var(--border-subtle);">
+                <span style="color:var(--text-muted);font-size:var(--text-sm);">Son Giriş</span>
+                <span id="profileLastLogin" style="font-size:var(--text-sm);font-weight:var(--font-medium);">—</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-3) 0;border-bottom:1px solid var(--border-subtle);">
+                <span style="color:var(--text-muted);font-size:var(--text-sm);">Erişim Bitiş</span>
+                <span id="profileAccessExpiry" style="font-size:var(--text-sm);font-weight:var(--font-medium);">—</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-3) 0;">
+                <span style="color:var(--text-muted);font-size:var(--text-sm);">Kullanıcı ID</span>
+                <span id="profileUid" style="font-size:var(--text-xs);color:var(--text-muted);font-family:monospace;word-break:break-all;max-width:160px;text-align:right;">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sağ: Araç İzinleri -->
+        <div>
+          <div class="card" style="padding:var(--space-6);">
+            <h2 style="font-size:var(--text-xl);font-weight:var(--font-bold);margin-bottom:var(--space-5);">Araç Erişimlerim</h2>
+            <div id="profilePermsList">
+              <div class="spinner"></div>
+            </div>
+          </div>
+
+          <!-- Hızlı Bağlantılar -->
+          <div class="card" style="padding:var(--space-6);margin-top:var(--space-4);">
+            <h2 style="font-size:var(--text-xl);font-weight:var(--font-bold);margin-bottom:var(--space-4);">Hızlı Bağlantılar</h2>
+            <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+              <a href="dashboard.html" class="btn btn-secondary" style="justify-content:flex-start;gap:var(--space-3);">🛠️ Araç Panelim</a>
+              <a href="blog.html" class="btn btn-secondary" style="justify-content:flex-start;gap:var(--space-3);">✍️ Blog</a>
+              <a href="tools/blog-editor.html" id="blogEditorLink" class="btn btn-secondary" style="justify-content:flex-start;gap:var(--space-3);display:none;">📝 Blog Editörü</a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/profile.js"></script>
+
+</body>
+</html>

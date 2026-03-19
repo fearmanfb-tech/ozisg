@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bütçe Takip — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/master.css" />
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="../index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="../index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="../dashboard.html" class="nav-link active">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="../dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <div id="auth-buttons"><a href="../login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="../index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="../dashboard.html" class="nav-link">📊 Araçlarım</a>
+  </nav>
+
+  <div id="auth-gate" style="display:none;">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;padding:var(--space-8);">
+        <div style="font-size:3rem;margin-bottom:var(--space-4);">🔐</div>
+        <h2 style="margin-bottom:var(--space-4);">Giriş Gerekli</h2>
+        <a href="../login.html" class="btn btn-primary btn-lg">Giriş Yap</a>
+      </div>
+    </div>
+  </div>
+  <div id="page-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;"><div class="spinner"></div></div>
+
+  <div id="main-content" style="display:none;">
+  <main class="page-content">
+
+    <div style="background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:var(--space-12) 0 var(--space-8);color:#fff;">
+      <div class="container">
+        <a href="../dashboard.html" style="color:rgba(255,255,255,0.6);font-size:var(--text-sm);text-decoration:none;display:inline-flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-4);">← Araçlarıma Dön</a>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-4);">
+          <div>
+            <h1 style="font-size:var(--text-3xl);font-weight:var(--font-extrabold);margin-bottom:var(--space-2);">💰 Bütçe Takip Aracı</h1>
+            <p style="color:rgba(255,255,255,0.7);">Gelir ve giderlerinizi takip edin, aylık analizinizi görün.</p>
+          </div>
+          <button class="btn btn-primary" id="openNewTxBtn">➕ İşlem Ekle</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="container" style="padding-top:var(--space-8);padding-bottom:var(--space-16);">
+
+      <!-- Özet Kartları -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4);margin-bottom:var(--space-8);">
+        <div class="card" style="padding:var(--space-6);text-align:center;border-top:4px solid var(--accent-success);">
+          <div style="font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:var(--space-2);">Toplam Gelir</div>
+          <div style="font-size:var(--text-3xl);font-weight:var(--font-extrabold);color:var(--accent-success);" id="totalIncome">₺0</div>
+        </div>
+        <div class="card" style="padding:var(--space-6);text-align:center;border-top:4px solid var(--accent-danger);">
+          <div style="font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:var(--space-2);">Toplam Gider</div>
+          <div style="font-size:var(--text-3xl);font-weight:var(--font-extrabold);color:var(--accent-danger);" id="totalExpense">₺0</div>
+        </div>
+        <div class="card" style="padding:var(--space-6);text-align:center;border-top:4px solid var(--accent-primary);">
+          <div style="font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:var(--space-2);">Net Bakiye</div>
+          <div style="font-size:var(--text-3xl);font-weight:var(--font-extrabold);" id="netBalance">₺0</div>
+        </div>
+      </div>
+
+      <!-- Filtreler -->
+      <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-6);">
+        <select id="filterType" class="form-control" style="width:160px;">
+          <option value="all">Tümü</option>
+          <option value="income">Gelirler</option>
+          <option value="expense">Giderler</option>
+        </select>
+        <select id="filterCategory" class="form-control" style="width:180px;">
+          <option value="all">Tüm Kategoriler</option>
+          <option value="maas">Maaş</option>
+          <option value="kira">Kira</option>
+          <option value="market">Market</option>
+          <option value="fatura">Fatura</option>
+          <option value="ulasim">Ulaşım</option>
+          <option value="saglik">Sağlık</option>
+          <option value="egitim">Eğitim</option>
+          <option value="eglence">Eğlence</option>
+          <option value="diger">Diğer</option>
+        </select>
+        <input type="month" id="filterBudgetMonth" class="form-control" style="width:160px;" />
+      </div>
+
+      <!-- Kategori Dağılımı -->
+      <div id="category-bars" class="card" style="padding:var(--space-6);margin-bottom:var(--space-6);display:none;">
+        <h3 style="font-size:var(--text-base);font-weight:var(--font-bold);margin-bottom:var(--space-5);">📊 Kategori Dağılımı (Giderler)</h3>
+        <div id="category-bars-inner"></div>
+      </div>
+
+      <div id="transactions-loading" style="text-align:center;padding:var(--space-8);"><div class="spinner"></div></div>
+      <div id="transactions-list" style="display:none;"></div>
+      <div id="transactions-empty" class="hidden" style="text-align:center;padding:var(--space-16);color:var(--text-muted);">
+        <div style="font-size:3rem;margin-bottom:var(--space-4);">💳</div>
+        <p>Henüz işlem eklemediniz.</p>
+        <button class="btn btn-primary" style="margin-top:var(--space-4);" onclick="document.getElementById('openNewTxBtn').click()">İlk İşlemi Ekle</button>
+      </div>
+    </div>
+  </main>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal-overlay" id="txModal" style="display:none;">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="txModalTitle">İşlem Ekle</h3>
+        <button class="modal-close" id="closeTxModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editTxId" />
+
+        <!-- Tip seçimi -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-bottom:var(--space-5);">
+          <button type="button" class="tx-type-btn active" data-type="expense"
+            style="padding:var(--space-4);border:2px solid var(--accent-danger);border-radius:var(--border-radius-md);background:none;cursor:pointer;font-weight:var(--font-bold);color:var(--accent-danger);transition:all var(--transition-fast);">
+            📤 Gider
+          </button>
+          <button type="button" class="tx-type-btn" data-type="income"
+            style="padding:var(--space-4);border:2px solid var(--border-color);border-radius:var(--border-radius-md);background:none;cursor:pointer;font-weight:var(--font-bold);color:var(--text-muted);transition:all var(--transition-fast);">
+            📥 Gelir
+          </button>
+        </div>
+        <input type="hidden" id="txType" value="expense" />
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Açıklama <span style="color:var(--accent-danger);">*</span></label>
+            <input type="text" id="txDesc" class="form-control" placeholder="Örn: Ocak market alışverişi" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Tutar (₺) <span style="color:var(--accent-danger);">*</span></label>
+            <input type="number" id="txAmount" class="form-control" placeholder="0.00" step="0.01" min="0" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Tarih <span style="color:var(--accent-danger);">*</span></label>
+            <input type="date" id="txDate" class="form-control" />
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Kategori</label>
+            <select id="txCategory" class="form-control">
+              <option value="maas">💼 Maaş</option>
+              <option value="kira">🏠 Kira</option>
+              <option value="market">🛒 Market</option>
+              <option value="fatura">🧾 Fatura</option>
+              <option value="ulasim">🚗 Ulaşım</option>
+              <option value="saglik">💊 Sağlık</option>
+              <option value="egitim">📚 Eğitim</option>
+              <option value="eglence">🎬 Eğlence</option>
+              <option value="diger">📦 Diğer</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Not (opsiyonel)</label>
+            <input type="text" id="txNote" class="form-control" placeholder="Ek açıklama…" />
+          </div>
+        </div>
+
+        <div id="txFormError" class="alert alert-danger hidden" style="margin-top:var(--space-4);">
+          <span class="alert-icon">⚠️</span>
+          <span id="txFormErrorText"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelTxModal">İptal</button>
+        <button class="btn btn-danger hidden" id="deleteTxBtn">🗑️ Sil</button>
+        <button class="btn btn-primary" id="saveTxBtn">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/butce.js"></script>
+</body>
+</html>

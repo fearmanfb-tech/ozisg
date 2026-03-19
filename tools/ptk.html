@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Periyodik Teknik Kontrol — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/master.css" />
+  <style>
+    /* PTK'ya özel ek stiller */
+    .ptk-tab-bar { display:flex; gap:var(--space-1); background:var(--bg-surface-3); padding:4px; border-radius:var(--border-radius-md); margin-bottom:var(--space-6); flex-wrap:wrap; }
+    .ptk-tab { padding:var(--space-2) var(--space-5); border:none; background:none; border-radius:var(--border-radius); font-size:var(--text-sm); font-weight:var(--font-semibold); color:var(--text-muted); cursor:pointer; transition:all var(--transition-fast); display:flex;align-items:center;gap:var(--space-2); }
+    .ptk-tab.active { background:var(--bg-surface); color:var(--accent-primary); box-shadow:var(--shadow-sm); }
+    .ptk-panel { display:none; }
+    .ptk-panel.active { display:block; }
+
+    .audit-item { background:var(--bg-surface); border:1px solid var(--border-color); border-left:4px solid var(--accent-success); border-radius:var(--border-radius); padding:var(--space-4); margin-bottom:var(--space-3); transition:all var(--transition-fast); }
+    .audit-item.fail { border-left-color:var(--accent-danger); background:rgba(239,68,68,0.03); }
+    .audit-item.critical { border-left-color:#7c3aed; background:rgba(124,58,237,0.03); }
+
+    .status-toggle { display:flex; background:var(--bg-surface-3); border-radius:var(--border-radius); padding:3px; gap:3px; }
+    .status-btn { padding:var(--space-2) var(--space-4); border:none; background:none; border-radius:6px; font-size:var(--text-xs); font-weight:var(--font-bold); cursor:pointer; transition:all var(--transition-fast); }
+    .status-btn.pass.active { background:var(--accent-success); color:#fff; }
+    .status-btn.fail.active { background:var(--accent-danger); color:#fff; }
+
+    .planning-row.overdue { background:rgba(239,68,68,0.05); }
+    .planning-row.warning { background:rgba(245,158,11,0.05); }
+
+    @media print {
+      .navbar, .mobile-nav, .ptk-tab-bar, #mail-actions { display:none !important; }
+      .ptk-panel { display:block !important; }
+      body { background:white; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="../index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="../index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="../dashboard.html" class="nav-link active">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="../dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <div id="auth-buttons"><a href="../login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="../index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="../dashboard.html" class="nav-link">📊 Araçlarım</a>
+  </nav>
+
+  <div id="auth-gate" style="display:none;">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;padding:2rem;">
+        <div style="font-size:3rem;margin-bottom:1rem;">🔐</div>
+        <h2 style="margin-bottom:1rem;">Giriş Gerekli</h2>
+        <a href="../login.html" class="btn btn-primary btn-lg">Giriş Yap</a>
+      </div>
+    </div>
+  </div>
+  <div id="page-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;"><div class="spinner"></div></div>
+
+  <div id="main-content" style="display:none;">
+  <main class="page-content">
+
+    <!-- Başlık -->
+    <div style="background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:var(--space-10) 0 var(--space-6);color:#fff;">
+      <div class="container">
+        <a href="../dashboard.html" style="color:rgba(255,255,255,0.6);font-size:var(--text-sm);text-decoration:none;display:inline-flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3);">← Araçlarıma Dön</a>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-4);">
+          <div>
+            <h1 style="font-size:var(--text-3xl);font-weight:var(--font-extrabold);margin-bottom:var(--space-2);">📊 Periyodik Teknik Kontrol</h1>
+            <p style="color:rgba(255,255,255,0.7);">Ekipman denetimleri, planlama ve arşiv yönetimi.</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:var(--space-3);">
+            <select id="locationSelect" class="form-control" style="width:200px;background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">
+              <option value="Esenyurt LM Depo">Esenyurt LM Depo</option>
+              <option value="Poyraz Depo">Poyraz Depo</option>
+              <option value="Yalova Depo">Yalova Depo</option>
+              <option value="Aksaray Depo">Aksaray Depo</option>
+              <option value="Titiz Depo">Titiz Depo</option>
+              <option value="Silivri Depo">Silivri Depo</option>
+              <option value="Eroğlu Depo">Eroğlu Depo</option>
+              <option value="Yılmaz Depo">Yılmaz Depo</option>
+            </select>
+            <div id="cloud-status" style="font-size:var(--text-xs);padding:4px 10px;border-radius:20px;background:rgba(16,185,129,0.2);color:#6ee7b7;">● Bağlı</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container" style="padding-top:var(--space-6);padding-bottom:var(--space-16);">
+
+      <!-- Tab Bar -->
+      <div class="ptk-tab-bar">
+        <button class="ptk-tab active" onclick="switchPTKTab('audit')">📋 Tekli Denetim</button>
+        <button class="ptk-tab" onclick="switchPTKTab('bulk')">📁 Toplu Giriş (CSV)</button>
+        <button class="ptk-tab" onclick="switchPTKTab('planning')">📅 Planlama Takvimi</button>
+        <button class="ptk-tab" onclick="switchPTKTab('reference')">📚 Ekipman Kütüphanesi</button>
+        <button class="ptk-tab" onclick="switchPTKTab('history')">🗄️ Arşiv</button>
+      </div>
+
+      <!-- ── PANEL: TEKLİ DENETİM ── -->
+      <div id="panel-audit" class="ptk-panel active">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);">
+
+          <!-- Sol: Ekipman listesi + form -->
+          <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+
+            <div class="card">
+              <div class="card-body">
+                <div style="display:grid;grid-template-columns:1fr auto;gap:var(--space-3);margin-bottom:var(--space-4);">
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">Rapor Tarihi</label>
+                    <input type="date" id="reportDate" class="form-control" />
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">Rapor Başlığı</label>
+                    <input type="text" id="reportTitle" class="form-control" placeholder="Periyodik Kontrol" style="width:180px;" />
+                  </div>
+                </div>
+                <div style="position:relative;">
+                  <input type="text" id="equipSearch" class="form-control" placeholder="🔍 Ekipman ara ve ekle…" autocomplete="off" />
+                  <div id="searchDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--border-radius);box-shadow:var(--shadow-md);z-index:100;max-height:240px;overflow-y:auto;margin-top:4px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div id="audit-list" style="flex:1;overflow-y:auto;max-height:55vh;"></div>
+
+            <div class="card">
+              <div class="card-body" style="display:flex;gap:var(--space-3);align-items:center;">
+                <button class="btn btn-primary" style="flex:1;" id="saveReportBtn" onclick="saveReport()">💾 Kaydet & Raporla</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sağ: Mail önizleme -->
+          <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+            <div class="card" style="flex:1;display:flex;flex-direction:column;">
+              <div class="card-body" style="border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;" id="mail-actions">
+                <span style="font-weight:var(--font-semibold);">📧 Mail Önizleme</span>
+                <div style="display:flex;gap:var(--space-2);">
+                  <button class="btn btn-ghost btn-sm" id="aiSummaryBtn" onclick="generateAISummary()">✨ AI Özet</button>
+                  <button class="btn btn-primary btn-sm" onclick="copyMailPreview()">📋 Kopyala</button>
+                </div>
+              </div>
+              <div style="flex:1;overflow-y:auto;padding:var(--space-4);">
+                <div id="mail-preview" style="font-size:13px;line-height:1.6;"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── PANEL: TOPLU GİRİŞ ── -->
+      <div id="panel-bulk" class="ptk-panel">
+        <div class="card">
+          <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-4);">
+            <div>
+              <h3 style="font-size:var(--text-base);font-weight:var(--font-bold);margin-bottom:var(--space-1);">CSV Toplu Giriş</h3>
+              <p style="font-size:var(--text-sm);color:var(--text-muted);">Şablonu indirin, doldurun ve yükleyin.</p>
+            </div>
+            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;">
+              <input type="date" id="bulkDate" class="form-control" style="width:160px;" />
+              <button class="btn btn-ghost btn-sm" onclick="downloadTemplate()">⬇️ Şablon İndir</button>
+              <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+                ⬆️ CSV Yükle
+                <input type="file" accept=".csv" style="display:none;" onchange="handleCSVUpload(event)" />
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="bulk-table" style="margin-top:var(--space-4);overflow-x:auto;"></div>
+        <div id="bulk-footer" style="display:none;margin-top:var(--space-4);" class="card">
+          <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="display:flex;gap:var(--space-3);">
+              <button class="btn btn-ghost btn-sm" onclick="selectAllBulk()">Tümünü Seç</button>
+              <button class="btn btn-ghost btn-sm" onclick="setAllPassBulk()" style="color:var(--accent-success);">✅ Hepsini Uygun</button>
+            </div>
+            <button class="btn btn-primary" onclick="saveBulk()">💾 Listeyi Kaydet</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PANEL: PLANLAMA ── -->
+      <div id="panel-planning" class="ptk-panel">
+        <div class="card" style="margin-bottom:var(--space-4);">
+          <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <h3 style="font-size:var(--text-base);font-weight:var(--font-bold);margin-bottom:var(--space-1);">Periyodik Kontrol Takvimi</h3>
+              <p style="font-size:var(--text-sm);color:var(--text-muted);">Geçmiş kontrollere göre hesaplanan gelecek tarihler.</p>
+            </div>
+            <button class="btn btn-success btn-sm" onclick="downloadPlanCSV()">⬇️ Excel İndir</button>
+          </div>
+        </div>
+        <div id="planning-table" style="overflow-x:auto;"></div>
+      </div>
+
+      <!-- ── PANEL: EKİPMAN KÜTÜPHANESİ ── -->
+      <div id="panel-reference" class="ptk-panel">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-4);">
+          <button class="btn btn-primary btn-sm" onclick="openAddEquipModal()">➕ Yeni Ekipman Tanımla</button>
+        </div>
+        <div id="reference-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-4);"></div>
+      </div>
+
+      <!-- ── PANEL: ARŞİV ── -->
+      <div id="panel-history" class="ptk-panel">
+        <div class="card" style="margin-bottom:var(--space-6);">
+          <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-4);">
+            <div>
+              <h3 style="font-size:var(--text-base);font-weight:var(--font-bold);">Master Excel İndir</h3>
+              <p style="font-size:var(--text-sm);color:var(--text-muted);">Seçili depo için tüm geçmiş kayıtları tek dosyada birleştirir.</p>
+            </div>
+            <button class="btn btn-success btn-sm" onclick="downloadMasterCSV()">⬇️ İndir (.csv)</button>
+          </div>
+        </div>
+        <div id="history-list"></div>
+      </div>
+
+    </div>
+  </main>
+  </div>
+
+  <!-- Ekipman Ekleme Modal -->
+  <div class="modal-overlay" id="addEquipModal" style="display:none;">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Yeni Ekipman Tanımla</h3>
+        <button class="modal-close" onclick="document.getElementById('addEquipModal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Kategori</label>
+          <select id="newEquipCat" class="form-control">
+            <option>Kaldırma Ekipmanları</option><option>Basınçlı Kaplar</option>
+            <option>Elektrik</option><option>Yangın Tesisatı</option>
+            <option>İş Hijyeni</option><option>Otomasyon Sistemleri</option><option>Diğer</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ekipman Adı <span style="color:var(--accent-danger);">*</span></label>
+          <input type="text" id="newEquipName" class="form-control" placeholder="Örn: Yeni Forklift" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Periyot (Ay)</label>
+          <input type="number" id="newEquipPeriod" class="form-control" value="12" min="1" max="120" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="document.getElementById('addEquipModal').style.display='none'">İptal</button>
+        <button class="btn btn-primary" onclick="addCustomEquip()">Ekle</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/ptk.js"></script>
+</body>
+</html>

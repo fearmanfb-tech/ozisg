@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>İSG Günlük Rapor — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/master.css" />
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="../index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="../index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="../dashboard.html" class="nav-link active">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="../dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <div id="auth-buttons"><a href="../login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="../index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="../dashboard.html" class="nav-link">📊 Araçlarım</a>
+  </nav>
+
+  <div id="auth-gate" style="display:none;">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;padding:var(--space-8);">
+        <div style="font-size:3rem;margin-bottom:var(--space-4);">🔐</div>
+        <h2 style="margin-bottom:var(--space-4);">Giriş Gerekli</h2>
+        <a href="../login.html" class="btn btn-primary btn-lg">Giriş Yap</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="main-content" style="display:none;">
+
+    <!-- Kompakt Başlık -->
+    <div class="tool-header">
+      <div class="container">
+        <div class="tool-header-inner">
+          <div>
+            <a href="../dashboard.html" class="tool-back-link">← Araçlarıma Dön</a>
+            <h1 class="tool-title">🛡️ Günlük İSG Saha Raporu</h1>
+          </div>
+          <div class="tool-header-actions">
+            <button class="btn btn-ghost btn-sm tool-btn-ghost" id="newReportBtn">📝 Yeni Rapor</button>
+            <button class="btn btn-primary btn-sm" id="saveReportBtn">💾 Kaydet</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats + Sekmeler -->
+    <div class="tool-bar">
+      <div class="container">
+        <div class="tool-bar-inner">
+          <div class="stat-pills">
+            <div class="stat-pill">
+              <span class="stat-pill-num" id="statTotal">0</span>
+              <span class="stat-pill-label">Rapor</span>
+            </div>
+            <div class="stat-pill stat-pill-warning">
+              <span class="stat-pill-num" id="statKaza">0</span>
+              <span class="stat-pill-label">Kaza</span>
+            </div>
+            <div class="stat-pill stat-pill-info">
+              <span class="stat-pill-num" id="statUyg">0</span>
+              <span class="stat-pill-label">Uygunsuzluk</span>
+            </div>
+            <div class="stat-pill stat-pill-success">
+              <span class="stat-pill-num" id="statBuAy">0</span>
+              <span class="stat-pill-label">Bu Ay</span>
+            </div>
+          </div>
+          <div class="tool-tabs">
+            <button class="work-tab active" data-tab="form"    onclick="switchTab('form')">📝 Rapor Formu</button>
+            <button class="work-tab"         data-tab="preview" onclick="switchTab('preview')">📧 Mail Önizleme</button>
+            <button class="work-tab"         data-tab="archive" onclick="switchTab('archive')">🗂️ Arşiv</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- İçerik -->
+    <div class="tool-list-area">
+      <div class="container">
+
+        <!-- TAB: FORM -->
+        <div id="tab-form" class="work-tab-content">
+          <div id="editingBanner" class="alert alert-warning" style="display:none;margin-bottom:var(--space-4);max-width:900px;margin-left:auto;margin-right:auto;">
+            <span class="alert-icon">✏️</span>
+            <span id="editingBannerText">Rapor düzenleniyor…</span>
+            <button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="cancelEdit()">İptal</button>
+          </div>
+
+          <div style="display:grid;gap:var(--space-4);max-width:900px;margin:0 auto;">
+
+            <!-- 1. Genel Bilgiler -->
+            <div class="report-card">
+              <div class="report-card-title">📋 Genel Bilgiler</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Tarih <span style="color:var(--accent-danger);">*</span></label>
+                  <input type="date" id="input-date" class="form-control" />
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Hazırlayan <span style="color:var(--accent-danger);">*</span></label>
+                  <input type="text" id="input-preparer" class="form-control" placeholder="Ad Soyad" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Kazalar ve Ramak Kala -->
+            <div class="report-card">
+              <div class="report-card-title">🚨 Kazalar, Ramak Kala ve Maddi Hasarlı Olaylar</div>
+              <div class="list-section">
+                <div class="list-section-header">
+                  <span class="list-section-label">Yaşanan Kazalar</span>
+                  <button class="btn btn-sm list-add-btn list-add-danger" onclick="addItem('kazalar')">+ Kaza Ekle</button>
+                </div>
+                <div id="list-kazalar" class="list-items"></div>
+              </div>
+              <div class="list-section" style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border-subtle);">
+                <div class="list-section-header">
+                  <span class="list-section-label">Ramak Kala Olayları</span>
+                  <button class="btn btn-sm list-add-btn list-add-warning" onclick="addItem('ramakKala')">+ Olay Ekle</button>
+                </div>
+                <div id="list-ramakKala" class="list-items"></div>
+              </div>
+              <div class="list-section" style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--border-subtle);">
+                <div class="list-section-header">
+                  <span class="list-section-label">Maddi Hasarlı Olaylar</span>
+                  <button class="btn btn-sm list-add-btn list-add-warning" onclick="addItem('maddiHasar')">+ Olay Ekle</button>
+                </div>
+                <div id="list-maddiHasar" class="list-items"></div>
+              </div>
+            </div>
+
+            <!-- 3. Uygunsuzluklar -->
+            <div class="report-card">
+              <div class="report-card-title">🔍 Saha Gözlemleri ve Uygunsuzluklar</div>
+              <div class="list-section">
+                <div class="list-section-header">
+                  <span class="list-section-label">Uygunsuzluklar</span>
+                  <button class="btn btn-sm list-add-btn list-add-info" onclick="addItem('uygunsuzluklar')">+ Ekle</button>
+                </div>
+                <div id="list-uygunsuzluklar" class="list-items"></div>
+              </div>
+            </div>
+
+            <!-- 4. Faaliyetler & Denetimler -->
+            <div class="report-card">
+              <div class="report-card-title">📋 İSG Planları, Faaliyetleri ve Denetimler</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);">
+                <div class="list-section">
+                  <div class="list-section-header">
+                    <span class="list-section-label">İSG Faaliyetleri</span>
+                    <button class="btn btn-sm list-add-btn list-add-info" onclick="addItem('faaliyetler')">+ Ekle</button>
+                  </div>
+                  <div id="list-faaliyetler" class="list-items"></div>
+                </div>
+                <div class="list-section">
+                  <div class="list-section-header">
+                    <span class="list-section-label">Denetimler</span>
+                    <button class="btn btn-sm list-add-btn list-add-info" onclick="addItem('denetimler')">+ Ekle</button>
+                  </div>
+                  <div id="list-denetimler" class="list-items"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. Saha Çalışmaları -->
+            <div class="report-card">
+              <div class="report-card-title">🛠️ İSG Kapsamında Saha Çalışmaları</div>
+              <div class="list-section">
+                <div class="list-section-header">
+                  <span class="list-section-label">Yapılan Çalışmalar</span>
+                  <button class="btn btn-sm list-add-btn list-add-success" onclick="addItem('sahaCalismalar')">+ Ekle</button>
+                </div>
+                <div id="list-sahaCalismalar" class="list-items"></div>
+              </div>
+            </div>
+
+            <!-- 6. İş İzinleri -->
+            <div class="report-card">
+              <div class="report-card-title">🔐 Verilen İş İzinleri</div>
+              <div class="list-section">
+                <div class="list-section-header">
+                  <span class="list-section-label">İş İzinleri</span>
+                  <button class="btn btn-sm list-add-btn list-add-info" onclick="addItem('isIzinleri')">+ İzin Ekle</button>
+                </div>
+                <div id="list-isIzinleri" class="list-items"></div>
+              </div>
+            </div>
+
+            <!-- 7. Ek Notlar -->
+            <div class="report-card">
+              <div class="report-card-title">💡 Ek Notlar</div>
+              <textarea id="input-ekNotlar" class="form-control" rows="3" placeholder="Ek bilgiler, notlar…"></textarea>
+            </div>
+
+            <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-bottom:var(--space-8);">
+              <button class="btn btn-ghost" onclick="switchTab('preview')">📧 Mail Önizleme</button>
+              <button class="btn btn-primary" onclick="saveReport()">💾 Kaydet</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- TAB: MAİL ÖNİZLEME -->
+        <div id="tab-preview" class="work-tab-content" style="display:none;">
+          <div style="max-width:900px;margin:0 auto;">
+            <div style="display:flex;gap:var(--space-3);justify-content:flex-end;margin-bottom:var(--space-4);">
+              <button class="btn btn-ghost btn-sm" onclick="switchTab('form')">✏️ Forma Dön</button>
+              <button class="btn btn-primary" id="copyMailBtn">📋 Mail İçin Kopyala</button>
+            </div>
+            <div id="email-template" style="border:1px solid var(--border-color);border-radius:var(--border-radius-lg);overflow:hidden;background:#fff;"></div>
+          </div>
+        </div>
+
+        <!-- TAB: ARŞİV -->
+        <div id="tab-archive" class="work-tab-content" style="display:none;">
+          <div style="display:flex;gap:var(--space-3);align-items:center;margin-bottom:var(--space-5);flex-wrap:wrap;">
+            <input type="text" id="archSearch" class="form-control" placeholder="🔍 Hazırlayan veya tarih ara…" style="max-width:300px;" />
+            <button class="btn btn-ghost btn-sm" onclick="loadReports()">🔄 Yenile</button>
+          </div>
+          <div id="archive-list"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <style>
+    .tool-header { background:linear-gradient(135deg,var(--navy-900),var(--navy-700)); padding:var(--space-4) 0; color:#fff; }
+    .tool-header-inner { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); flex-wrap:wrap; }
+    .tool-back-link { color:rgba(255,255,255,.55); font-size:var(--text-xs); text-decoration:none; display:block; margin-bottom:var(--space-1); }
+    .tool-back-link:hover { color:rgba(255,255,255,.85); }
+    .tool-title { font-size:var(--text-xl); font-weight:var(--font-bold); color:#fff; margin:0; }
+    .tool-header-actions { display:flex; gap:var(--space-2); }
+    .tool-btn-ghost { color:rgba(255,255,255,.85); border-color:rgba(255,255,255,.3); }
+    .tool-btn-ghost:hover { background:rgba(255,255,255,.1); }
+
+    .tool-bar { background:var(--bg-surface); border-bottom:1px solid var(--border-color); position:sticky; top:64px; z-index:50; }
+    .tool-bar-inner { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); flex-wrap:wrap; padding:var(--space-3) 0; }
+
+    .stat-pills { display:flex; gap:var(--space-2); flex-wrap:wrap; }
+    .stat-pill { display:flex; align-items:baseline; gap:4px; padding:var(--space-1) var(--space-3); border-radius:99px; background:var(--bg-surface-2); border:1px solid var(--border-subtle); }
+    .stat-pill-num { font-size:var(--text-base); font-weight:var(--font-bold); color:var(--text-primary); }
+    .stat-pill-label { font-size:var(--text-xs); color:var(--text-muted); }
+    .stat-pill-warning .stat-pill-num { color:var(--accent-warning); }
+    .stat-pill-success .stat-pill-num { color:var(--accent-success); }
+    .stat-pill-info .stat-pill-num { color:var(--accent-info); }
+
+    .tool-tabs { display:flex; gap:var(--space-1); }
+    .work-tab { padding:var(--space-2) var(--space-4); border:1px solid transparent; border-radius:99px; background:none; font-size:var(--text-sm); font-weight:var(--font-semibold); color:var(--text-muted); cursor:pointer; transition:all var(--transition-fast); white-space:nowrap; }
+    .work-tab:hover { background:var(--bg-surface-2); color:var(--text-primary); }
+    .work-tab.active { background:var(--accent-primary); color:#fff; border-color:var(--accent-primary); }
+
+    .tool-list-area { padding:var(--space-6) 0 var(--space-16); }
+
+    .report-card { background:var(--bg-surface); border:1px solid var(--border-color); border-radius:var(--border-radius-lg); padding:var(--space-5); }
+    .report-card-title { font-size:var(--text-base); font-weight:var(--font-bold); color:var(--text-primary); margin-bottom:var(--space-4); padding-bottom:var(--space-3); border-bottom:2px solid var(--border-subtle); }
+
+    .list-section {}
+    .list-section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-2); }
+    .list-section-label { font-size:var(--text-sm); font-weight:var(--font-semibold); color:var(--text-secondary); }
+    .list-add-btn { font-size:var(--text-xs); padding:3px var(--space-3); border-radius:99px; border:1px dashed; background:transparent; cursor:pointer; }
+    .list-add-danger  { color:var(--accent-danger);  border-color:var(--accent-danger); }
+    .list-add-warning { color:var(--accent-warning); border-color:var(--accent-warning); }
+    .list-add-info    { color:var(--accent-info);    border-color:var(--accent-info); }
+    .list-add-success { color:var(--accent-success); border-color:var(--accent-success); }
+
+    .list-items { display:flex; flex-direction:column; gap:var(--space-2); }
+    .list-item { display:flex; align-items:flex-start; gap:var(--space-2); background:var(--bg-surface-2); border:1px solid var(--border-subtle); border-radius:var(--border-radius); padding:var(--space-3); }
+    .list-item-fields { flex:1; display:flex; flex-direction:column; gap:var(--space-2); }
+    .li-row { display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center; }
+    .li-input { flex:1; min-width:120px; padding:var(--space-2) var(--space-3); font-size:var(--text-sm); background:var(--bg-surface); border:1px solid var(--border-color); border-radius:var(--border-radius); color:var(--text-primary); font-family:inherit; }
+    .li-input:focus { outline:none; border-color:var(--accent-primary); }
+    .li-input.w80  { flex:0 0 80px; min-width:unset; }
+    .li-input.w140 { flex:0 0 140px; min-width:unset; }
+    select.li-input { appearance:none; }
+    .li-remove { width:28px; height:28px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:none; border:none; cursor:pointer; color:var(--text-muted); border-radius:4px; font-size:.9rem; }
+    .li-remove:hover { color:var(--accent-danger); background:var(--bg-surface-3); }
+    .li-img-row { display:flex; align-items:center; gap:var(--space-2); margin-top:2px; }
+    .li-img-btn { font-size:var(--text-xs); padding:3px 10px; background:var(--bg-surface-3); border:1px dashed var(--border-color); border-radius:var(--border-radius); cursor:pointer; color:var(--text-muted); }
+    .li-img-btn:hover { border-color:var(--accent-primary); color:var(--accent-primary); }
+    .li-img-thumb { max-height:56px; max-width:80px; object-fit:cover; border-radius:4px; border:1px solid var(--border-color); }
+    .li-img-remove { font-size:var(--text-xs); padding:2px 8px; background:none; border:1px solid var(--border-subtle); border-radius:var(--border-radius); cursor:pointer; color:var(--accent-danger); }
+    .list-empty { font-size:var(--text-sm); color:var(--text-muted); padding:var(--space-3); text-align:center; font-style:italic; }
+
+    .archive-item { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--space-3); padding:var(--space-4); background:var(--bg-surface); border:1px solid var(--border-color); border-radius:var(--border-radius-lg); margin-bottom:var(--space-2); }
+    .archive-item:hover { background:var(--bg-surface-2); }
+
+    @media(max-width:640px) {
+      .tool-bar-inner { flex-direction:column; align-items:flex-start; }
+      .tool-tabs { width:100%; }
+      .work-tab { flex:1; text-align:center; font-size:var(--text-xs); padding:var(--space-2); }
+      [style*="grid-template-columns:1fr 1fr"] { grid-template-columns:1fr !important; }
+    }
+  </style>
+
+  <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/isg-rapor.js"></script>
+</body>
+</html>

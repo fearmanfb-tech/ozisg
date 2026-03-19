@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog Editörü — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/master.css" />
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="../index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="../index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="../dashboard.html" class="nav-link">Dashboard</a></li>
+        <li><a href="../blog.html" class="nav-link">Blog</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">A</div>
+            <span id="userNameNav" style="color:var(--text-navbar);"></span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="../dashboard.html" class="dropdown-item">📊 Dashboard</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <div id="auth-buttons"><a href="../login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="../index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="../dashboard.html" class="nav-link">📊 Dashboard</a>
+    <a href="../blog.html" class="nav-link">✍️ Blog</a>
+  </nav>
+
+  <!-- Yüklenme / Erişim yok -->
+  <div id="page-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+    <div class="spinner"></div>
+  </div>
+  <div id="auth-gate" style="display:none;min-height:100vh;align-items:center;justify-content:center;">
+    <div style="text-align:center;padding:var(--space-8);">
+      <div style="font-size:4rem;margin-bottom:var(--space-4);">🔒</div>
+      <h2>Giriş Yapmanız Gerekiyor</h2>
+      <a href="../login.html" class="btn btn-primary" style="margin-top:var(--space-4);">Giriş Yap</a>
+    </div>
+  </div>
+
+  <!-- Ana içerik -->
+  <div id="main-content" style="display:none;">
+
+    <!-- Başlık -->
+    <div style="background:linear-gradient(135deg,var(--navy-900),var(--navy-700));padding:var(--space-8) 0 var(--space-6);color:#fff;">
+      <div class="container">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-4);">
+          <div>
+            <h1 style="font-size:var(--text-2xl);font-weight:var(--font-extrabold);margin-bottom:var(--space-1);">✍️ Blog Editörü</h1>
+            <p style="color:rgba(255,255,255,.7);font-size:var(--text-sm);">Yeni yazı oluştur, taslak kaydet veya incelemeye gönder.</p>
+          </div>
+          <span id="editorRoleBadge" style="background:rgba(255,255,255,.15);color:#fff;padding:4px 14px;border-radius:99px;font-size:var(--text-sm);">✍️ Editör</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab bar -->
+    <div style="background:var(--bg-surface);border-bottom:1px solid var(--border-color);position:sticky;top:0;z-index:100;">
+      <div class="container" style="display:flex;gap:0;">
+        <button class="editor-tab active" data-tab="write" onclick="switchEditorTab('write')">📝 Yazı Yaz</button>
+        <button class="editor-tab" data-tab="myposts" onclick="switchEditorTab('myposts')">📋 Yazılarım</button>
+      </div>
+    </div>
+
+    <div class="container" style="padding-top:var(--space-8);padding-bottom:var(--space-16);">
+
+      <!-- TAB: Yazı Yaz -->
+      <div id="editor-tab-write">
+
+        <!-- Düzenleme banner -->
+        <div id="editing-banner" style="display:none;background:var(--accent-warning);color:#fff;padding:var(--space-3) var(--space-4);border-radius:var(--border-radius);margin-bottom:var(--space-5);display:none;align-items:center;justify-content:space-between;gap:var(--space-3);">
+          <span>✏️ Mevcut taslağı düzenliyorsunuz.</span>
+          <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:none;" onclick="cancelEdit()">✕ İptal</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:var(--space-6);">
+
+          <!-- Sol: Ana form -->
+          <div>
+            <div class="form-group">
+              <label class="form-label">Başlık <span style="color:var(--accent-danger);">*</span></label>
+              <input type="text" id="postTitle" class="form-control" placeholder="Yazı başlığını girin…"
+                style="font-size:var(--text-xl);font-weight:var(--font-bold);padding:var(--space-4);"
+                oninput="autoSlug()" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Özet <span style="font-size:var(--text-xs);color:var(--text-muted);">(blog listesinde görünür)</span></label>
+              <textarea id="postExcerpt" class="form-control" rows="2"
+                placeholder="Kısa açıklama veya giriş cümlesi…"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                İçerik <span style="color:var(--accent-danger);">*</span>
+                <span style="font-size:var(--text-xs);color:var(--text-muted);margin-left:var(--space-2);">HTML kullanabilirsiniz</span>
+              </label>
+              <div class="editor-toolbar">
+                <button type="button" onclick="fmt('bold')" title="Kalın"><b>B</b></button>
+                <button type="button" onclick="fmt('italic')" title="İtalik"><i>I</i></button>
+                <button type="button" onclick="fmtHeading(2)" title="Başlık 2">H2</button>
+                <button type="button" onclick="fmtHeading(3)" title="Başlık 3">H3</button>
+                <button type="button" onclick="fmtList('ul')" title="Liste">≡</button>
+                <button type="button" onclick="fmtList('ol')" title="Numaralı Liste">1.</button>
+                <button type="button" onclick="fmtLink()" title="Link">🔗</button>
+                <button type="button" onclick="fmtBlockquote()" title="Alıntı">"</button>
+              </div>
+              <textarea id="postContent" class="form-control"
+                style="min-height:420px;font-family:monospace;font-size:var(--text-sm);line-height:1.7;"
+                placeholder="Yazı içeriğini buraya yazın…"></textarea>
+            </div>
+          </div>
+
+          <!-- Sağ: Yan panel -->
+          <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+
+            <!-- Yayımla kartı -->
+            <div class="card" style="padding:var(--space-5);">
+              <h4 style="font-weight:var(--font-bold);margin-bottom:var(--space-4);">📤 Yayımla</h4>
+              <input type="hidden" id="editPostId" />
+
+              <div class="form-group">
+                <label class="form-label" style="font-size:var(--text-xs);">Durum</label>
+                <div id="postStatusDisplay" style="font-size:var(--text-sm);color:var(--text-muted);padding:var(--space-2) 0;">
+                  <span class="badge badge-muted">Taslak</span>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:var(--space-2);">
+                <button class="btn btn-ghost" style="width:100%;" onclick="saveDraft()">💾 Taslak Kaydet</button>
+                <button class="btn btn-primary" style="width:100%;" onclick="submitForReview()">📤 İncelemeye Gönder</button>
+              </div>
+
+              <div id="postStatusMsg" style="display:none;margin-top:var(--space-3);font-size:var(--text-xs);color:var(--accent-success);"></div>
+            </div>
+
+            <!-- Meta -->
+            <div class="card" style="padding:var(--space-5);">
+              <h4 style="font-weight:var(--font-bold);margin-bottom:var(--space-4);">⚙️ Yazı Ayarları</h4>
+
+              <div class="form-group">
+                <label class="form-label" style="font-size:var(--text-xs);">Kategori</label>
+                <select id="postCategory" class="form-control">
+                  <option value="personal">✍️ Kişisel</option>
+                  <option value="scientific">📄 Bilimsel Makale</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" style="font-size:var(--text-xs);">Etiketler <span style="color:var(--text-muted);">(virgülle ayır)</span></label>
+                <input type="text" id="postTags" class="form-control" placeholder="isg, güvenlik, rapor" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" style="font-size:var(--text-xs);">Kapak Görseli URL'i</label>
+                <input type="url" id="postCover" class="form-control" placeholder="https://…"
+                  oninput="previewCover()" />
+                <div id="coverPreview" style="margin-top:var(--space-2);display:none;">
+                  <img id="coverImg" src="" alt="Kapak"
+                    style="width:100%;height:100px;object-fit:cover;border-radius:6px;" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Red gerekçesi (varsa) -->
+            <div id="rejectionCard" style="display:none;" class="card" style="padding:var(--space-5);border-top:3px solid var(--accent-danger);">
+              <h4 style="font-weight:var(--font-bold);color:var(--accent-danger);margin-bottom:var(--space-2);">❌ Red Gerekçesi</h4>
+              <p id="rejectionText" style="font-size:var(--text-sm);color:var(--text-secondary);margin:0;line-height:1.5;"></p>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Yazılarım -->
+      <div id="editor-tab-myposts" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-5);">
+          <h3 style="font-weight:var(--font-bold);">Yazılarım</h3>
+          <button class="btn btn-primary btn-sm" onclick="newPost()">➕ Yeni Yazı</button>
+        </div>
+        <div id="my-posts-list"></div>
+      </div>
+
+    </div>
+  </div><!-- /main-content -->
+
+  <div id="toast-container"></div>
+
+  <style>
+    .editor-tab {
+      padding: var(--space-3) var(--space-6);
+      background: none; border: none;
+      border-bottom: 3px solid transparent;
+      font-weight: var(--font-semibold); font-size: var(--text-sm);
+      color: var(--text-muted); cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .editor-tab:hover { color: var(--text-primary); }
+    .editor-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+
+    .editor-toolbar {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      padding: 6px 8px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-color);
+      border-bottom: none;
+      border-radius: var(--border-radius) var(--border-radius) 0 0;
+    }
+    .editor-toolbar button {
+      padding: 4px 10px; background: none; border: 1px solid transparent;
+      border-radius: 4px; cursor: pointer; font-size: var(--text-sm);
+      color: var(--text-secondary); transition: all var(--transition-fast);
+    }
+    .editor-toolbar button:hover { background: var(--bg-surface-3); border-color: var(--border-color); }
+    .editor-toolbar + textarea { border-radius: 0 0 var(--border-radius) var(--border-radius); }
+
+    .my-post-card {
+      padding: var(--space-4); background: var(--bg-surface);
+      border: 1px solid var(--border-subtle); border-radius: var(--border-radius);
+      margin-bottom: var(--space-3); display: flex;
+      align-items: center; gap: var(--space-4); flex-wrap: wrap;
+    }
+    .my-post-card:hover { border-color: var(--accent-primary); }
+
+    @media (max-width: 768px) {
+      #editor-tab-write > div { grid-template-columns: 1fr !important; }
+    }
+  </style>
+
+  <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/blog-editor.js"></script>
+</body>
+</html>

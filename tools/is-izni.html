@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>İş Takip Sistemi — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/master.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <div class="container navbar-inner">
+      <a href="../index.html" class="navbar-brand">
+        <div class="navbar-logo">OZ</div>
+        <span class="navbar-brand-name">ozisg.com</span>
+      </a>
+      <ul class="navbar-nav">
+        <li><a href="../index.html" class="nav-link">Ana Sayfa</a></li>
+        <li><a href="../dashboard.html" class="nav-link active">Araçlarım</a></li>
+      </ul>
+      <div class="navbar-actions">
+        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+          <span class="theme-toggle-icon sun">☀️</span>
+          <span class="theme-toggle-icon moon">🌙</span>
+        </button>
+        <div id="user-menu" class="dropdown hidden">
+          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
+            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
+            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
+            <span style="color:var(--text-navbar);">▾</span>
+          </button>
+          <div class="dropdown-menu" id="userDropdown" style="display:none;">
+            <a href="../dashboard.html" class="dropdown-item">📊 Araçlarım</a>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
+          </div>
+        </div>
+        <div id="auth-buttons"><a href="../login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
+        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+  </nav>
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="../index.html" class="nav-link">🏠 Ana Sayfa</a>
+    <a href="../dashboard.html" class="nav-link">📊 Araçlarım</a>
+  </nav>
+
+  <!-- Auth Gate -->
+  <div id="auth-gate" style="display:none;">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;padding:var(--space-8);">
+        <div style="font-size:3rem;margin-bottom:var(--space-4);">🔐</div>
+        <h2 style="margin-bottom:var(--space-4);">Giriş Gerekli</h2>
+        <a href="../login.html" class="btn btn-primary btn-lg">Giriş Yap</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="page-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="main-content" style="display:none;">
+
+    <!-- ── Kompakt Başlık ── -->
+    <div class="tool-header">
+      <div class="container">
+        <div class="tool-header-inner">
+          <div class="tool-header-left">
+            <a href="../dashboard.html" class="tool-back-link">← Araçlarıma Dön</a>
+            <h1 class="tool-title">📋 Teknik İş Takip & İSG</h1>
+          </div>
+          <div class="tool-header-actions">
+            <button class="btn btn-ghost btn-sm tool-btn-ghost" id="exportExcelBtn">📊 Excel</button>
+            <button class="btn btn-primary btn-sm" id="openNewEntryBtn">➕ Yeni Kayıt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Stats + Sekmeler (tek satır) ── -->
+    <div class="tool-bar">
+      <div class="container">
+        <div class="tool-bar-inner">
+
+          <!-- Sol: İstatistikler -->
+          <div class="stat-pills">
+            <div class="stat-pill">
+              <span class="stat-pill-num" id="statTotal">0</span>
+              <span class="stat-pill-label">Toplam</span>
+            </div>
+            <div class="stat-pill stat-pill-warning">
+              <span class="stat-pill-num" id="statInProgress">0</span>
+              <span class="stat-pill-label">Devam</span>
+            </div>
+            <div class="stat-pill stat-pill-success">
+              <span class="stat-pill-num" id="statCompleted">0</span>
+              <span class="stat-pill-label">Tamam</span>
+            </div>
+            <div class="stat-pill stat-pill-info">
+              <span class="stat-pill-num" id="statThisWeek">0</span>
+              <span class="stat-pill-label">Bu Hafta</span>
+            </div>
+          </div>
+
+          <!-- Sağ: Sekmeler -->
+          <div class="tool-tabs">
+            <button class="work-tab active" data-tab="daily"   onclick="switchTab('daily')">📅 Günlük</button>
+            <button class="work-tab"         data-tab="weekly"  onclick="switchTab('weekly')">📊 Haftalık</button>
+            <button class="work-tab"         data-tab="archive" onclick="switchTab('archive')">🗂️ Arşiv</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Filtre Şeridi ── -->
+    <div class="tool-filter-bar">
+      <div class="container">
+
+        <!-- Günlük filtreleri -->
+        <div id="filters-daily" class="filter-row">
+          <input type="date" id="dailyDate" class="form-control filter-ctrl" />
+          <input type="text" id="dailySearch" class="form-control filter-ctrl" placeholder="🔍  Firma, proje, detay…" />
+          <button class="btn btn-ghost btn-sm" id="gotoTodayBtn">Bugün</button>
+        </div>
+
+        <!-- Haftalık filtreleri -->
+        <div id="filters-weekly" class="filter-row" style="display:none;">
+          <select id="weeklyFilterStatus" class="form-control filter-ctrl" style="max-width:180px;">
+            <option value="all">Tüm Durumlar</option>
+            <option value="Devam Ediyor">⏳ Devam Ediyor</option>
+            <option value="Tamamlandı">✅ Tamamlandı</option>
+          </select>
+          <input type="text" id="weeklySearch" class="form-control filter-ctrl" placeholder="🔍  Firma, proje, depo…" />
+        </div>
+
+        <!-- Arşiv filtreleri -->
+        <div id="filters-archive" class="filter-row" style="display:none;">
+          <input type="date" id="archStart" class="form-control filter-ctrl" style="max-width:160px;" />
+          <span style="color:var(--text-muted);font-size:var(--text-sm);">—</span>
+          <input type="date" id="archEnd" class="form-control filter-ctrl" style="max-width:160px;" />
+          <input type="text" id="archSearch" class="form-control filter-ctrl" placeholder="🔍  Ara…" />
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Liste Alanı ── -->
+    <div class="tool-list-area">
+      <div class="container">
+
+        <div id="tab-daily"   class="work-tab-content">
+          <div id="daily-list"></div>
+        </div>
+
+        <div id="tab-weekly"  class="work-tab-content" style="display:none;">
+          <div id="weekly-list"></div>
+        </div>
+
+        <div id="tab-archive" class="work-tab-content" style="display:none;">
+          <div id="archive-list"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /main-content -->
+
+  <!-- ══════════ KAYIT EKLE / DÜZENLE MODAL ══════════ -->
+  <div class="modal-overlay" id="entryModal" style="display:none;">
+    <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="entryModalTitle">Yeni Kayıt</h3>
+        <button class="modal-close" onclick="closeEntryModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="entryId" />
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+
+          <div class="form-group">
+            <label class="form-label">Çalışma Tarihi <span style="color:var(--accent-danger);">*</span></label>
+            <input type="date" id="eTarih" class="form-control" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Birim Türü <span style="color:var(--accent-danger);">*</span></label>
+            <select id="eBirimTuru" class="form-control">
+              <option value="Taşeron">Taşeron</option>
+              <option value="Teknik">Teknik</option>
+              <option value="Yapı Onarım">Yapı Onarım</option>
+              <option value="Güvenlik Teknoloji">Güvenlik Teknoloji</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Yüklenici Firma / Ekip <span style="color:var(--accent-danger);">*</span></label>
+            <input type="text" id="eFirma" class="form-control" placeholder="Firma adı" list="firmaSuggestions" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Sorumlu Teknik Personel <span style="color:var(--accent-danger);">*</span></label>
+            <input type="text" id="eSorumlu" class="form-control" placeholder="Ad Soyad" list="sorumluSuggestions" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Blok</label>
+            <input type="text" id="eBlok" class="form-control" placeholder="A Blok" list="blokSuggestions" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Kat</label>
+            <input type="text" id="eKat" class="form-control" placeholder="3. Kat" list="katSuggestions" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Alan</label>
+            <input type="text" id="eAlan" class="form-control" placeholder="Teknik oda" list="alanSuggestions" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Depo</label>
+            <input type="text" id="eDepo" class="form-control" placeholder="Malzeme deposu" list="depoSuggestions" />
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Ana Proje / İş Başlığı <span style="color:var(--accent-danger);">*</span></label>
+            <input type="text" id="eProje" class="form-control" placeholder="Proje veya iş başlığı" list="projeSuggestions" />
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Çalışma İzin Kapsamı (İSG) <span style="color:var(--accent-danger);">*</span></label>
+            <select id="eIzinTuru" class="form-control">
+              <option value="izin_yok">✅ İzin Gerekmiyor</option>
+              <option value="yuksekte">🏗️ Yüksekte Çalışma</option>
+              <option value="sicak">🔥 Sıcak İşlem (Kaynak vb.)</option>
+              <option value="kapali_alan">🚪 Kapalı Alan Çalışması</option>
+              <option value="elektrik">⚡ Elektrik İzolasyonu (EKED)</option>
+              <option value="kazi">⛏️ Kazı Çalışması</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Yapılan Günlük İş Detayı <span style="color:var(--accent-danger);">*</span></label>
+            <textarea id="eDetay" class="form-control" rows="3" placeholder="Ne yapıldığını kısaca açıklayın…"></textarea>
+          </div>
+
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">İş Görseli <span style="font-size:var(--text-xs);color:var(--text-muted);">(isteğe bağlı)</span></label>
+            <input type="file" id="eGorsel" class="form-control" accept="image/*" />
+            <img id="gorselPreview" src="" alt="Önizleme" style="display:none;margin-top:var(--space-3);max-height:160px;border-radius:var(--border-radius);object-fit:cover;" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Durum</label>
+            <select id="eDurum" class="form-control">
+              <option value="Devam Ediyor">⏳ Devam Ediyor</option>
+              <option value="Tamamlandı">✅ Tamamlandı</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Kapanış Notu</label>
+            <input type="text" id="eKapanis" class="form-control" placeholder="İş tamamlanma notu…" />
+          </div>
+
+        </div>
+
+        <div id="entryFormError" class="alert alert-danger hidden" style="margin-top:var(--space-4);">
+          <span class="alert-icon">⚠️</span>
+          <span id="entryFormErrorText"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeEntryModal()">İptal</button>
+        <button class="btn btn-danger hidden" id="deleteEntryBtn">🗑️ Sil</button>
+        <button class="btn btn-primary" id="saveEntryBtn">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Datalists -->
+  <datalist id="firmaSuggestions"></datalist>
+  <datalist id="sorumluSuggestions"></datalist>
+  <datalist id="blokSuggestions"></datalist>
+  <datalist id="katSuggestions"></datalist>
+  <datalist id="alanSuggestions"></datalist>
+  <datalist id="depoSuggestions"></datalist>
+  <datalist id="projeSuggestions"></datalist>
+
+  <div id="toast-container"></div>
+
+  <style>
+    /* ── Kompakt Başlık ── */
+    .tool-header {
+      background: linear-gradient(135deg, var(--navy-900), var(--navy-700));
+      padding: var(--space-4) 0;
+      color: #fff;
+    }
+    .tool-header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      flex-wrap: wrap;
+    }
+    .tool-back-link {
+      color: rgba(255,255,255,0.55);
+      font-size: var(--text-xs);
+      text-decoration: none;
+      display: block;
+      margin-bottom: var(--space-1);
+      transition: color var(--transition-fast);
+    }
+    .tool-back-link:hover { color: rgba(255,255,255,0.85); }
+    .tool-title {
+      font-size: var(--text-xl);
+      font-weight: var(--font-bold);
+      color: #fff;
+      margin: 0;
+    }
+    .tool-header-actions { display: flex; gap: var(--space-2); align-items: center; }
+    .tool-btn-ghost { color: rgba(255,255,255,0.85); border-color: rgba(255,255,255,0.3); }
+    .tool-btn-ghost:hover { background: rgba(255,255,255,0.1); }
+
+    /* ── Stats + Sekmeler Çubuğu ── */
+    .tool-bar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 64px;
+      z-index: 50;
+    }
+    .tool-bar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      flex-wrap: wrap;
+      padding: var(--space-3) 0;
+    }
+
+    /* Stat Pills */
+    .stat-pills { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+    .stat-pill {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      padding: var(--space-1) var(--space-3);
+      border-radius: 99px;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-subtle);
+    }
+    .stat-pill-num  { font-size: var(--text-base); font-weight: var(--font-bold); color: var(--text-primary); }
+    .stat-pill-label{ font-size: var(--text-xs); color: var(--text-muted); }
+    .stat-pill-warning .stat-pill-num { color: var(--accent-warning); }
+    .stat-pill-success .stat-pill-num { color: var(--accent-success); }
+    .stat-pill-info   .stat-pill-num { color: var(--accent-info); }
+
+    /* Tool Tabs (pill style) */
+    .tool-tabs { display: flex; gap: var(--space-1); }
+    .work-tab {
+      padding: var(--space-2) var(--space-4);
+      border: 1px solid transparent;
+      border-radius: 99px;
+      background: none;
+      font-size: var(--text-sm);
+      font-weight: var(--font-semibold);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+    }
+    .work-tab:hover { background: var(--bg-surface-2); color: var(--text-primary); }
+    .work-tab.active {
+      background: var(--accent-primary);
+      color: #fff;
+      border-color: var(--accent-primary);
+    }
+
+    /* ── Filtre Şeridi ── */
+    .tool-filter-bar {
+      background: var(--bg-surface-2);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: var(--space-2) 0;
+    }
+    .filter-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+    .filter-ctrl { height: 34px; font-size: var(--text-sm); padding: var(--space-1) var(--space-3); }
+
+    /* ── Liste Alanı ── */
+    .tool-list-area {
+      padding: var(--space-4) 0 var(--space-16);
+    }
+
+    /* ── Tablo ── */
+    .wt { padding: var(--space-2) var(--space-3); text-align:left; font-weight:var(--font-semibold); color:var(--text-secondary); white-space:nowrap; background:var(--bg-surface-3); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.04em; }
+    .wd { padding: var(--space-2) var(--space-3); border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
+    .entry-table { width:100%; border-collapse:collapse; font-size:var(--text-sm); }
+    .entry-table tbody tr:hover { background:var(--bg-surface-2); }
+    .form-control-sm { padding:var(--space-1) var(--space-2); font-size:var(--text-sm); height:32px; }
+
+    @media (max-width: 640px) {
+      .tool-bar-inner { flex-direction: column; align-items: flex-start; }
+      .tool-tabs { width: 100%; }
+      .work-tab { flex: 1; text-align: center; padding: var(--space-2) var(--space-2); font-size: var(--text-xs); }
+      .stat-pills { gap: var(--space-1); }
+    }
+  </style>
+
+  <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/is-izni.js"></script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Giriş Yap — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/master.css" />
+</head>
+<body>
+
+  <div class="auth-page" id="authPage">
+
+    <!-- Theme Toggle (sağ üst) -->
+    <div style="position:fixed; top:var(--space-4); right:var(--space-4);">
+      <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
+        <span class="theme-toggle-icon sun">☀️</span>
+        <span class="theme-toggle-icon moon">🌙</span>
+      </button>
+    </div>
+
+    <div class="auth-card" id="authCard">
+
+      <!-- Logo -->
+      <div class="auth-logo">
+        <a href="index.html" style="text-decoration:none;">
+          <div class="auth-logo-icon">OZ</div>
+        </a>
+        <p style="font-size:var(--text-sm); color:var(--text-muted); margin-top:var(--space-2);">
+          ozisg.com
+        </p>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="tab-switcher" id="tabSwitcher">
+        <button class="tab-btn active" data-tab="login" id="tabLogin">Giriş Yap</button>
+        <button class="tab-btn" data-tab="register" id="tabRegister">Üye Ol</button>
+      </div>
+
+      <!-- ── GİRİŞ FORMU ── -->
+      <div id="formLogin">
+        <h2 class="auth-title">Tekrar Hoşgeldiniz</h2>
+        <p class="auth-subtitle">Hesabınıza giriş yapın.</p>
+
+        <div id="loginError" class="alert alert-danger hidden" style="margin-bottom:var(--space-5);">
+          <span class="alert-icon">⚠️</span>
+          <span id="loginErrorText"></span>
+        </div>
+
+        <form id="loginForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="loginEmail">E-posta Adresi</label>
+            <input type="email" id="loginEmail" class="form-control" placeholder="ornek@mail.com" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="loginPassword">
+              Şifre
+              <a href="#" id="forgotPasswordLink" style="float:right; font-weight:normal; font-size:var(--text-xs);">Şifremi Unuttum</a>
+            </label>
+            <div style="position:relative;">
+              <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" autocomplete="current-password" required />
+              <button type="button" class="password-toggle" id="toggleLoginPassword" aria-label="Şifreyi göster/gizle">👁</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full btn-lg" id="loginSubmitBtn">
+            Giriş Yap
+          </button>
+        </form>
+
+        <div class="divider">veya</div>
+
+        <button type="button" class="btn btn-ghost btn-full" id="googleLoginBtn" style="gap:var(--space-3);">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18L12.048 13.56c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+          Google ile Giriş Yap
+        </button>
+      </div>
+
+      <!-- ── KAYIT FORMU ── -->
+      <div id="formRegister" style="display:none;">
+        <h2 class="auth-title">Hesap Oluşturun</h2>
+        <p class="auth-subtitle">Ücretsiz üye olun, araçları kullanın.</p>
+
+        <div id="registerError" class="alert alert-danger hidden" style="margin-bottom:var(--space-5);">
+          <span class="alert-icon">⚠️</span>
+          <span id="registerErrorText"></span>
+        </div>
+
+        <div id="registerSuccess" class="alert alert-success hidden" style="margin-bottom:var(--space-5);">
+          <span class="alert-icon">✅</span>
+          Hesabınız oluşturuldu! Yönlendiriliyorsunuz…
+        </div>
+
+        <form id="registerForm" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="regName">Ad Soyad</label>
+            <input type="text" id="regName" class="form-control" placeholder="Oğuzhan Çetin" autocomplete="name" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regEmail">E-posta Adresi</label>
+            <input type="email" id="regEmail" class="form-control" placeholder="ornek@mail.com" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regPassword">Şifre</label>
+            <div style="position:relative;">
+              <input type="password" id="regPassword" class="form-control" placeholder="En az 6 karakter" autocomplete="new-password" required />
+              <button type="button" class="password-toggle" id="toggleRegPassword" aria-label="Şifreyi göster/gizle">👁</button>
+            </div>
+            <span class="form-hint">En az 6 karakter olmalıdır.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regPasswordConfirm">Şifre Tekrar</label>
+            <input type="password" id="regPasswordConfirm" class="form-control" placeholder="Şifrenizi tekrar girin" autocomplete="new-password" required />
+          </div>
+          <button type="submit" class="btn btn-primary btn-full btn-lg" id="registerSubmitBtn">
+            Hesap Oluştur
+          </button>
+        </form>
+
+        <div class="divider">veya</div>
+
+        <button type="button" class="btn btn-ghost btn-full" id="googleRegisterBtn" style="gap:var(--space-3);">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18L12.048 13.56c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+          Google ile Kayıt Ol
+        </button>
+      </div>
+
+      <!-- Footer link -->
+      <p style="text-align:center; margin-top:var(--space-6); font-size:var(--text-sm); color:var(--text-muted);">
+        <a href="index.html">← Ana Sayfaya Dön</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Şifre sıfırlama modal -->
+  <div class="modal-overlay" id="forgotModal" style="display:none;">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Şifre Sıfırla</h3>
+        <button class="modal-close" id="closeForgotModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-muted); font-size:var(--text-sm); margin-bottom:var(--space-5);">
+          Kayıtlı e-posta adresinizi girin. Şifre sıfırlama bağlantısı göndereceğiz.
+        </p>
+        <div id="forgotMessage" class="hidden" style="margin-bottom:var(--space-4);"></div>
+        <div class="form-group mb-0">
+          <label class="form-label" for="forgotEmail">E-posta Adresi</label>
+          <input type="email" id="forgotEmail" class="form-control" placeholder="ornek@mail.com" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelForgotModal">İptal</button>
+        <button class="btn btn-primary" id="sendResetEmail">Gönder</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/login.js"></script>
+
+  <style>
+    /* Login sayfasına özel */
+    .tab-switcher {
+      display: flex;
+      background: var(--bg-surface-3);
+      border-radius: var(--border-radius);
+      padding: 4px;
+      margin-bottom: var(--space-8);
+      gap: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: var(--space-2) var(--space-4);
+      background: none;
+      border: none;
+      border-radius: calc(var(--border-radius) - 2px);
+      font-size: var(--text-sm);
+      font-weight: var(--font-semibold);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+    .tab-btn.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-xs);
+    }
+    .password-toggle {
+      position: absolute;
+      right: var(--space-3);
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: var(--text-base);
+      opacity: 0.5;
+      padding: var(--space-1);
+      transition: opacity var(--transition-fast);
+    }
+    .password-toggle:hover { opacity: 1; }
+    [data-theme="dark"] .auth-page {
+      background: linear-gradient(135deg, #060d1a, #0a1628);
+    }
+  </style>
+
+</body>
+</html>
