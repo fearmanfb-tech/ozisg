@@ -1,8 +1,5 @@
 name: Deploy to cPanel (ozisg.com)
 
-# ─────────────────────────────────────────────
-# Tetikleyici: main branch'e push yapıldığında
-# ─────────────────────────────────────────────
 on:
   push:
     branches:
@@ -14,24 +11,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Kodu çek
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. FTP ile cPanel'e yükle
-      # Değişen dosyaları tespit eder, sadece onları yükler (hızlı)
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server:   ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port:     21
-          # cPanel'deki hedef klasör (genellikle public_html/ veya alt dizin)
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          # Yerel kaynak: tüm proje dosyaları
-          local-dir: ./
-          # Bu dosya/klasörler FTP'ye yüklenmez
+          server:     ${{ secrets.FTP_SERVER }}
+          username:   ${{ secrets.FTP_USERNAME }}
+          password:   ${{ secrets.FTP_PASSWORD }}
+          port:       21
+          server-dir: public_html/
+          local-dir:  ./
           exclude: |
             **/.git*
             **/.git*/**

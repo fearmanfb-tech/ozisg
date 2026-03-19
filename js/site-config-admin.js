@@ -515,31 +515,74 @@ function _renderMenuList() {
   const el = document.getElementById("site-menu-list");
   if (!el) return;
 
-  el.innerHTML = menuItems.map((item, idx) => `
-    <div class="site-row" data-idx="${idx}" style="opacity:${item.visible===false?"0.5":"1"};">
-      <div style="display:flex;gap:var(--space-2);flex-direction:column;flex-shrink:0;">
-        <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:10px;" onclick="moveMenu(${idx},-1)" ${idx===0?"disabled":""}>▲</button>
-        <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:10px;" onclick="moveMenu(${idx},1)" ${idx===menuItems.length-1?"disabled":""}>▼</button>
+  el.innerHTML = menuItems.map((item, idx) => {
+    const children = item.children || [];
+    return `
+    <div style="border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden;margin-bottom:2px;" data-menu-idx="${idx}">
+      <!-- Ana satır -->
+      <div class="site-row" style="background:var(--bg-surface-2);opacity:${item.visible===false?"0.5":"1"};">
+        <div style="display:flex;gap:2px;flex-direction:column;flex-shrink:0;">
+          <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:10px;" onclick="moveMenu(${idx},-1)" ${idx===0?"disabled":""}>▲</button>
+          <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:10px;" onclick="moveMenu(${idx},1)" ${idx===menuItems.length-1?"disabled":""}>▼</button>
+        </div>
+        <input type="text" class="form-control menu-icon" style="width:44px;text-align:center;font-size:1.1rem;padding:4px;" value="${esc(item.icon||"")}" placeholder="🔗" />
+        <input type="text" class="form-control menu-label" style="flex:1;min-width:80px;" value="${esc(item.label)}" placeholder="Menü adı" />
+        <input type="text" class="form-control menu-url" style="flex:1;min-width:80px;font-size:var(--text-xs);" value="${esc(item.url)}" placeholder="sayfa.html" />
+        <label style="display:flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap;font-size:var(--text-xs);">
+          <input type="checkbox" class="menu-visible" ${item.visible!==false?"checked":""} style="accent-color:var(--accent-primary);"
+            onchange="this.closest('.site-row').parentElement.style.opacity=this.checked?'1':'0.5';" />
+          Göster
+        </label>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;white-space:nowrap;flex-shrink:0;" title="Alt menü ekle"
+          onclick="addChildItem(${idx})">+ Alt</button>
+        ${item.custom ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);flex-shrink:0;padding:4px 6px;" onclick="deleteMenu(${idx})">🗑️</button>` : `<div style="width:28px;flex-shrink:0;"></div>`}
       </div>
-      <input type="text" class="form-control menu-icon" style="width:48px;text-align:center;font-size:1.2rem;padding:4px;" value="${esc(item.icon||"")}" placeholder="🔗" />
-      <input type="text" class="form-control menu-label" style="flex:1;" value="${esc(item.label)}" placeholder="Menü adı" />
-      <input type="text" class="form-control menu-url" style="flex:1;font-size:var(--text-xs);color:var(--text-muted);" value="${esc(item.url)}" placeholder="sayfa.html" />
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;font-size:var(--text-xs);">
-        <input type="checkbox" class="menu-visible" ${item.visible!==false?"checked":""} style="accent-color:var(--accent-primary);"
-          onchange="this.closest('.site-row').style.opacity=this.checked?'1':'0.5';" />
-        Göster
-      </label>
-      ${item.custom ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);flex-shrink:0;" onclick="deleteMenu(${idx})">🗑️</button>` : `<div style="width:32px;flex-shrink:0;"></div>`}
-    </div>`).join("");
+
+      <!-- Alt menü öğeleri -->
+      ${children.length > 0 ? `
+        <div style="border-top:1px dashed var(--border-color);background:var(--bg-page);">
+          ${children.map((child, ci) => `
+            <div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--border-subtle);"
+              data-child-parent="${idx}" data-child-idx="${ci}">
+              <span style="color:var(--text-muted);font-size:12px;flex-shrink:0;">└</span>
+              <input type="text" class="form-control child-label" style="flex:1;font-size:var(--text-xs);height:30px;"
+                value="${esc(child.label||"")}" placeholder="Alt öğe adı" />
+              <input type="text" class="form-control child-url" style="flex:1;font-size:var(--text-xs);height:30px;"
+                value="${esc(child.url||"")}" placeholder="sayfa.html" />
+              <label style="display:flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap;font-size:var(--text-xs);">
+                <input type="checkbox" class="child-visible" ${child.visible!==false?"checked":""}
+                  style="accent-color:var(--accent-primary);" />
+                Göster
+              </label>
+              <button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);padding:2px 6px;flex-shrink:0;"
+                onclick="deleteChildItem(${idx},${ci})">✕</button>
+            </div>`).join("")}
+        </div>` : ""}
+    </div>`;
+  }).join("");
 }
 
 function syncMenuFromDOM() {
-  document.querySelectorAll("#site-menu-list .site-row").forEach((row, idx) => {
+  document.querySelectorAll("[data-menu-idx]").forEach((wrapper) => {
+    const idx = parseInt(wrapper.dataset.menuIdx);
     if (!menuItems[idx]) return;
-    menuItems[idx].icon    = row.querySelector(".menu-icon")?.value.trim()    ?? menuItems[idx].icon;
-    menuItems[idx].label   = row.querySelector(".menu-label")?.value.trim()   ?? menuItems[idx].label;
-    menuItems[idx].url     = row.querySelector(".menu-url")?.value.trim()     ?? menuItems[idx].url;
-    menuItems[idx].visible = row.querySelector(".menu-visible")?.checked      ?? menuItems[idx].visible;
+    const row = wrapper.querySelector(".site-row");
+    if (row) {
+      menuItems[idx].icon    = row.querySelector(".menu-icon")?.value.trim()    ?? menuItems[idx].icon;
+      menuItems[idx].label   = row.querySelector(".menu-label")?.value.trim()   ?? menuItems[idx].label;
+      menuItems[idx].url     = row.querySelector(".menu-url")?.value.trim()     ?? menuItems[idx].url;
+      menuItems[idx].visible = row.querySelector(".menu-visible")?.checked      ?? menuItems[idx].visible;
+    }
+    // Alt öğeleri oku
+    const children = [];
+    wrapper.querySelectorAll("[data-child-idx]").forEach(childRow => {
+      children.push({
+        label:   childRow.querySelector(".child-label")?.value.trim()  || "",
+        url:     childRow.querySelector(".child-url")?.value.trim()    || "",
+        visible: childRow.querySelector(".child-visible")?.checked     ?? true,
+      });
+    });
+    menuItems[idx].children = children;
   });
 }
 
@@ -570,9 +613,27 @@ window.deleteMenu = function(idx) {
 
 window.addMenuItem = function() {
   syncMenuFromDOM();
-  menuItems.push({ id: "custom_" + Date.now(), label: "Yeni Sayfa", url: "#", icon: "🔗", visible: true, order: menuItems.length, custom: true });
+  menuItems.push({ id: "custom_" + Date.now(), label: "Yeni Sayfa", url: "#", icon: "🔗", visible: true, order: menuItems.length, custom: true, children: [] });
   _renderMenuList();
   setTimeout(() => document.getElementById("site-menu-list")?.scrollTo(0, 99999), 50);
+};
+
+window.addChildItem = function(parentIdx) {
+  syncMenuFromDOM();
+  if (!menuItems[parentIdx].children) menuItems[parentIdx].children = [];
+  // Üst URL'i "#" yap (dropdown parent)
+  if (menuItems[parentIdx].url && menuItems[parentIdx].url !== "#") {
+    menuItems[parentIdx].url = "#";
+  }
+  menuItems[parentIdx].children.push({ label: "Alt Öğe", url: "#", visible: true });
+  _renderMenuList();
+};
+
+window.deleteChildItem = function(parentIdx, childIdx) {
+  syncMenuFromDOM();
+  if (!menuItems[parentIdx].children) return;
+  menuItems[parentIdx].children.splice(childIdx, 1);
+  _renderMenuList();
 };
 
 window.saveMenu = async function() {
@@ -909,65 +970,156 @@ const FONT_OPTIONS = [
 function renderPageDesign() {
   const el = document.getElementById("site-pagedesign-form");
   if (!el) return;
-  const pages = cfg.pageDesign || {};
-  el.innerHTML = `
-    <p style="font-size:var(--text-sm);color:var(--text-muted);margin-bottom:var(--space-4);">
-      Her sayfa için bağımsız renk ve yazı tipi ayarlayın. Boş bırakılan alanlar global tema ayarlarını kullanır.
-    </p>
-    <div style="display:flex;flex-direction:column;gap:var(--space-4);">
-      ${PAGE_LIST.map(p => {
-        const pd = pages[p.id] || {};
-        return `
-          <details style="border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden;">
-            <summary style="padding:var(--space-3) var(--space-4);background:var(--bg-surface-2);cursor:pointer;font-weight:var(--font-semibold);font-size:var(--text-sm);display:flex;align-items:center;justify-content:space-between;">
-              <span>${p.label}</span>
-              <span style="font-size:var(--text-xs);color:var(--text-muted);font-weight:normal;">${p.file}</span>
-            </summary>
-            <div style="padding:var(--space-4);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);" data-page="${p.id}">
-              <div class="form-group" style="margin:0;">
-                <label class="form-label" style="font-size:var(--text-xs);">Ana Renk <span style="color:var(--text-muted);">(primary override)</span></label>
-                <div style="display:flex;gap:var(--space-2);align-items:center;">
-                  <input type="color" class="pd-primary" value="${pd.primaryColor||"#2563eb"}"
-                    style="width:40px;height:32px;border:none;cursor:pointer;border-radius:4px;" />
-                  <input type="text" class="form-control pd-primary-hex" value="${pd.primaryColor||""}"
-                    placeholder="Boş = global" style="font-family:monospace;font-size:var(--text-xs);"
-                    oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))this.previousElementSibling.value=this.value;" />
-                </div>
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label class="form-label" style="font-size:var(--text-xs);">Yazı Tipi</label>
-                <select class="form-control pd-font">
-                  ${FONT_OPTIONS.map(f => `<option value="${f.value}" ${pd.fontFamily===f.value?"selected":""}>${f.label}</option>`).join("")}
-                </select>
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label class="form-label" style="font-size:var(--text-xs);">Yazı Boyutu <span style="color:var(--text-muted);">(ölçek %)</span></label>
-                <div style="display:flex;gap:var(--space-2);align-items:center;">
-                  <input type="range" class="pd-font-scale" min="80" max="130" step="5" value="${pd.fontScale||100}"
-                    style="flex:1;" oninput="this.nextElementSibling.textContent=this.value+'%'" />
-                  <span style="min-width:40px;font-size:var(--text-xs);font-weight:600;">${pd.fontScale||100}%</span>
-                </div>
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label class="form-label" style="font-size:var(--text-xs);">Header Rengi 1</label>
-                <input type="color" class="pd-header-from" value="${pd.headerFrom||"#0f172a"}"
-                  style="width:100%;height:32px;border:none;cursor:pointer;border-radius:4px;" />
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label class="form-label" style="font-size:var(--text-xs);">Header Rengi 2</label>
-                <input type="color" class="pd-header-to" value="${pd.headerTo||"#1e3a5f"}"
-                  style="width:100%;height:32px;border:none;cursor:pointer;border-radius:4px;" />
-              </div>
-              <div class="form-group" style="margin:0;grid-column:1/-1;display:flex;align-items:center;gap:var(--space-2);">
-                <input type="checkbox" class="pd-visible" ${pd.disabled?"":"checked"} style="accent-color:var(--accent-primary);width:16px;height:16px;" />
-                <label style="font-size:var(--text-sm);cursor:pointer;">Sayfa Aktif <span style="color:var(--text-muted);font-size:var(--text-xs);">(devre dışı bırakılırsa "Bakımda" yönlendirir)</span></label>
-              </div>
+  const pages      = cfg.pageDesign   || {};
+  const customPages = cfg.customPages || [];
+
+  // Tüm sayfalar: sabit + özel
+  const allPages = [
+    ...PAGE_LIST.map(p => ({ ...p, custom: false })),
+    ...customPages.map(p => ({ ...p, custom: true })),
+  ];
+
+  const pageRow = (p) => {
+    const pd = pages[p.id] || {};
+    return `
+      <details style="border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden;" ${pd.disabled ? "" : ""}>
+        <summary style="padding:var(--space-3) var(--space-4);background:var(--bg-surface-2);cursor:pointer;font-size:var(--text-sm);display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);">
+          <span style="font-weight:var(--font-semibold);flex:1;">${esc(p.label)}</span>
+          <span style="font-size:var(--text-xs);color:var(--text-muted);font-weight:normal;">${esc(p.file)}</span>
+          ${pd.disabled ? `<span style="background:var(--accent-danger);color:#fff;padding:1px 7px;border-radius:99px;font-size:10px;margin-left:4px;">Kapalı</span>` : ""}
+          ${p.custom ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent-danger);padding:2px 6px;font-size:11px;margin-left:4px;"
+            onclick="event.stopPropagation();deleteCustomPage('${p.id}','${esc(p.label)}')">🗑️</button>` : ""}
+        </summary>
+        <div style="padding:var(--space-4);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);" data-page="${p.id}">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:var(--text-xs);">Ana Renk <span style="color:var(--text-muted);">(primary override)</span></label>
+            <div style="display:flex;gap:var(--space-2);align-items:center;">
+              <input type="color" class="pd-primary" value="${pd.primaryColor||"#2563eb"}"
+                style="width:40px;height:32px;border:none;cursor:pointer;border-radius:4px;" />
+              <input type="text" class="form-control pd-primary-hex" value="${pd.primaryColor||""}"
+                placeholder="Boş = global" style="font-family:monospace;font-size:var(--text-xs);"
+                oninput="if(this.value.match(/^#[0-9a-f]{6}$/i))this.previousElementSibling.value=this.value;" />
             </div>
-          </details>`;
-      }).join("")}
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:var(--text-xs);">Yazı Tipi</label>
+            <select class="form-control pd-font">
+              ${FONT_OPTIONS.map(f => `<option value="${f.value}" ${pd.fontFamily===f.value?"selected":""}>${f.label}</option>`).join("")}
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:var(--text-xs);">Yazı Boyutu <span style="color:var(--text-muted);">(ölçek %)</span></label>
+            <div style="display:flex;gap:var(--space-2);align-items:center;">
+              <input type="range" class="pd-font-scale" min="80" max="130" step="5" value="${pd.fontScale||100}"
+                style="flex:1;" oninput="this.nextElementSibling.textContent=this.value+'%'" />
+              <span style="min-width:40px;font-size:var(--text-xs);font-weight:600;">${pd.fontScale||100}%</span>
+            </div>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:var(--text-xs);">Header Rengi 1</label>
+            <input type="color" class="pd-header-from" value="${pd.headerFrom||"#0f172a"}"
+              style="width:100%;height:32px;border:none;cursor:pointer;border-radius:4px;" />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:var(--text-xs);">Header Rengi 2</label>
+            <input type="color" class="pd-header-to" value="${pd.headerTo||"#1e3a5f"}"
+              style="width:100%;height:32px;border:none;cursor:pointer;border-radius:4px;" />
+          </div>
+          <div class="form-group" style="margin:0;grid-column:1/-1;display:flex;align-items:center;gap:var(--space-2);">
+            <input type="checkbox" class="pd-visible" ${pd.disabled?"":"checked"} style="accent-color:var(--accent-primary);width:16px;height:16px;" />
+            <label style="font-size:var(--text-sm);cursor:pointer;">Sayfa Aktif
+              <span style="color:var(--text-muted);font-size:var(--text-xs);">(devre dışı → "Bu sayfa kullanılamıyor" mesajı gösterir)</span>
+            </label>
+          </div>
+        </div>
+      </details>`;
+  };
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-4);">
+      <p style="font-size:var(--text-sm);color:var(--text-muted);margin:0;">
+        Her sayfa için bağımsız renk ve yazı tipi. Sayfayı kapat → "kullanılamıyor" ekranı gösterir.
+      </p>
+      <button class="btn btn-ghost btn-sm" onclick="openAddPageModal()">➕ Sayfa Ekle</button>
     </div>
-    <button class="btn btn-primary" style="width:100%;margin-top:var(--space-4);" onclick="savePageDesign()">💾 Sayfa Tasarımlarını Kaydet</button>`;
+
+    <div style="display:flex;flex-direction:column;gap:var(--space-3);">
+      <div style="font-size:var(--text-xs);font-weight:600;color:var(--text-muted);padding:0 var(--space-2);margin-top:var(--space-2);">SİSTEM SAYFALARI</div>
+      ${PAGE_LIST.map(p => pageRow({ ...p, custom: false })).join("")}
+
+      ${customPages.length ? `
+        <div style="font-size:var(--text-xs);font-weight:600;color:var(--text-muted);padding:0 var(--space-2);margin-top:var(--space-3);">ÖZEL SAYFALAR</div>
+        ${customPages.map(p => pageRow({ ...p, custom: true })).join("")}
+      ` : ""}
+    </div>
+
+    <div style="display:flex;gap:var(--space-3);margin-top:var(--space-5);">
+      <button class="btn btn-primary" style="flex:1;" onclick="savePageDesign()">💾 Tasarım Ayarlarını Kaydet</button>
+    </div>
+
+    <!-- Sayfa Ekle Modalı -->
+    <div id="add-page-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;align-items:center;justify-content:center;">
+      <div style="background:var(--bg-surface,#fff);border-radius:12px;padding:var(--space-6);width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-5);">
+          <h3 style="font-weight:700;">➕ Özel Sayfa Ekle</h3>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('add-page-modal').style.display='none'">✕</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sayfa Adı</label>
+          <input type="text" id="new-page-label" class="form-control" placeholder="Örn: İletişim" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">HTML Dosyası <span style="font-size:var(--text-xs);color:var(--text-muted);">(cPanel'de var olmalı)</span></label>
+          <input type="text" id="new-page-file" class="form-control" placeholder="iletisim.html" style="font-family:monospace;" />
+        </div>
+        <div style="background:var(--bg-surface-2);border-radius:var(--border-radius);padding:var(--space-3);margin-bottom:var(--space-4);font-size:var(--text-xs);color:var(--text-muted);">
+          💡 Dosyayı önce cPanel File Manager'dan <code>public_html/</code> içine yükleyin, ardından buradan ekleyin.
+        </div>
+        <div style="display:flex;gap:var(--space-3);">
+          <button class="btn btn-ghost" style="flex:1;" onclick="document.getElementById('add-page-modal').style.display='none'">İptal</button>
+          <button class="btn btn-primary" style="flex:2;" onclick="addCustomPage()">Ekle</button>
+        </div>
+      </div>
+    </div>`;
 }
+
+window.openAddPageModal = function() {
+  document.getElementById("add-page-modal").style.display = "flex";
+  document.getElementById("new-page-label").value = "";
+  document.getElementById("new-page-file").value  = "";
+};
+
+window.addCustomPage = async function() {
+  const label = document.getElementById("new-page-label")?.value.trim();
+  const file  = document.getElementById("new-page-file")?.value.trim().replace(/^\/+/,"");
+  if (!label || !file) { showToast("Ad ve dosya zorunlu.", "warning"); return; }
+  if (!file.endsWith(".html")) { showToast("Dosya adı .html ile bitmeli.", "warning"); return; }
+
+  const id = file.replace(".html","").replace(/[^a-z0-9-_]/gi,"_");
+  const customPages = [...(cfg.customPages || [])];
+  if (customPages.find(p => p.id === id)) { showToast("Bu sayfa zaten kayıtlı.", "warning"); return; }
+
+  customPages.push({ id, label, file });
+  const ok = await saveSection({ customPages });
+  if (ok) {
+    document.getElementById("add-page-modal").style.display = "none";
+    await loadConfig();
+    renderPageDesign();
+    showToast(`"${label}" sayfası eklendi.`, "success");
+  }
+};
+
+window.deleteCustomPage = async function(id, label) {
+  if (!confirm(`"${label}" sayfasını listeden kaldırmak istiyor musunuz?\n(Fiziksel dosya cPanel'de kalır, sadece bu kayıt silinir.)`)) return;
+  const customPages = (cfg.customPages || []).filter(p => p.id !== id);
+
+  // pageDesign'dan da kaldır
+  const pageDesign = { ...(cfg.pageDesign || {}) };
+  delete pageDesign[id];
+
+  const ok = await saveSection({ customPages, pageDesign });
+  if (ok) { await loadConfig(); renderPageDesign(); }
+};
 
 window.savePageDesign = async function() {
   const pageDesign = {};

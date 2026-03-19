@@ -119,6 +119,7 @@
         <button class="admin-tab" data-tab="invite"      onclick="switchTab('invite')">✉️ Davet Gönder</button>
         <button id="blogTabBtn" class="admin-tab" data-tab="blog"       onclick="switchTab('blog')">✍️ Blog</button>
         <button class="admin-tab" data-tab="categories" onclick="switchTab('categories')">🏷️ Kategoriler</button>
+        <button class="admin-tab" data-tab="forms"      onclick="switchTab('forms')">📬 Formlar</button>
         <button class="admin-tab" data-tab="logs"       onclick="switchTab('logs')">📋 Aktivite</button>
         <button class="admin-tab" data-tab="site"       onclick="switchTab('site')">🌐 Site</button>
       </div>
@@ -224,6 +225,11 @@
       <!-- TAB: Kategoriler -->
       <div id="tab-categories" class="tab-content" style="display:none;">
         <div id="categories-panel"></div>
+      </div>
+
+      <!-- TAB: Formlar -->
+      <div id="tab-forms" class="tab-content" style="display:none;">
+        <div id="forms-panel"></div>
       </div>
 
       <!-- TAB: Blog -->
@@ -569,5 +575,6 @@
   <script type="module" src="js/admin.js"></script>
   <script type="module" src="js/site-config-admin.js"></script>
   <script type="module" src="js/categories-admin.js"></script>
+  <script type="module" src="js/forms-admin.js"></script>
 </body>
 </html>
