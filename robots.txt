@@ -1,0 +1,18 @@
+# robots.txt — ozisg.com
+# https://ozisg.com/robots.txt
+
+User-agent: *
+Allow: /
+
+# Admin ve sistem sayfaları taranmasın
+Disallow: /admin.html
+Disallow: /login.html
+Disallow: /js/
+Disallow: /css/
+
+# Gereksiz sayfa parametreleri
+Disallow: /*?*token=
+Disallow: /*?*invite=
+
+# Sitemap konumu
+Sitemap: https://ozisg.com/sitemap.xml
