@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <script>
+    (function(){var t=localStorage.getItem('ozisg_theme'),p=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t||p);})();
+  </script>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>İş İzni Doğrulama — ozisg.com</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/master.css" />
+</head>
+<body>
+<div id="nav-placeholder"></div>
+
+<main class="page-content" style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:var(--space-6) var(--space-4);">
+  <div class="card" style="max-width:480px;width:100%;padding:var(--space-6);">
+    <div id="pv-loading" style="text-align:center;padding:var(--space-6) 0;">
+      <div class="spinner" style="margin:0 auto var(--space-4);"></div>
+      <p style="color:var(--text-muted);">İzin doğrulanıyor…</p>
+    </div>
+    <div id="pv-result" style="display:none;"></div>
+  </div>
+</main>
+
+<div id="footer-placeholder"></div>
+
+<script src="../js/layout.js"></script>
+<script>renderLayout("../");</script>
+<script>
+(function () {
+  const IZIN_TURLERI = {
+    izin_yok:    "✅ İzin Gerekmiyor",
+    yuksekte:    "🏗️ Yüksekte Çalışma",
+    sicak:       "🔥 Sıcak İşlem",
+    kapali_alan: "🚪 Kapalı Alan",
+    elektrik:    "⚡ Elektrik İzolasyonu",
+    kazi:        "⛏️ Kazı Çalışması",
+  };
+
+  function esc(s) {
+    return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  function fmt(dt) {
+    if (!dt) return "—";
+    try { return new Date(dt).toLocaleString("tr-TR"); } catch { return dt; }
+  }
+
+  function render(html) {
+    document.getElementById("pv-loading").style.display = "none";
+    const el = document.getElementById("pv-result");
+    el.style.display = "block";
+    el.innerHTML = html;
+  }
+
+  function renderNotFound() {
+    render(`
+      <div style="text-align:center;">
+        <div style="font-size:2.5rem;margin-bottom:var(--space-3);">❌</div>
+        <h2 style="margin-bottom:var(--space-2);">İzin Bulunamadı</h2>
+        <p style="color:var(--text-muted);">Bu izin numarasına ait bir kayıt bulunamadı. QR kodu veya izin numarasını kontrol edin.</p>
+      </div>`);
+  }
+
+  function renderError(msg) {
+    render(`
+      <div style="text-align:center;">
+        <div style="font-size:2.5rem;margin-bottom:var(--space-3);">⚠️</div>
+        <h2 style="margin-bottom:var(--space-2);">Doğrulama Yapılamadı</h2>
+        <p style="color:var(--text-muted);">${esc(msg)}</p>
+      </div>`);
+  }
+
+  function renderPermit(p) {
+    const now = new Date();
+    const bitis = p.gecerlilikBitis ? new Date(p.gecerlilikBitis) : null;
+    const expired = bitis && bitis < now;
+    const isAktif = p.durum === "Aktif" || p.durum === "Devam Ediyor";
+
+    let statusIcon, statusText, statusColor;
+    if (isAktif && !expired) {
+      statusIcon = "✅"; statusText = "GEÇERLİ — İzin Aktif"; statusColor = "var(--accent-success)";
+    } else if (isAktif && expired) {
+      statusIcon = "⚠️"; statusText = "SÜRESİ DOLMUŞ — Aktif görünüyor ama geçerlilik bitti"; statusColor = "var(--accent-danger)";
+    } else if (p.durum === "Askıya Alındı") {
+      statusIcon = "⏸️"; statusText = "ASKIYA ALINDI"; statusColor = "var(--accent-warning)";
+    } else if (p.durum === "Kapatıldı" || p.durum === "Tamamlandı") {
+      statusIcon = "🔒"; statusText = "KAPATILDI"; statusColor = "var(--text-muted)";
+    } else if (p.durum === "İptal Edildi") {
+      statusIcon = "🚫"; statusText = "İPTAL EDİLDİ"; statusColor = "var(--accent-danger)";
+    } else {
+      statusIcon = "📝"; statusText = "TASLAK — Henüz aktifleştirilmedi"; statusColor = "var(--accent-warning)";
+    }
+
+    render(`
+      <div style="text-align:center;margin-bottom:var(--space-5);">
+        <div style="font-size:2.5rem;margin-bottom:var(--space-2);">${statusIcon}</div>
+        <div style="font-weight:var(--font-bold);font-size:var(--text-lg);color:${statusColor};">${statusText}</div>
+        <div style="color:var(--text-muted);font-size:var(--text-sm);margin-top:4px;">🔖 ${esc(p.permitNo)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);font-size:var(--text-sm);">
+        <div><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">Tarih</div><div style="font-weight:var(--font-semibold);">${esc(p.tarih) || "—"}</div></div>
+        <div><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">İzin Kapsamı</div><div style="font-weight:var(--font-semibold);">${esc(IZIN_TURLERI[p.izinTuru] || p.izinTuru || "—")}</div></div>
+        <div><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">Firma</div><div style="font-weight:var(--font-semibold);">${esc(p.firma) || "—"}</div></div>
+        <div><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">Sorumlu</div><div style="font-weight:var(--font-semibold);">${esc(p.sorumlu) || "—"}</div></div>
+        <div style="grid-column:1/-1;"><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">Geçerlilik</div><div style="font-weight:var(--font-semibold);">${fmt(p.gecerlilikBaslangic)} → ${fmt(p.gecerlilikBitis)}</div></div>
+        <div><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">İzni Veren</div><div style="font-weight:var(--font-semibold);">${esc(p.izniVerenAd) || "—"} ${p.izniVerenOnay ? "✅" : "⏳"}</div></div>
+        <div><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">İzni Alan</div><div style="font-weight:var(--font-semibold);">${esc(p.izniAlanAd) || "—"} ${p.izinAlanOnay ? "✅" : "⏳"}</div></div>
+        <div style="grid-column:1/-1;"><div style="color:var(--text-muted);font-size:var(--text-xs);text-transform:uppercase;">Tehlike Kontrol Listesi</div><div style="font-weight:var(--font-semibold);">${p.checklistTotal ? `${p.checklistDone}/${p.checklistTotal} tamamlandı` : "Bu izin türü için yok"}</div></div>
+      </div>
+      <p style="text-align:center;color:var(--text-muted);font-size:var(--text-xs);margin-top:var(--space-5);">Bu sayfa ozisg.com İş İzni Takip Sistemi tarafından otomatik oluşturulmuştur.</p>`);
+  }
+
+  const params = new URLSearchParams(location.search);
+  const no = (params.get("no") || "").trim();
+  if (!no) {
+    renderError("Geçersiz bağlantı: izin numarası eksik.");
+    return;
+  }
+
+  fetch(`../api/permit-verify.php?no=${encodeURIComponent(no)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status !== "ok") { renderError(data.message || "Bilinmeyen hata."); return; }
+      if (!data.found) { renderNotFound(); return; }
+      renderPermit(data.permit);
+    })
+    .catch(() => renderError("Sunucuya bağlanılamadı."));
+})();
+</script>
+</body>
+</html>

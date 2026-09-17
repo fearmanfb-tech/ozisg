@@ -2,51 +2,22 @@
 <html lang="tr" data-theme="light">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    (function(){var t=localStorage.getItem('ozisg_theme'),p=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t||p);})();
+  </script>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
   <title>İş Takip Sistemi — ozisg.com</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../css/master.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script defer src="../js/layout.js"></script>
+  <script>document.addEventListener('DOMContentLoaded',function(){typeof renderLayout==='function'&&renderLayout('../');});</script>
+  <!-- SheetJS lazy yüklenir (Excel ihtiyaç anında window.loadScript ile) -->
 </head>
 <body>
-
-  <nav class="navbar" id="navbar">
-    <div class="container navbar-inner">
-      <a href="../index.html" class="navbar-brand">
-        <div class="navbar-logo">OZ</div>
-        <span class="navbar-brand-name">ozisg.com</span>
-      </a>
-      <ul class="navbar-nav">
-        <li><a href="../index.html" class="nav-link">Ana Sayfa</a></li>
-        <li><a href="../dashboard.html" class="nav-link active">Araçlarım</a></li>
-      </ul>
-      <div class="navbar-actions">
-        <button class="theme-toggle" id="themeToggle" aria-label="Tema değiştir">
-          <span class="theme-toggle-icon sun">☀️</span>
-          <span class="theme-toggle-icon moon">🌙</span>
-        </button>
-        <div id="user-menu" class="dropdown hidden">
-          <button class="btn btn-ghost btn-sm" id="userMenuBtn">
-            <div class="avatar avatar-sm avatar-placeholder" id="userAvatarNav">O</div>
-            <span id="userNameNav" style="color:var(--text-navbar);">Kullanıcı</span>
-            <span style="color:var(--text-navbar);">▾</span>
-          </button>
-          <div class="dropdown-menu" id="userDropdown" style="display:none;">
-            <a href="../dashboard.html" class="dropdown-item">📊 Araçlarım</a>
-            <div class="dropdown-divider"></div>
-            <button class="dropdown-item" id="logoutBtn">🚪 Çıkış Yap</button>
-          </div>
-        </div>
-        <div id="auth-buttons"><a href="../login.html" class="btn btn-primary btn-sm">Giriş Yap</a></div>
-        <button class="hamburger" id="hamburger" aria-label="Menü"><span></span><span></span><span></span></button>
-      </div>
-    </div>
-  </nav>
-  <nav class="mobile-nav" id="mobileNav">
-    <a href="../index.html" class="nav-link">🏠 Ana Sayfa</a>
-    <a href="../dashboard.html" class="nav-link">📊 Araçlarım</a>
-  </nav>
+<div id="nav-placeholder"></div>
 
   <!-- Auth Gate -->
   <div id="auth-gate" style="display:none;">
@@ -65,7 +36,7 @@
   </div>
 
   <!-- Main Content -->
-  <div id="main-content" style="display:none;">
+  <div id="main-content" style="display:none;padding-top:var(--navbar-height);">
 
     <!-- ── Kompakt Başlık ── -->
     <div class="tool-header">
@@ -110,9 +81,10 @@
 
           <!-- Sağ: Sekmeler -->
           <div class="tool-tabs">
-            <button class="work-tab active" data-tab="daily"   onclick="switchTab('daily')">📅 Günlük</button>
-            <button class="work-tab"         data-tab="weekly"  onclick="switchTab('weekly')">📊 Haftalık</button>
-            <button class="work-tab"         data-tab="archive" onclick="switchTab('archive')">🗂️ Arşiv</button>
+            <button class="work-tab active" data-tab="daily"    onclick="switchTab('daily')">📅 Günlük</button>
+            <button class="work-tab"         data-tab="weekly"   onclick="switchTab('weekly')">📊 Haftalık</button>
+            <button class="work-tab"         data-tab="archive"  onclick="switchTab('archive')">🗂️ Arşiv</button>
+            <button class="work-tab"         data-tab="settings" onclick="switchTab('settings')">⚙️ Ayarlar</button>
           </div>
 
         </div>
@@ -134,8 +106,11 @@
         <div id="filters-weekly" class="filter-row" style="display:none;">
           <select id="weeklyFilterStatus" class="form-control filter-ctrl" style="max-width:180px;">
             <option value="all">Tüm Durumlar</option>
-            <option value="Devam Ediyor">⏳ Devam Ediyor</option>
-            <option value="Tamamlandı">✅ Tamamlandı</option>
+            <option value="Taslak">📝 Taslak</option>
+            <option value="Aktif">🟢 Aktif</option>
+            <option value="Askıya Alındı">⏸️ Askıya Alındı</option>
+            <option value="Kapatıldı">✅ Kapatıldı</option>
+            <option value="İptal Edildi">🚫 İptal Edildi</option>
           </select>
           <input type="text" id="weeklySearch" class="form-control filter-ctrl" placeholder="🔍  Firma, proje, depo…" />
         </div>
@@ -167,6 +142,36 @@
           <div id="archive-list"></div>
         </div>
 
+        <div id="tab-settings" class="work-tab-content" style="display:none;">
+          <div style="max-width:640px;margin:0 auto;">
+            <div class="card" style="padding:var(--space-5);">
+              <h3 style="margin-top:0;">⚙️ Kurumsal Ayarlar</h3>
+              <div style="display:grid;gap:var(--space-4);">
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Şirket / Saha Adı</label>
+                  <input type="text" id="set-companyName" class="form-control" placeholder="Örn: ABC İnşaat — Şantiye 1" />
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Logo URL <span style="font-weight:400;color:var(--text-muted);">(opsiyonel)</span></label>
+                  <input type="text" id="set-logoUrl" class="form-control" placeholder="https://…/logo.png" />
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">Mail Dağıtım Listesi <span style="color:var(--accent-danger);">*</span></label>
+                  <textarea id="set-mailRecipients" class="form-control" rows="3" placeholder="her-satira-bir-eposta@ornek.com&#10;ikinci-alici@ornek.com"></textarea>
+                  <div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:4px;">Her satıra bir e-posta adresi yazın. İş izni kayıtlarındaki "📧 Gönder" bu listeye gönderim yapar.</div>
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label class="form-label">İmza / Alt Bilgi <span style="font-weight:400;color:var(--text-muted);">(opsiyonel)</span></label>
+                  <textarea id="set-signature" class="form-control" rows="2" placeholder="Örn: ABC İnşaat İSG Departmanı"></textarea>
+                </div>
+                <div style="display:flex;justify-content:flex-end;">
+                  <button class="btn btn-primary" id="saveSettingsBtn">💾 Ayarları Kaydet</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -181,6 +186,16 @@
       </div>
       <div class="modal-body">
         <input type="hidden" id="entryId" />
+
+        <div id="permitNoBanner" style="display:none;margin-bottom:var(--space-4);padding:var(--space-2) var(--space-3);background:var(--bg-surface-3);border-radius:var(--border-radius);font-size:var(--text-sm);font-weight:var(--font-semibold);color:var(--text-secondary);display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap;">
+          <span>🔖 İzin No: <span id="permitNoText"></span></span>
+          <button type="button" class="btn btn-ghost btn-sm" id="showQrBtn" style="font-weight:var(--font-semibold);">🔗 QR Kod</button>
+        </div>
+
+        <details id="historyDetails" style="display:none;margin-bottom:var(--space-4);">
+          <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--font-semibold);color:var(--text-secondary);">🕘 İzin Geçmişi</summary>
+          <div id="historyList" style="margin-top:var(--space-2);display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;background:var(--bg-surface-2);border:1px solid var(--border-subtle);border-radius:var(--border-radius);padding:var(--space-3);font-size:var(--text-xs);color:var(--text-secondary);"></div>
+        </details>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
 
@@ -246,6 +261,38 @@
             </select>
           </div>
 
+          <!-- PTW: İzin türüne özel tehlike checklist'i -->
+          <div class="form-group" id="checklistGroup" style="grid-column:1/-1;display:none;">
+            <label class="form-label">Tehlike Kontrol Listesi (PTW)</label>
+            <div id="checklistContainer" style="display:flex;flex-direction:column;gap:6px;background:var(--bg-surface-2);border:1px solid var(--border-subtle);border-radius:var(--border-radius);padding:var(--space-3);"></div>
+          </div>
+
+          <!-- PTW: Geçerlilik penceresi -->
+          <div class="form-group">
+            <label class="form-label">Geçerlilik Başlangıcı</label>
+            <input type="datetime-local" id="eGecerlilikBaslangic" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Geçerlilik Bitişi</label>
+            <input type="datetime-local" id="eGecerlilikBitis" class="form-control" />
+          </div>
+
+          <!-- PTW: İzin veren / alan onayı -->
+          <div class="form-group" style="border:1px solid var(--border-subtle);border-radius:var(--border-radius);padding:var(--space-3);margin:0;">
+            <label class="form-label">İzni Veren</label>
+            <input type="text" id="eIzniVerenAd" class="form-control" placeholder="Ad Soyad (İSG Sorumlusu)" style="margin-bottom:6px;" />
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer;">
+              <input type="checkbox" id="eIzniVerenOnay" style="width:16px;height:16px;margin:0;" /> Onayladım
+            </label>
+          </div>
+          <div class="form-group" style="border:1px solid var(--border-subtle);border-radius:var(--border-radius);padding:var(--space-3);margin:0;">
+            <label class="form-label">İzni Alan</label>
+            <input type="text" id="eIzniAlanAd" class="form-control" placeholder="Ad Soyad (Çalışmayı Yapan)" style="margin-bottom:6px;" />
+            <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer;">
+              <input type="checkbox" id="eIzniAlanOnay" style="width:16px;height:16px;margin:0;" /> Onayladım
+            </label>
+          </div>
+
           <div class="form-group" style="grid-column:1/-1;">
             <label class="form-label">Yapılan Günlük İş Detayı <span style="color:var(--accent-danger);">*</span></label>
             <textarea id="eDetay" class="form-control" rows="3" placeholder="Ne yapıldığını kısaca açıklayın…"></textarea>
@@ -260,14 +307,18 @@
           <div class="form-group">
             <label class="form-label">Durum</label>
             <select id="eDurum" class="form-control">
-              <option value="Devam Ediyor">⏳ Devam Ediyor</option>
-              <option value="Tamamlandı">✅ Tamamlandı</option>
+              <option value="Taslak">📝 Taslak</option>
+              <option value="Aktif">🟢 Aktif</option>
+              <option value="Askıya Alındı">⏸️ Askıya Alındı</option>
+              <option value="Kapatıldı">✅ Kapatıldı</option>
+              <option value="İptal Edildi">🚫 İptal Edildi</option>
             </select>
+            <div style="font-size:var(--text-xs);color:var(--text-muted);margin-top:4px;">"Aktif" için her iki onay kutusu; "Askıya Alındı"/"Kapatıldı" için durum notu gereklidir. Geçerlilik bitişini değiştirmek (süre uzatma) onayları sıfırlar — yeniden onaylanmalıdır.</div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Kapanış Notu</label>
-            <input type="text" id="eKapanis" class="form-control" placeholder="İş tamamlanma notu…" />
+            <label class="form-label">Durum Notu</label>
+            <input type="text" id="eKapanis" class="form-control" placeholder="Kapanış / askıya alma / iptal notu…" />
           </div>
 
         </div>
@@ -280,7 +331,25 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeEntryModal()">İptal</button>
         <button class="btn btn-danger hidden" id="deleteEntryBtn">🗑️ Sil</button>
+        <button class="btn btn-ghost hidden" id="sendPermitMailBtn">📧 Gönder</button>
         <button class="btn btn-primary" id="saveEntryBtn">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ QR KOD MODAL (sahada izin doğrulama) ══════════ -->
+  <div class="modal-overlay" id="qrModal" style="display:none;">
+    <div class="modal" style="max-width:360px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔗 Sahada Doğrulama QR Kodu</h3>
+        <button class="modal-close" onclick="closeQrModal()">✕</button>
+      </div>
+      <div class="modal-body" style="text-align:center;">
+        <div id="qrHolder" style="display:flex;justify-content:center;margin-bottom:var(--space-4);"></div>
+        <p style="font-size:var(--text-xs);color:var(--text-muted);margin-bottom:var(--space-2);">
+          Bu QR kodu yazdırıp sahaya asın. Okutulduğunda izin canlı durumunu gösteren bir sayfa açılır.
+        </p>
+        <a id="qrLink" href="#" target="_blank" rel="noopener" style="font-size:var(--text-xs);word-break:break-all;"></a>
       </div>
     </div>
   </div>
@@ -293,6 +362,7 @@
   <datalist id="alanSuggestions"></datalist>
   <datalist id="depoSuggestions"></datalist>
   <datalist id="projeSuggestions"></datalist>
+<div id="footer-placeholder"></div>
 
   <div id="toast-container"></div>
 
