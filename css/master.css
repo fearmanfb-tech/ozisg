@@ -329,6 +329,15 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: var(--spac
   background: rgba(255,255,255,0.1);
 }
 
+.nav-dropdown-btn {
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.nav-caret { font-size: 0.65em; opacity: 0.7; }
+.nav-dropdown-menu { left: 0; right: auto; min-width: 170px; }
+
 .nav-link.active {
   background: rgba(46,108,209,0.4);
   color: var(--navy-100);
@@ -414,13 +423,16 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: var(--spac
   position: fixed;
   top: var(--navbar-height);
   left: 0; right: 0;
+  bottom: 0;                              /* ekranın altına kadar uzanır */
   background: var(--bg-navbar);
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-8);
   border-top: 1px solid rgba(255,255,255,0.1);
   box-shadow: var(--shadow-lg);
   z-index: calc(var(--z-navbar) - 1);
   flex-direction: column;
   gap: var(--space-1);
+  overflow-y: auto;                       /* çok link varsa kaydırılabilir */
+  -webkit-overflow-scrolling: touch;
 }
 
 .mobile-nav.open { display: flex; }
@@ -429,6 +441,13 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: var(--spac
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-base);
   border-radius: var(--border-radius);
+  color: rgba(232,240,252,0.85);
+}
+
+.mobile-nav .nav-link:hover,
+.mobile-nav .nav-link.active {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
 }
 
 /* Page offset for fixed navbar */
@@ -509,6 +528,20 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: var(--spac
 .btn-ghost:hover {
   background: var(--bg-surface-3);
   color: var(--text-primary);
+}
+.navbar .btn-ghost,
+.navbar .btn-ghost:hover {
+  background: transparent;
+  border-color: rgba(255,255,255,0.2);
+  color: var(--text-navbar);
+}
+.navbar .btn-ghost:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+/* Basılı tutma anında dokunsal geri bildirim — hover'ın transform'unun üzerine yazar */
+.btn:active {
+  transform: scale(0.97);
 }
 
 .btn-sm { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
@@ -595,12 +628,14 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: var(--spac
   width: 100%;
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-base);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
   background: var(--bg-surface);
   border: 1.5px solid var(--border-color);
   border-radius: var(--border-radius);
   transition: all var(--transition-fast);
   outline: none;
+  opacity: 1;
 }
 
 .form-control:focus {
@@ -625,11 +660,23 @@ textarea.form-control {
 
 select.form-control {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 16px;
   padding-right: var(--space-10);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] select.form-control {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  color: var(--text-primary);
+}
+
+select.form-control option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .form-hint { font-size: var(--text-xs); color: var(--text-muted); }
@@ -735,7 +782,7 @@ select.form-control {
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  animation: fadeIn 0.2s ease;
+  /* backdrop anında görünür — sadece .modal kutusu slideUp ile açılır */
 }
 
 .modal {
@@ -746,7 +793,7 @@ select.form-control {
   max-width: 520px;
   max-height: 90vh;
   overflow-y: auto;
-  animation: slideUp 0.3s var(--transition-bounce);
+  animation: slideUp 0.2s ease-out;
 }
 
 .modal-header {
@@ -1224,6 +1271,20 @@ code {
 }
 .footer-links a:hover { color: var(--text-navbar); }
 
+/* Footer ikon + metin linkleri */
+.footer-icon-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.footer-icon-link svg { flex-shrink: 0; opacity: 0.8; width: 14px; height: 14px; }
+.footer-icon-link:hover svg { opacity: 1; }
+.footer-icon-link[data-brand="linkedin"]:hover  { color: #70b5f9; }
+.footer-icon-link[data-brand="instagram"]:hover { color: #e4405f; }
+.footer-icon-link[data-brand="twitter"]:hover   { color: #e7e7e7; }
+.footer-icon-link[data-brand="youtube"]:hover   { color: #FF4444; }
+.footer-icon-link[data-brand="github"]:hover    { color: #ccc; }
+
 .footer-bottom {
   border-top: 1px solid rgba(255,255,255,0.08);
   padding-top: var(--space-6);
@@ -1661,3 +1722,173 @@ code {
   body { background: #fff; color: #000; }
   .card { box-shadow: none; border: 1px solid #ddd; }
 }
+
+/* ══════════════════════════════════════════════
+   PRINT STYLES
+══════════════════════════════════════════════ */
+@media print {
+  .navbar, .mobile-nav, .footer, .hamburger,
+  .theme-toggle, #toast-container,
+  .btn, .modal-overlay, .dropdown-menu,
+  #admin-new-post-btn, .blog-controls { display: none !important; }
+
+  body { background: #fff !important; color: #000 !important; font-size: 12pt; }
+  a { color: #0066cc; text-decoration: underline; }
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9pt; }
+  .page-hero-div, .page-hero { background: #fff !important; color: #000 !important; padding: 1rem 0 !important; }
+  .card { border: 1px solid #ccc !important; box-shadow: none !important; }
+  .container { max-width: 100% !important; padding: 0 !important; }
+  h1,h2,h3 { page-break-after: avoid; }
+  img { max-width: 100% !important; }
+  .section { padding: 1rem 0 !important; }
+}
+
+/* ─── Navbar düzenini sayfa bazlı müdahalelerden korur (SADECE masaüstü) ── */
+@media (min-width: 1025px) {
+  .navbar-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    list-style: none !important;
+    gap: 24px !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  .navbar-nav li {
+    order: initial !important;
+  }
+}
+
+/* Bildirim ve Profil Slotları */
+#notif-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+#auth-slot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+/* Profil isminin taşmasını engelleyen stil */
+/* line-height + padding: "ğ, p, g, y" descender'larının overflow:hidden içinde
+   kırpılmasını önler. inline style ile birlikte çift yönlü garanti. */
+#userNameNav {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+    padding: 1px 0;
+    transition: color 0.2s;
+}
+
+/* Aktif linkin görsel olarak diğerlerini itmemesi için */
+.nav-link.active {
+    font-weight: 700 !important;
+    color: var(--accent-primary) !important;
+}
+
+/* ─────────────────────────────────────────────
+   MOBİL NAVBAR TAŞMA DÜZELTME
+   Sorun: notif(36) + tema(44) + auth-slot(140px sabit) + hamburger(40)
+          = ~260px — dar ekranlarda sağa taşıyor
+   Çözüm: auth-slot'u daralt, kullanıcı adı + oku gizle
+   ───────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  /* Auth slot — sabit 140px inline style'ı ezmek için !important */
+  #auth-slot {
+    width: auto !important;
+    min-width: 0 !important;
+  }
+
+  /* Kullanıcı adı metni gizle — sadece avatar kalsın */
+  #userNameNav {
+    display: none !important;
+  }
+
+  /* "▾" ok gizle */
+  #userMenuBtn > span:last-child {
+    display: none !important;
+  }
+
+  /* Navbar actions boşluğunu sıkıştır */
+  .navbar-actions {
+    gap: 6px !important;
+  }
+}
+
+/* Çok dar ekranlar (≤400px): marka adını küçült */
+@media (max-width: 400px) {
+  .navbar-brand-name {
+    font-size: 15px !important;
+  }
+  #notif-slot {
+    width: 30px !important;
+    height: 30px !important;
+  }
+}
+/* TERMAL ETİKET (50x30mm) YAZDIRMA AYARLARI */
+@media print {
+    /* Sayfadaki her şeyi gizle */
+    body * { visibility: hidden; }
+    
+    /* Sadece etiket alanını ve içindekileri göster */
+    #thermal-label-wrapper, #thermal-label-wrapper * { visibility: visible; }
+    
+    #thermal-label-wrapper {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 50mm; /* Yazıcınızın etiket genişliği */
+        height: 30mm; /* Yazıcınızın etiket yüksekliği */
+        padding: 2mm;
+        margin: 0;
+        box-sizing: border-box;
+        background: #fff;
+        color: #000;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        font-family: 'Arial', sans-serif;
+    }
+    
+    /* Tarayıcıya kağıt boyutunu zorla */
+    @page {
+        size: 50mm 30mm;
+        margin: 0;
+    }
+}
+
+/* ─────────────────────────────────────────────
+   EKİPMAN SİSTEMİ — ORTAK SEKME NAVİGASYONU
+   tools/ekipman-takip.html, ekipman-analiz.html,
+   ekipman-ayarlar.html, ekipman-qr-basim.html
+   arasında tutarlı geçiş için paylaşılan stil —
+   her sayfa aynı sınıfları kullanır, sadece
+   .ekp-tab-active hangi sayfada olduğunu belirtir.
+   ───────────────────────────────────────────── */
+.ekp-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: var(--space-6, 24px);
+}
+.ekp-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: #64748b;
+    text-decoration: none;
+    transition: all .15s;
+}
+.ekp-tab:hover { background: #e2e8f0; color: #334155; }
+.ekp-tab-active,
+.ekp-tab-active:hover { background: #2563eb; color: #fff; }

@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ekipman Sistemi Ayarları | ozisg.com</title>
+  <link rel="stylesheet" href="../css/master.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <!-- SheetJS lazy yüklenir (Excel import/export çağrılınca window.loadScript ile) -->
+  <script defer src="../js/layout.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .tab-btn        { transition: all .15s; }
+    .tab-btn.active { background:#2563eb; color:#fff; }
+    .tab-btn:not(.active) { background:#f1f5f9; color:#64748b; }
+    .tab-btn:not(.active):hover { background:#e2e8f0; color:#334155; }
+    .soru-tip-badge {
+      font-size:.65rem; font-weight:700; padding:2px 8px;
+      border-radius:99px; white-space:nowrap; letter-spacing:.3px;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+<div id="nav-placeholder"></div>
+
+<!-- ── Yükleniyor ── -->
+<div id="page-loading" class="flex items-center justify-center min-h-screen">
+  <div class="text-center text-gray-400">
+    <div class="animate-spin w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm">Kimlik doğrulanıyor…</p>
+  </div>
+</div>
+
+<!-- ── Yetkisiz ── -->
+<div id="auth-gate" style="display:none;" class="flex items-center justify-center min-h-screen">
+  <div class="text-center bg-white rounded-2xl shadow p-10 max-w-sm mx-4">
+    <div class="text-5xl mb-4">🔒</div>
+    <h2 class="text-lg font-bold text-gray-800 mb-2">Erişim Kısıtlı</h2>
+    <p class="text-sm text-gray-500">Giriş yapmanız gerekiyor.</p>
+    <a href="../login.html" class="mt-5 inline-block bg-blue-600 text-white rounded-xl px-6 py-2.5 font-semibold text-sm">Giriş Yap</a>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     ANA İÇERİK
+═══════════════════════════════════════════════════════════ -->
+<main id="main-content" style="display:none;"
+      x-data="AyarlarApp()" x-init="baslat()" x-cloak
+      class="min-h-screen pt-24 pb-20">
+
+  <div class="max-w-5xl mx-auto px-4">
+
+    <nav class="ekp-tabs" aria-label="Ekipman Sistemi Navigasyonu">
+      <a href="ekipman-takip.html" class="ekp-tab">📋 Takip</a>
+      <a href="ekipman-analiz.html" class="ekp-tab">📊 Analiz</a>
+      <a href="ekipman-qr-basim.html" class="ekp-tab">🏷️ QR Basım</a>
+      <a href="ekipman-ayarlar.html" class="ekp-tab ekp-tab-active">⚙️ Ayarlar</a>
+    </nav>
+
+    <!-- ── Admin değil ── -->
+    <div x-show="!adminMi && user"
+         class="bg-white rounded-2xl shadow p-12 text-center">
+      <div class="text-5xl mb-4">🔐</div>
+      <h2 class="text-lg font-bold text-gray-800 mb-2">Admin Yetkisi Gerekli</h2>
+      <p class="text-sm text-gray-500">Bu sayfaya yalnızca <strong>admin</strong> / <strong>superadmin</strong> erişebilir.</p>
+    </div>
+
+    <!-- ── Admin içerik ── -->
+    <div x-show="adminMi" x-cloak>
+
+      <!-- Sayfa başlığı + kaydet -->
+      <div class="flex items-start justify-between mb-6 gap-4">
+        <div>
+          <h1 class="text-2xl font-extrabold text-gray-900">⚙️ Ekipman Sistemi Ayarları</h1>
+          <p class="text-sm text-gray-400 mt-1">
+            Firestore: <code class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">settings_ekipman / config</code>
+            <span x-show="sonGuncelleme" class="ml-3 text-gray-400">
+              Son kayıt: <span class="font-medium text-gray-600" x-text="sonGuncelleme"></span>
+            </span>
+          </p>
+        </div>
+        <button @click="kaydet()" :disabled="kaydediliyor"
+                class="flex-shrink-0 bg-blue-600 text-white rounded-xl px-6 py-2.5 font-bold shadow hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-2">
+          <span x-show="!kaydediliyor">💾 Kaydet</span>
+          <span x-show="kaydediliyor" class="flex items-center gap-2">
+            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Kaydediliyor…
+          </span>
+        </button>
+      </div>
+
+      <!-- ── Sekme Çubuğu ── -->
+      <div class="flex gap-2 mb-6 flex-wrap">
+        <template x-for="t in sekmeler" :key="t.id">
+          <button @click="aktifSekme = t.id"
+                  :class="aktifSekme === t.id ? 'active' : ''"
+                  class="tab-btn rounded-xl px-4 py-2 text-sm font-semibold">
+            <span x-text="t.label"></span>
+          </button>
+        </template>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SEKME 1 — LOKASYONLARHiyerarşi: Blok → Bölge
+      ═══════════════════════════════════════════ -->
+      <div x-show="aktifSekme === 'lokasyonlar'">
+
+        <!-- Yeni blok ekle -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+          <h3 class="font-bold text-gray-800 mb-3">📍 Yeni Blok Ekle</h3>
+          <div class="flex gap-2">
+            <input x-model="yeniBlokAdi" type="text"
+                   placeholder="Blok adı (örn: A Blok, Depo 1)"
+                   @keyup.enter="blokEkle()"
+                   class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+            <button @click="blokEkle()"
+                    :disabled="!yeniBlokAdi.trim()"
+                    class="bg-blue-600 text-white rounded-xl px-5 font-semibold text-sm hover:bg-blue-700 disabled:opacity-40 transition">
+              + Ekle
+            </button>
+          </div>
+        </div>
+
+        <!-- Blok listesi -->
+        <div x-show="cfg.lokasyonlar.length === 0"
+             class="text-center py-12 text-gray-400 text-sm bg-white rounded-2xl border border-dashed border-gray-200">
+          📍 Henüz blok tanımlı değil. Yukarıdan ekleyin.
+        </div>
+
+        <div class="space-y-3">
+          <template x-for="blok in cfg.lokasyonlar" :key="blok.id">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+              <!-- Blok başlığı -->
+              <div class="flex items-center gap-3 p-4 bg-gray-50 border-b border-gray-100">
+                <span class="text-lg">🏗️</span>
+                <input x-model="blok.ad" type="text"
+                       class="flex-1 font-bold text-gray-800 bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none py-0.5 text-sm"
+                       placeholder="Blok adı">
+                <button @click="blokGenislet(blok.id)"
+                        class="text-gray-400 hover:text-blue-600 transition text-xs font-semibold px-2 py-1 rounded-lg hover:bg-blue-50">
+                  <span x-text="genisletilmisBloId === blok.id ? '▲ Daralt' : '▼ Genişlet'"></span>
+                </button>
+                <button @click="blokSil(blok.id)"
+                        class="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg px-2 py-1 text-xs font-semibold transition">
+                  🗑️ Sil
+                </button>
+              </div>
+
+              <!-- Bölgeler -->
+              <div x-show="genisletilmisBloId === blok.id" class="p-4">
+
+                <!-- Bölge listesi -->
+                <div class="space-y-2 mb-3">
+                  <template x-for="bolge in blok.bolgeler" :key="bolge.id">
+                    <div class="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+                      <span class="text-gray-400 text-xs">📌</span>
+                      <input x-model="bolge.ad" type="text"
+                             class="flex-1 text-sm bg-transparent border-b border-transparent focus:border-blue-400 outline-none py-0.5 text-gray-700"
+                             placeholder="Bölge adı">
+                      <button @click="bolgeSil(blok, bolge.id)"
+                              class="text-red-400 hover:text-red-600 rounded-lg p-1 hover:bg-red-50 transition text-xs">✕</button>
+                    </div>
+                  </template>
+                  <div x-show="blok.bolgeler.length === 0"
+                       class="text-xs text-gray-400 italic py-1 pl-2">
+                    Bu blokta henüz bölge yok.
+                  </div>
+                </div>
+
+                <!-- Yeni bölge ekle -->
+                <div class="flex gap-2">
+                  <input :id="'bolge-input-' + blok.id"
+                         type="text" placeholder="Bölge adı (örn: Yükleme Rampaları)"
+                         @keyup.enter="bolgeEkle(blok, $el.value); $el.value=''"
+                         class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-400">
+                  <button @click="bolgeEkle(blok, $el.previousElementSibling.value); $el.previousElementSibling.value=''"
+                          class="bg-blue-50 text-blue-600 border border-blue-200 rounded-xl px-3 text-xs font-semibold hover:bg-blue-100 transition">
+                    + Bölge
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SEKME 2 — EKİPMAN TÜRLERİ
+      ═══════════════════════════════════════════ -->
+      <div x-show="aktifSekme === 'turler'">
+
+        <!-- Yeni tür ekle formu -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+          <h3 class="font-bold text-gray-800 mb-3">🏭 Yeni Ekipman Türü</h3>
+          <div class="flex gap-2 items-center">
+            <select x-model="yeniTurIkon"
+                    class="border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+              <template x-for="ik in ikonlar" :key="ik">
+                <option :value="ik" x-text="ik"></option>
+              </template>
+            </select>
+            <input x-model="yeniTurAdi" type="text"
+                   placeholder="Tür adı (örn: Forklift, VNA, Manlift)"
+                   @keyup.enter="turEkle()"
+                   class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+            <button @click="turEkle()"
+                    :disabled="!yeniTurAdi.trim()"
+                    class="bg-blue-600 text-white rounded-xl px-5 py-2.5 font-semibold text-sm hover:bg-blue-700 disabled:opacity-40 transition">
+              + Ekle
+            </button>
+          </div>
+        </div>
+
+        <!-- Tür listesi -->
+        <div x-show="cfg.ekipmanTurleri.length === 0"
+             class="text-center py-12 text-gray-400 text-sm bg-white rounded-2xl border border-dashed border-gray-200">
+          🏭 Henüz ekipman türü tanımlı değil.
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <template x-for="tur in cfg.ekipmanTurleri" :key="tur.id">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+              <div class="flex items-start justify-between gap-2 mb-3">
+                <div class="flex items-center gap-2">
+                  <select x-model="tur.ikon"
+                          class="text-xl border-0 bg-transparent outline-none cursor-pointer">
+                    <template x-for="ik in ikonlar" :key="ik">
+                      <option :value="ik" x-text="ik"></option>
+                    </template>
+                  </select>
+                  <input x-model="tur.ad" type="text"
+                         class="font-bold text-gray-800 text-sm bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none"
+                         placeholder="Tür adı">
+                </div>
+                <button @click="turSil(tur.id)"
+                        class="text-red-400 hover:text-red-600 text-xs hover:bg-red-50 rounded-lg px-2 py-1 transition">
+                  🗑️
+                </button>
+              </div>
+              <div class="text-xs text-gray-400">
+                <span x-text="(tur.checklistMaddeler || []).length"></span> kontrol maddesi
+              </div>
+              <button @click="aktifSekme = 'checklist'; seciliTurId = tur.id"
+                      class="mt-3 w-full text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg py-1.5 font-semibold transition">
+                📋 Checklist Düzenle →
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SEKME 3 — CHECKLİST EDİTÖRÜ
+      ═══════════════════════════════════════════ -->
+      <div x-show="aktifSekme === 'checklist'">
+
+        <!-- Tür seçici -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+          <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+            Ekipman Türü Seç
+          </label>
+          <select x-model="seciliTurId"
+                  class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="">— Tür seçin —</option>
+            <template x-for="tur in cfg.ekipmanTurleri" :key="tur.id">
+              <option :value="tur.id" x-text="tur.ikon + ' ' + tur.ad"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- Seçili tür yoksa bilgi -->
+        <div x-show="!seciliTurId"
+             class="text-center py-14 text-gray-400 text-sm bg-white rounded-2xl border border-dashed border-gray-200">
+          ☝️ Kontrol listesini düzenlemek için yukarıdan bir ekipman türü seçin.
+        </div>
+
+        <!-- Checklist düzenleyici -->
+        <div x-show="seciliTurId && aktifTur">
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+            <!-- Başlık -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50">
+              <div>
+                <h3 class="font-bold text-gray-800 text-sm"
+                    x-text="(aktifTur?.ikon || '') + ' ' + (aktifTur?.ad || '') + ' — Kontrol Listesi'"></h3>
+                <p class="text-xs text-gray-400 mt-0.5">
+                  <span x-text="(aktifTur?.checklistMaddeler || []).length"></span> madde
+                </p>
+              </div>
+            </div>
+
+            <!-- Madde listesi -->
+            <div class="divide-y divide-gray-50">
+              <div x-show="(aktifTur?.checklistMaddeler || []).length === 0"
+                   class="text-center py-8 text-gray-400 text-sm italic">
+                Bu tür için henüz kontrol maddesi yok. Aşağıdan ekleyin.
+              </div>
+
+              <template x-for="(m, idx) in (aktifTur?.checklistMaddeler || [])" :key="m.id">
+                <div class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition group">
+                  <!-- Sıra no -->
+                  <span class="text-xs text-gray-400 font-mono w-6 text-center flex-shrink-0"
+                        x-text="idx + 1"></span>
+
+                  <!-- Başlık input -->
+                  <input x-model="m.baslik" type="text"
+                         placeholder="Kontrol maddesi başlığı…"
+                         class="flex-1 text-sm text-gray-700 bg-transparent border-b border-transparent focus:border-blue-400 outline-none py-0.5">
+
+                  <!-- Soru tipi seçici -->
+                  <select x-model="m.tip"
+                          class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-blue-400 bg-white flex-shrink-0">
+                    <template x-for="st in soruTipleri" :key="st.id">
+                      <option :value="st.id" x-text="st.label"></option>
+                    </template>
+                  </select>
+
+                  <!-- Tip badge -->
+                  <span class="soru-tip-badge flex-shrink-0 hidden sm:inline"
+                        :class="{
+                          'bg-green-100 text-green-700': m.tip === 'evet_hayir',
+                          'bg-blue-100 text-blue-700':  m.tip === 'var_yok',
+                          'bg-gray-100 text-gray-600':  m.tip === 'kapsam_disi'
+                        }"
+                        x-text="soruTipleri.find(s=>s.id===m.tip)?.kisa || m.tip">
+                  </span>
+
+                  <!-- Sil -->
+                  <button @click="maddeSil(seciliTurId, m.id)"
+                          class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition rounded-lg p-1 hover:bg-red-50 flex-shrink-0">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+              </template>
+            </div>
+
+            <!-- Yeni madde ekle formu -->
+            <div class="p-4 bg-blue-50/40 border-t border-blue-100">
+              <div class="flex gap-2 items-center flex-wrap sm:flex-nowrap">
+                <input x-model="yeniMaddeBaslik" type="text"
+                       placeholder="Yeni kontrol maddesi başlığı…"
+                       @keyup.enter="maddeEkle()"
+                       class="flex-1 min-w-0 border border-blue-200 bg-white rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                <select x-model="yeniMaddeTip"
+                        class="border border-blue-200 bg-white rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-400 flex-shrink-0">
+                  <template x-for="st in soruTipleri" :key="st.id">
+                    <option :value="st.id" x-text="st.label"></option>
+                  </template>
+                </select>
+                <button @click="maddeEkle()"
+                        :disabled="!yeniMaddeBaslik.trim()"
+                        class="bg-blue-600 text-white rounded-xl px-5 py-2.5 font-semibold text-sm hover:bg-blue-700 disabled:opacity-40 transition flex-shrink-0">
+                  + Ekle
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Soru tipleri açıklama kartı -->
+          <div class="mt-3 bg-white rounded-xl border border-gray-100 p-4">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Soru Tipi Açıklamaları</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600">
+              <div class="flex items-center gap-2">
+                <span class="soru-tip-badge bg-green-100 text-green-700">Evet/Hayır</span>
+                <span>Operatör ✅ veya ❌ seçer</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="soru-tip-badge bg-blue-100 text-blue-700">Var/Yok</span>
+                <span>Malzeme/ekipman varlığı</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="soru-tip-badge bg-gray-100 text-gray-600">Kapsam Dışı</span>
+                <span>Bu vardiyada geçerli değil seçeneği eklenir</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SEKME 4 — EKİPMAN ENVANTERİ
+           Spesifik cihaz/plaka bazlı kayıt (Firestore /ekipmanlar)
+           Her doc.id = cihaz ID/plaka (örn: T-301)
+           Fields: { adi, turId, durum }
+      ═══════════════════════════════════════════ -->
+      <div x-show="aktifSekme === 'envanter'" x-cloak>
+
+        <!-- Manuel ekleme formu -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4 flex flex-col md:flex-row gap-4 items-end">
+          <div class="flex-1 w-full">
+            <label class="block text-xs font-bold text-gray-600 mb-1">Cihaz ID / Plaka</label>
+            <input x-model="yeniCihazId" type="text" placeholder="Örn: T-301"
+                   class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+          <div class="flex-1 w-full">
+            <label class="block text-xs font-bold text-gray-600 mb-1">Cihaz Adı</label>
+            <input x-model="yeniCihazAdi" type="text" placeholder="Örn: Elektrikli Transpalet"
+                   class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+          </div>
+          <div class="flex-1 w-full">
+            <label class="block text-xs font-bold text-gray-600 mb-1">Ekipman Türü (Checklist)</label>
+            <select x-model="yeniCihazTurId"
+                    class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+              <option value="">— Tür Seç —</option>
+              <template x-for="t in cfg.ekipmanTurleri" :key="t.id">
+                <option :value="t.id" x-text="(t.ikon || '') + ' ' + t.ad"></option>
+              </template>
+            </select>
+          </div>
+          <button @click="cihazEkleManuel()"
+                  :disabled="!yeniCihazId.trim() || !yeniCihazTurId"
+                  class="bg-blue-600 text-white rounded-xl px-5 py-2 font-semibold text-sm hover:bg-blue-700 disabled:opacity-40 transition whitespace-nowrap">
+            + Manuel Ekle
+          </button>
+        </div>
+
+        <!-- Excel toplu yükleme -->
+        <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+          <div class="text-sm text-blue-800">
+            <b>📥 Excel'den Toplu Yükle:</b> Sütunlar
+            <code class="bg-white px-1.5 py-0.5 rounded text-xs">ID</code>,
+            <code class="bg-white px-1.5 py-0.5 rounded text-xs">AD</code>,
+            <code class="bg-white px-1.5 py-0.5 rounded text-xs">TUR_ID</code>
+            olmalıdır.
+          </div>
+          <input type="file" accept=".xlsx,.xls" @change="excelCihazYukle($event)"
+                 class="text-sm bg-white rounded-lg px-3 py-1.5 border border-blue-200 file:mr-3 file:bg-blue-600 file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:text-xs file:font-semibold hover:file:bg-blue-700 file:cursor-pointer">
+        </div>
+
+        <!-- Özet çubuğu -->
+        <div class="flex items-center gap-3 text-xs text-gray-500 mb-3">
+          <span>📦 Toplam cihaz:</span>
+          <span class="font-bold text-slate-800" x-text="envanterListesi.length"></span>
+          <span x-show="envanterYukleniyor" class="text-blue-500">⏳ Yükleniyor…</span>
+        </div>
+
+        <!-- Envanter tablosu -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 border-b border-gray-100 text-gray-500">
+              <tr>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">ID / Plaka</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Adı</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Türü</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide text-right">İşlem</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="c in envanterListesi" :key="c.id">
+                <tr class="border-b border-gray-50 hover:bg-gray-50">
+                  <td class="p-3 font-mono font-bold text-gray-800" x-text="c.id"></td>
+                  <td class="p-3 text-gray-700" x-text="c.adi"></td>
+                  <td class="p-3 text-gray-500" x-text="c.turAd || '—'"></td>
+                  <td class="p-3 text-right">
+                    <button @click="cihazSil(c.id)"
+                            class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs font-semibold transition">
+                      🗑️ Sil
+                    </button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="envanterListesi.length === 0 && !envanterYukleniyor">
+                <td colspan="4" class="p-6 text-center text-gray-400 text-sm">
+                  🪪 Kayıtlı cihaz yok. Yukarıdan manuel ekleyin veya Excel ile toplu yükleyin.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SEKME 5 — SİSTEM AYARLARI
+      ═══════════════════════════════════════════ -->
+      <div x-show="aktifSekme === 'sistem'" class="space-y-4">
+
+        <!-- Power Automate Webhook -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <label class="block text-sm font-bold text-gray-800 mb-1">
+            🔗 Power Automate Webhook URL
+          </label>
+          <p class="text-xs text-gray-400 mb-3">
+            "When an HTTP request is received" tetikleyicisinin HTTP POST URL'si.
+            Tüm kontrol raporları ve kırmızı etiket bildirimleri bu adrese gönderilir.
+          </p>
+          <input x-model="cfg.webhookUrl" type="url"
+                 placeholder="https://prod-xx.westeurope.logic.azure.com/workflows/…"
+                 class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500">
+          <div class="flex items-center gap-3 mt-2.5">
+            <button @click="webhookTestEt()"
+                    :disabled="!cfg.webhookUrl.trim() || testEdiliyor"
+                    class="text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded-lg px-3 py-1.5 font-semibold hover:bg-blue-100 disabled:opacity-40 transition">
+              <span x-show="!testEdiliyor">🧪 Test Et</span>
+              <span x-show="testEdiliyor">⏳ Test ediliyor…</span>
+            </button>
+            <span x-show="testSonuc" class="text-xs font-semibold"
+                  :class="testSonuc?.startsWith('✅') ? 'text-green-600' : 'text-red-500'"
+                  x-text="testSonuc"></span>
+          </div>
+        </div>
+
+        <!-- Gemini System Prompt -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <label class="block text-sm font-bold text-gray-800 mb-1">
+            🤖 Gemini AI — System Prompt
+          </label>
+          <p class="text-xs text-gray-400 mb-3">
+            Chatbot'un ekipman log analizinde kullanacağı sistem yönlendirmesi.
+            Maks 4000 karakter.
+          </p>
+          <textarea x-model="cfg.systemPrompt" rows="12"
+                    placeholder="Sen ... asistanısın. Görevin …"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-mono resize-none outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
+            <button @click="cfg.systemPrompt = VARSAYILAN_PROMPT"
+                    class="text-blue-600 hover:underline font-medium">
+              ↺ Varsayılana Döndür
+            </button>
+            <span :class="(cfg.systemPrompt||'').length > 3800 ? 'text-red-500 font-bold' : ''">
+              <span x-text="(cfg.systemPrompt||'').length"></span> / 4000
+            </span>
+          </div>
+        </div>
+
+        <!-- JSON Önizleme -->
+        <details class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <summary class="p-4 cursor-pointer font-semibold text-sm text-gray-600 hover:bg-gray-50 transition select-none">
+            🔍 Firestore JSON Önizleme
+          </summary>
+          <pre class="p-4 bg-gray-900 text-green-300 text-xs overflow-x-auto max-h-72"
+               x-text="jsonOnizleme()"></pre>
+        </details>
+      </div>
+
+    </div><!-- /adminMi -->
+  </div>
+</main>
+
+<div id="footer-placeholder"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     1. SENKRON INLINE: _ayReady Promise'ini ERKEN oluştur
+     Alpine (defer) modül scriptinden önce çalışabilir.
+     Burada oluşturulmazsa baslat() → await undefined → return.
+═══════════════════════════════════════════════════════════ -->
+<script>
+  window._ayReady = new Promise(function(r){ window.__ayReadyResolve = r; });
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     2. FİREBASE BRIDGE (module — asenkron)
+═══════════════════════════════════════════════════════════ -->
+<script type="module">
+  import { requireToolAccess, db, showToast } from '../js/app.js';
+  import {
+    doc, getDoc, setDoc, deleteDoc,
+    collection, getDocs, serverTimestamp
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  window._ayBridge = {
+    db, showToast,
+    doc, getDoc, setDoc, deleteDoc,
+    collection, getDocs, serverTimestamp
+  };
+
+  (async () => {
+    try {
+      const user = await requireToolAccess('tool_ekipman', {
+        loadingEl:  'page-loading',
+        authGateEl: 'auth-gate',
+        mainEl:     'main-content'
+      });
+      if (!user) { window.__ayReadyResolve(null); return; }
+
+      const uSnap = await getDoc(doc(db, 'users', user.uid));
+      const role  = uSnap.exists() ? (uSnap.data().role || 'user') : 'user';
+      window.__ayReadyResolve({
+        user,
+        adminMi: role === 'admin' || role === 'superadmin'
+      });
+    } catch (e) {
+      console.error('[ayarlar] bridge hatası:', e);
+      window.__ayReadyResolve(null);
+    }
+  })();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     3. ALPINE COMPONENT
+═══════════════════════════════════════════════════════════ -->
+<script>
+// ── Sabitler ────────────────────────────────────────────────────────────
+const SORU_TIPLERI = [
+  { id: 'evet_hayir',  label: '✅ Evet / ❌ Hayır',  kisa: 'Evet/Hayır'   },
+  { id: 'var_yok',     label: '📦 Var / 🚫 Yok',     kisa: 'Var/Yok'      },
+  { id: 'kapsam_disi', label: '➖ Kapsam Dışı Dahil', kisa: 'Kapsam Dışı' },
+];
+
+const IKON_LISTESI = [
+  '📦','🏗️','🔧','⚙️','🚜','🏭','🔩','🛠️','🚛','🔌','🧲','🔋',
+  '🏋️','🪝','📋','⚠️','🛡️','🔍','🚧','🛞','🪛','🔦','🧰','🏷️'
+];
+
+const VARSAYILAN_PROMPT = `Sen "ozisg.com" İSG platformunun Depo Ekipman Analiz Asistanısın.
+
+GÖREVİN:
+- Sana verilen ekipman kontrol log verilerini analiz et.
+- Kullanıcının sorusunu YALNIZCA bu veriye dayanarak, Türkçe ve kısa (maks 250 kelime) yanıtla.
+- Somut sayılar, yüzdeler ve ekipman isimleri kullan.
+- Veri yetersizse açıkça belirt. Asla tahmin veya uydurma veri üretme.
+- Yanıtı düz metin olarak ver; Markdown sadece **kalın** ve madde listeleri için kullanılabilir.
+
+ANALİZ EDEBİLECEĞİN KONULAR:
+- En çok arıza yapan ekipman / bölge / vardiya
+- Kırmızı etiket sayıları ve trendi
+- Belirli bir ekipmanın geçmiş kontrol geçmişi
+- Haftalık/aylık arıza özeti`;
+
+const VARSAYILAN_CFG = {
+  webhookUrl:      '',
+  systemPrompt:    VARSAYILAN_PROMPT,
+  lokasyonlar:     [],
+  ekipmanTurleri:  []
+};
+
+// ── Alpine Component ─────────────────────────────────────────────────────
+function AyarlarApp() {
+  return {
+
+    // ── State ──────────────────────────────────────────────────────────
+    user:          null,
+    adminMi:       false,
+    kaydediliyor:  false,
+    sonGuncelleme: '',
+    aktifSekme:    'lokasyonlar',
+    sekmeler: [
+      { id: 'lokasyonlar', label: '📍 Lokasyonlar' },
+      { id: 'turler',      label: '🏭 Ekipman Türleri' },
+      { id: 'checklist',   label: '📋 Checklist Editörü' },
+      { id: 'envanter',    label: '🪪 Ekipman Envanteri' },
+      { id: 'sistem',      label: '⚙️ Sistem Ayarları' },
+    ],
+
+    cfg: { ...VARSAYILAN_CFG, lokasyonlar: [], ekipmanTurleri: [] },
+
+    // Lokasyon
+    yeniBlokAdi:       '',
+    genisletilmisBloId: null,
+
+    // Tür
+    yeniTurAdi:  '',
+    yeniTurIkon: '📦',
+    ikonlar:     IKON_LISTESI,
+
+    // Checklist
+    seciliTurId:    '',
+    aktifTur:       null,      // ← reactive referans (seciliTur() method yerine)
+    yeniMaddeBaslik: '',
+    yeniMaddeTip:   'evet_hayir',
+    soruTipleri:    SORU_TIPLERI,
+
+    // Envanter (Firestore /ekipmanlar koleksiyonu)
+    envanterListesi:  [],     // [{ id, adi, turId, turAd, durum }]
+    envanterYukleniyor: false,
+    yeniCihazId:      '',
+    yeniCihazAdi:     '',
+    yeniCihazTurId:   '',
+
+    // Sistem
+    testEdiliyor: false,
+    testSonuc:    '',
+    VARSAYILAN_PROMPT,
+
+    // ── Başlat ────────────────────────────────────────────────────────
+    async baslat() {
+      const r = await window._ayReady;
+      if (!r) return;
+      this.user    = r.user;
+      this.adminMi = r.adminMi;
+      if (!this.adminMi) return;
+      await this.yukle();
+
+      // Envanter (ekipmanlar koleksiyonu) — config'ten bağımsız doküman
+      await this._envanteriYukle();
+
+      // seciliTurId değişince aktifTur'u güncelle (Alpine reactivity için)
+      this.$watch('seciliTurId', (id) => {
+        this.aktifTur = id
+          ? (this.cfg.ekipmanTurleri.find(t => t.id === id) || null)
+          : null;
+      });
+      // cfg değişince de aktifTur pointer'ı güncel kalsın (türde değişiklik olunca)
+      this.$watch('cfg.ekipmanTurleri', () => {
+        if (this.seciliTurId) {
+          this.aktifTur = this.cfg.ekipmanTurleri.find(t => t.id === this.seciliTurId) || null;
+        }
+        // Tür adı değiştiyse envanter listesindeki turAd etiketlerini de yenile
+        this._envanterTurAdleriniYenile();
+      });
+    },
+
+    // ── Firestore'dan Yükle ───────────────────────────────────────────
+    async yukle() {
+      const { db, doc, getDoc } = window._ayBridge;
+      try {
+        const snap = await getDoc(doc(db, 'settings_ekipman', 'config'));
+        if (snap.exists()) {
+          const d = snap.data();
+          this.cfg = {
+            webhookUrl:     d.webhookUrl      || '',
+            systemPrompt:   d.systemPrompt    || VARSAYILAN_PROMPT,
+            lokasyonlar:    Array.isArray(d.lokasyonlar)
+              ? d.lokasyonlar.map(b => ({
+                  id: b.id || this._id(),
+                  ad: b.ad || '',
+                  bolgeler: Array.isArray(b.bolgeler) ? b.bolgeler : []
+                }))
+              : [],
+            ekipmanTurleri: Array.isArray(d.ekipmanTurleri)
+              ? d.ekipmanTurleri.map(t => ({
+                  id: t.id || this._id(),
+                  ad: t.ad || '',
+                  ikon: t.ikon || '📦',
+                  checklistMaddeler: Array.isArray(t.checklistMaddeler) ? t.checklistMaddeler : []
+                }))
+              : [],
+          };
+          if (d.updatedAt?.toDate) {
+            this.sonGuncelleme = d.updatedAt.toDate().toLocaleString('tr-TR');
+          }
+        } else {
+          // ── İlk Kurulum: Doküman yoksa varsayılan şablonla oluştur ──
+          await this._ilkKurulum();
+        }
+      } catch (e) {
+        this._toast('Ayarlar yüklenemedi: ' + e.message, 'error');
+        console.error('[ayarlar] yukle hatası:', e);
+      }
+    },
+
+    async _ilkKurulum() {
+      const { db, doc, setDoc, serverTimestamp } = window._ayBridge;
+      try {
+        const ilkVeri = {
+          ...VARSAYILAN_CFG,
+          lokasyonlar:    [],
+          ekipmanTurleri: [],
+          updatedAt:      serverTimestamp(),
+          updatedBy:      this.user.email,
+          ilkKurulum:     true
+        };
+        await setDoc(doc(db, 'settings_ekipman', 'config'), ilkVeri);
+        this.cfg = { ...VARSAYILAN_CFG, lokasyonlar: [], ekipmanTurleri: [] };
+        this._toast('✅ İlk kurulum tamamlandı. Ayarlarınızı doldurun.', 'success');
+      } catch (e) {
+        this._toast('İlk kurulum başarısız: ' + e.message, 'error');
+        console.error('[ayarlar] ilkKurulum hatası:', e);
+      }
+    },
+
+    // ── ID Üretici ────────────────────────────────────────────────────
+    _id() { return Math.random().toString(36).slice(2, 9); },
+
+    // ══════════════════════════════════════════════════════════════════
+    // EKİPMAN ENVANTERİ (Firestore /ekipmanlar koleksiyonu)
+    // Doc.id = cihaz ID/plaka (örn: "T-301") — normalize edilir (trim+upper)
+    // Fields: { adi, turId, durum, createdAt }
+    // ══════════════════════════════════════════════════════════════════
+
+    _normalizeCihazId(raw) {
+      return String(raw || '').trim().toUpperCase().replace(/\s+/g, '-');
+    },
+
+    // Tür ID → Tür adı eşlemesi (config ekipmanTurleri üzerinden)
+    _turAd(turId) {
+      const t = this.cfg.ekipmanTurleri.find(x => x.id === turId);
+      return t ? ((t.ikon || '') + ' ' + t.ad).trim() : '(tanımsız)';
+    },
+
+    _envanterTurAdleriniYenile() {
+      // Tür adı/ikonu değiştiyse listedeki etiketleri tazele (DB'ye değil, UI'a)
+      this.envanterListesi = this.envanterListesi.map(c => ({
+        ...c,
+        turAd: this._turAd(c.turId)
+      }));
+    },
+
+    async _envanteriYukle() {
+      const { db, collection, getDocs } = window._ayBridge;
+      this.envanterYukleniyor = true;
+      try {
+        const snap = await getDocs(collection(db, 'ekipmanlar'));
+        const liste = [];
+        snap.forEach(d => {
+          const data = d.data() || {};
+          liste.push({
+            id:    d.id,
+            adi:   data.adi   || '',
+            turId: data.turId || '',
+            turAd: this._turAd(data.turId),
+            durum: data.durum || 'Çalışıyor'
+          });
+        });
+        // Alfabetik (Türkçe)
+        liste.sort((a, b) => a.id.localeCompare(b.id, 'tr'));
+        this.envanterListesi = liste;
+      } catch (e) {
+        console.error('[ayarlar] envanter yükleme hatası:', e);
+        this._toast('Envanter yüklenemedi: ' + e.message, 'error');
+      } finally {
+        this.envanterYukleniyor = false;
+      }
+    },
+
+    async cihazEkleManuel() {
+      const { db, doc, setDoc, getDoc, serverTimestamp } = window._ayBridge;
+      const id = this._normalizeCihazId(this.yeniCihazId);
+      const adi = this.yeniCihazAdi.trim() || id;
+      const turId = this.yeniCihazTurId;
+
+      if (!id)    { this._toast('Cihaz ID boş olamaz.', 'error'); return; }
+      if (!turId) { this._toast('Ekipman türü seçin.', 'error'); return; }
+
+      try {
+        // Aynı ID zaten var mı?
+        const existing = await getDoc(doc(db, 'ekipmanlar', id));
+        if (existing.exists()) {
+          if (!confirm(`"${id}" zaten kayıtlı. Üzerine yazılsın mı?`)) return;
+        }
+
+        await setDoc(doc(db, 'ekipmanlar', id), {
+          adi,
+          turId,
+          durum:     'Çalışıyor',
+          createdAt: serverTimestamp(),
+          createdBy: this.user?.email || null
+        }, { merge: true });
+
+        // Yerel listeye ekle / güncelle
+        const idx = this.envanterListesi.findIndex(c => c.id === id);
+        const yeni = { id, adi, turId, turAd: this._turAd(turId), durum: 'Çalışıyor' };
+        if (idx >= 0) this.envanterListesi[idx] = yeni;
+        else          this.envanterListesi.unshift(yeni);
+
+        // Formu temizle
+        this.yeniCihazId = '';
+        this.yeniCihazAdi = '';
+        this.yeniCihazTurId = '';
+
+        this._toast(`✅ "${id}" eklendi.`, 'success');
+      } catch (e) {
+        console.error('[ayarlar] cihaz ekleme hatası:', e);
+        this._toast('Cihaz eklenemedi: ' + e.message, 'error');
+      }
+    },
+
+    async cihazSil(id) {
+      if (!id) return;
+      if (!confirm(`"${id}" kalıcı olarak silinecek. Onaylıyor musunuz?`)) return;
+      const { db, doc, deleteDoc } = window._ayBridge;
+      try {
+        await deleteDoc(doc(db, 'ekipmanlar', id));
+        this.envanterListesi = this.envanterListesi.filter(c => c.id !== id);
+        this._toast(`🗑️ "${id}" silindi.`, 'success');
+      } catch (e) {
+        console.error('[ayarlar] cihaz silme hatası:', e);
+        this._toast('Silinemedi: ' + e.message, 'error');
+      }
+    },
+
+    async excelCihazYukle(ev) {
+      const dosya = ev?.target?.files?.[0];
+      if (!dosya) return;
+      // Lazy: SheetJS sadece excel yükleme istendiğinde yüklenir
+      if (typeof XLSX === 'undefined' && window.loadScript) {
+        try {
+          await window.loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+        } catch (e) { console.warn('[ayarlar] SheetJS lazy load hatası:', e); }
+      }
+      if (typeof XLSX === 'undefined') {
+        this._toast('Excel kütüphanesi yüklenemedi.', 'error');
+        return;
+      }
+
+      try {
+        const buf = await dosya.arrayBuffer();
+        const wb  = XLSX.read(buf, { type: 'array' });
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!rows.length) {
+          this._toast('Excel boş görünüyor.', 'error');
+          ev.target.value = '';
+          return;
+        }
+
+        // Satırları normalize et — sütun adları büyük/küçük harf + TR karakter toleranslı
+        const turIds = new Set(this.cfg.ekipmanTurleri.map(t => t.id));
+        const ekler = [];
+        const hatalar = [];
+        rows.forEach((r, i) => {
+          // Başlık varyasyonları
+          const rawId  = r.ID  ?? r.Id  ?? r.id  ?? r.PLAKA ?? r.Plaka ?? '';
+          const rawAd  = r.AD  ?? r.Ad  ?? r.ad  ?? r.ADI   ?? r.Adi   ?? '';
+          const rawTur = r.TUR_ID ?? r.TurId ?? r.turId ?? r.TUR ?? r.Tur ?? '';
+
+          const id    = this._normalizeCihazId(rawId);
+          const adi   = String(rawAd).trim() || id;
+          const turId = String(rawTur).trim();
+
+          if (!id)    { hatalar.push(`Satır ${i+2}: ID boş`); return; }
+          if (!turId) { hatalar.push(`Satır ${i+2} (${id}): TUR_ID boş`); return; }
+          if (!turIds.has(turId)) {
+            hatalar.push(`Satır ${i+2} (${id}): TUR_ID "${turId}" tanımsız`);
+            return;
+          }
+          ekler.push({ id, adi, turId });
+        });
+
+        if (!ekler.length) {
+          this._toast(`Geçerli satır yok. ${hatalar.length} hata bulundu. Detay konsolda.`, 'error');
+          console.warn('[ayarlar] Excel hataları:', hatalar);
+          ev.target.value = '';
+          return;
+        }
+
+        if (!confirm(`${ekler.length} cihaz yüklenecek. ${hatalar.length ? hatalar.length + ' satır hatalı (atlanacak). ' : ''}Devam edilsin mi?`)) {
+          ev.target.value = '';
+          return;
+        }
+
+        // Paralel batch yazım — Firestore 500/sn limitini aşmamak için 20'lik chunk
+        const { db, doc, setDoc, serverTimestamp } = window._ayBridge;
+        const chunkSize = 20;
+        let basarili = 0, basarisiz = 0;
+
+        for (let i = 0; i < ekler.length; i += chunkSize) {
+          const chunk = ekler.slice(i, i + chunkSize);
+          const results = await Promise.allSettled(
+            chunk.map(c => setDoc(doc(db, 'ekipmanlar', c.id), {
+              adi:       c.adi,
+              turId:     c.turId,
+              durum:     'Çalışıyor',
+              createdAt: serverTimestamp(),
+              createdBy: this.user?.email || null,
+              kaynak:    'excel-import'
+            }, { merge: true }))
+          );
+          results.forEach(r => r.status === 'fulfilled' ? basarili++ : basarisiz++);
+        }
+
+        this._toast(`✅ ${basarili} cihaz yüklendi${basarisiz ? `, ${basarisiz} hatalı` : ''}.`, 'success');
+        if (hatalar.length) console.warn('[ayarlar] Atlanmış satırlar:', hatalar);
+
+        // Listeyi yeniden çek
+        await this._envanteriYukle();
+      } catch (e) {
+        console.error('[ayarlar] Excel yükleme hatası:', e);
+        this._toast('Excel okunamadı: ' + e.message, 'error');
+      } finally {
+        ev.target.value = ''; // Aynı dosyayı tekrar seçebilsin
+      }
+    },
+
+    // ── LOKASYON İŞLEMLERİ ────────────────────────────────────────────
+
+    blokEkle() {
+      const ad = this.yeniBlokAdi.trim();
+      if (!ad) return;
+      const yeniId = this._id();
+      this.cfg.lokasyonlar = [
+        ...this.cfg.lokasyonlar,
+        { id: yeniId, ad, bolgeler: [] }
+      ];
+      this.yeniBlokAdi = '';
+      this.genisletilmisBloId = yeniId; // Yeni bloğu otomatik aç
+    },
+
+    blokSil(blokId) {
+      if (!confirm('Bu blok ve altındaki tüm bölgeler silinecek. Emin misin?')) return;
+      this.cfg.lokasyonlar = this.cfg.lokasyonlar.filter(b => b.id !== blokId);
+      if (this.genisletilmisBloId === blokId) this.genisletilmisBloId = null;
+    },
+
+    blokGenislet(blokId) {
+      this.genisletilmisBloId = this.genisletilmisBloId === blokId ? null : blokId;
+    },
+
+    bolgeEkle(blok, ad) {
+      const temiz = (ad || '').trim();
+      if (!temiz) return;
+      blok.bolgeler = [...(blok.bolgeler || []), { id: this._id(), ad: temiz }];
+    },
+
+    bolgeSil(blok, bolgeId) {
+      blok.bolgeler = (blok.bolgeler || []).filter(b => b.id !== bolgeId);
+    },
+
+    // ── EKİPMAN TÜRLERİ İŞLEMLERİ ───────────────────────────────────
+
+    turEkle() {
+      const ad = this.yeniTurAdi.trim();
+      if (!ad) return;
+      if (this.cfg.ekipmanTurleri.find(t => t.ad.toLowerCase() === ad.toLowerCase())) {
+        this._toast('Bu isimde bir tür zaten var.', 'warning');
+        return;
+      }
+      this.cfg.ekipmanTurleri = [
+        ...this.cfg.ekipmanTurleri,
+        { id: this._id(), ad, ikon: this.yeniTurIkon, checklistMaddeler: [] }
+      ];
+      this.yeniTurAdi  = '';
+      this.yeniTurIkon = '📦';
+    },
+
+    turSil(turId) {
+      if (!confirm('Bu ekipman türü ve kontrol listesi silinecek. Emin misin?')) return;
+      this.cfg.ekipmanTurleri = this.cfg.ekipmanTurleri.filter(t => t.id !== turId);
+      if (this.seciliTurId === turId) this.seciliTurId = '';
+    },
+
+    // ── CHECKLİST İŞLEMLERİ ──────────────────────────────────────────
+
+    seciliTur() {
+      return this.cfg.ekipmanTurleri.find(t => t.id === this.seciliTurId) || null;
+    },
+
+    maddeEkle() {
+      const baslik = this.yeniMaddeBaslik.trim();
+      if (!baslik || !this.seciliTurId) return;
+      // Alpine reactivity: tüm ekipmanTurleri dizisini yeniden ata
+      this.cfg.ekipmanTurleri = this.cfg.ekipmanTurleri.map(t => {
+        if (t.id !== this.seciliTurId) return t;
+        return {
+          ...t,
+          checklistMaddeler: [
+            ...(t.checklistMaddeler || []),
+            { id: this._id(), baslik, tip: this.yeniMaddeTip }
+          ]
+        };
+      });
+      this.yeniMaddeBaslik = '';
+    },
+
+    maddeSil(turId, maddeId) {
+      this.cfg.ekipmanTurleri = this.cfg.ekipmanTurleri.map(t => {
+        if (t.id !== turId) return t;
+        return {
+          ...t,
+          checklistMaddeler: (t.checklistMaddeler || []).filter(m => m.id !== maddeId)
+        };
+      });
+    },
+
+    // ── WEBHOOK TEST ──────────────────────────────────────────────────
+
+    async webhookTestEt() {
+      this.testEdiliyor = true;
+      this.testSonuc    = '';
+      try {
+        const res = await fetch(this.cfg.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            test: true, kaynak: 'ozisg-ekipman-ayarlar',
+            ts: new Date().toISOString()
+          })
+        });
+        this.testSonuc = (res.ok || res.status === 202)
+          ? `✅ Başarılı (HTTP ${res.status})`
+          : `❌ Sunucu hatası (HTTP ${res.status})`;
+      } catch (e) {
+        this.testSonuc = '❌ Bağlantı hatası: ' + e.message;
+      } finally {
+        this.testEdiliyor = false;
+      }
+    },
+
+    // ── KAYDET ────────────────────────────────────────────────────────
+
+    _dogrula() {
+      const hatalar = [];
+      if (this.cfg.webhookUrl.trim() && !/^https?:\/\//.test(this.cfg.webhookUrl))
+        hatalar.push('Webhook URL "https://" ile başlamalı.');
+
+      for (const tur of this.cfg.ekipmanTurleri) {
+        if (!tur.ad?.trim()) {
+          hatalar.push(`Adı boş bir ekipman türü var — doldurun veya silin.`);
+          break;
+        }
+        for (const m of (tur.checklistMaddeler || [])) {
+          if (!m.baslik?.trim()) {
+            hatalar.push(`"${tur.ad}" türünde başlığı boş bir kontrol maddesi var.`);
+            break;
+          }
+        }
+      }
+      for (const blok of this.cfg.lokasyonlar) {
+        if (!blok.ad?.trim()) {
+          hatalar.push('Adı boş bir blok var — doldurun veya silin.');
+          break;
+        }
+      }
+      return hatalar;
+    },
+
+    async kaydet() {
+      const hatalar = this._dogrula();
+      if (hatalar.length) {
+        alert('Kaydetmeden önce düzeltilmesi gerekenler:\n\n• ' + hatalar.join('\n• '));
+        return;
+      }
+      this.kaydediliyor = true;
+      const { db, doc, setDoc, serverTimestamp } = window._ayBridge;
+      try {
+        await setDoc(doc(db, 'settings_ekipman', 'config'), {
+          webhookUrl:      (this.cfg.webhookUrl || '').trim(),
+          systemPrompt:    (this.cfg.systemPrompt || '').substring(0, 4000),
+          lokasyonlar:     this.cfg.lokasyonlar,
+          ekipmanTurleri:  this.cfg.ekipmanTurleri,
+          updatedAt:       serverTimestamp(),
+          updatedBy:       this.user.email
+        }, { merge: true });
+        this.sonGuncelleme = new Date().toLocaleString('tr-TR');
+        this._toast('✅ Ayarlar kaydedildi.', 'success');
+      } catch (e) {
+        this._toast('Kayıt hatası: ' + e.message, 'error');
+        console.error('[ayarlar] kaydet hatası:', e);
+      } finally {
+        this.kaydediliyor = false;
+      }
+    },
+
+    // ── JSON Önizleme ─────────────────────────────────────────────────
+
+    jsonOnizleme() {
+      try {
+        return JSON.stringify({
+          webhookUrl:     this.cfg.webhookUrl || '(boş)',
+          systemPrompt:   (this.cfg.systemPrompt || '').substring(0, 80) + '…',
+          lokasyonlar:    this.cfg.lokasyonlar,
+          ekipmanTurleri: this.cfg.ekipmanTurleri.map(t => ({
+            ...t,
+            checklistMaddeler: (t.checklistMaddeler || []).length + ' madde'
+          }))
+        }, null, 2);
+      } catch (e) {
+        return 'JSON oluşturulamadı: ' + e.message;
+      }
+    },
+
+    // ── Toast Yardımcısı ──────────────────────────────────────────────
+    _toast(msg, tip = 'info') {
+      try { window._ayBridge.showToast(msg, tip); } catch (_) { console.log(msg); }
+    }
+  };
+}
+</script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof renderLayout === 'function') renderLayout('../');
+  });
+</script>
+</body>
+</html>

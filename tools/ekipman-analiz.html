@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ekipman Analiz Dashboard | ozisg.com</title>
+  <link rel="stylesheet" href="../css/master.css">
+
+  <!-- Tailwind + Alpine -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+  <!-- Chart.js & SheetJS -->
+  <!-- Chart.js & SheetJS lazy yüklenir (window.loadScript ile, ihtiyaç anında) -->
+  <!-- CDN'ler grafikleriKur() ve excelIndir() fonksiyonlarının başında çağrılır -->
+
+  <!-- Ortak layout -->
+  <script defer src="../js/layout.js"></script>
+
+  <style>
+    [x-cloak] { display:none !important; }
+
+    .kpi-card {
+      background:#fff; border:1px solid #eef2f7; border-radius:16px;
+      padding:18px 20px; position:relative; overflow:hidden;
+      transition:transform .15s, box-shadow .15s;
+    }
+    .kpi-card:hover { transform:translateY(-2px); box-shadow:0 10px 25px rgba(30,41,59,.06); }
+    .kpi-card::before {
+      content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+      background: var(--kpi-accent, #3b82f6);
+    }
+    .kpi-title { font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+    .kpi-value { font-size:28px; font-weight:800; color:#0f172a; line-height:1; margin-top:8px; }
+    .kpi-sub   { font-size:11px; color:#94a3b8; margin-top:6px; }
+
+    .panel {
+      background:#fff; border:1px solid #eef2f7; border-radius:16px;
+      padding:18px 20px;
+    }
+    .panel h3 { font-size:14px; font-weight:700; color:#0f172a; margin:0; }
+    .panel .hint { font-size:11px; color:#94a3b8; margin-top:2px; }
+
+    .chart-wrap { position:relative; height:260px; }
+    .chart-wrap.tall { height:320px; }
+
+    .fi-input, .fi-select {
+      width:100%; border:1px solid #e2e8f0; border-radius:10px;
+      padding:8px 10px; font-size:13px; background:#fff;
+      transition:border-color .15s, box-shadow .15s;
+    }
+    .fi-input:focus, .fi-select:focus {
+      outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.12);
+    }
+    .fi-label { font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; display:block; }
+
+    .btn-primary {
+      background:linear-gradient(135deg,#4f46e5,#7c3aed);
+      color:#fff; border:none; border-radius:10px;
+      padding:9px 16px; font-size:13px; font-weight:600;
+      transition:filter .15s; cursor:pointer;
+    }
+    .btn-primary:hover:not(:disabled) { filter:brightness(1.08); }
+    .btn-primary:disabled { opacity:.55; cursor:not-allowed; }
+
+    .btn-ghost {
+      background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+      padding:9px 14px; font-size:13px; font-weight:600; color:#475569; cursor:pointer;
+    }
+    .btn-ghost:hover { background:#f1f5f9; }
+
+    .ai-card {
+      background:linear-gradient(135deg,#eef2ff 0%, #faf5ff 100%);
+      border:1px solid #e0e7ff; border-radius:16px; padding:18px 20px;
+    }
+    .ai-output {
+      white-space:pre-wrap; font-size:13.5px; color:#1e293b; line-height:1.55;
+      background:#fff; border:1px solid #e0e7ff; border-radius:12px; padding:14px 16px;
+      min-height:80px;
+    }
+
+    .tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .tbl th { background:#f8fafc; color:#475569; font-weight:600; text-align:left;
+              padding:10px 12px; border-bottom:1px solid #e2e8f0; font-size:11px;
+              text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; }
+    .tbl td { padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#334155; white-space:nowrap; }
+    .tbl tr:hover td { background:#fafbfc; }
+
+    .badge {
+      display:inline-block; font-size:11px; font-weight:600;
+      padding:2px 8px; border-radius:999px;
+    }
+    .badge-red    { background:#fee2e2; color:#b91c1c; }
+    .badge-amber  { background:#fef3c7; color:#b45309; }
+    .badge-green  { background:#dcfce7; color:#15803d; }
+    .badge-slate  { background:#f1f5f9; color:#475569; }
+
+    .scroll-x { overflow-x:auto; }
+    .scroll-x::-webkit-scrollbar { height:6px; }
+    .scroll-x::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+
+    @media (max-width: 768px) {
+      .kpi-value { font-size:22px; }
+      .chart-wrap { height:220px; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+<div id="nav-placeholder"></div>
+
+<!-- Yükleniyor -->
+<div id="page-loading" class="flex items-center justify-center min-h-screen">
+  <div class="text-center text-gray-400">
+    <div class="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm">Yükleniyor…</p>
+  </div>
+</div>
+
+<!-- Yetkisiz -->
+<div id="auth-gate" style="display:none;" class="flex items-center justify-center min-h-screen">
+  <div class="text-center bg-white rounded-2xl shadow p-10 max-w-sm mx-4">
+    <div class="text-5xl mb-4">🔒</div>
+    <h2 class="text-lg font-bold text-gray-800 mb-2">Erişim Kısıtlı</h2>
+    <p class="text-sm text-gray-500">Bu dashboard'u görüntülemek için giriş yapmanız ve yetkili olmanız gerekiyor.</p>
+    <a href="../login.html" class="mt-5 inline-block bg-indigo-600 text-white rounded-xl px-6 py-2.5 font-semibold text-sm">Giriş Yap</a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ANA İÇERİK
+════════════════════════════════════════════════════ -->
+<main id="main-content" style="display:none;"
+      x-data="AnalizApp()" x-init="$nextTick(() => initAnaliz())" x-cloak
+      class="max-w-7xl mx-auto px-4 pt-24 pb-16 min-h-screen">
+
+  <nav class="ekp-tabs" aria-label="Ekipman Sistemi Navigasyonu">
+    <a href="ekipman-takip.html" class="ekp-tab">📋 Takip</a>
+    <a href="ekipman-analiz.html" class="ekp-tab ekp-tab-active">📊 Analiz</a>
+    <a href="ekipman-qr-basim.html" class="ekp-tab">🏷️ QR Basım</a>
+    <a href="ekipman-ayarlar.html" class="ekp-tab">⚙️ Ayarlar</a>
+  </nav>
+
+  <!-- Başlık -->
+  <header class="flex items-end justify-between flex-wrap gap-3 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <span class="text-2xl">📊</span> Ekipman Analiz Dashboard
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">Firestore <code class="text-xs bg-slate-100 px-1.5 py-0.5 rounded">ekipman_loglari</code> verileri üzerinden canlı yönetim panosu.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-2 text-xs text-slate-500 ml-2 border-l pl-4 border-gray-200">
+        <span>📦 Toplam kayıt:</span>
+        <span class="font-bold text-slate-800" x-text="logHepsi.length"></span>
+        <span class="text-slate-300">•</span>
+        <span>📋 Filtrelenmiş:</span>
+        <span class="font-bold text-indigo-600" x-text="logFiltreli.length"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Filtre paneli -->
+  <section class="panel mb-5">
+    <div class="flex items-end flex-wrap gap-3">
+      <div class="grow min-w-[140px]">
+        <label class="fi-label">Başlangıç</label>
+        <input type="date" class="fi-input" x-model="filtre.dateFrom" @change="filtrele()">
+      </div>
+      <div class="grow min-w-[140px]">
+        <label class="fi-label">Bitiş</label>
+        <input type="date" class="fi-input" x-model="filtre.dateTo" @change="filtrele()">
+      </div>
+      <div class="grow min-w-[140px]">
+        <label class="fi-label">Blok</label>
+        <select class="fi-select" x-model="filtre.blokId" @change="filtre.bolgeId=''; filtrele()">
+          <option value="">Tümü</option>
+          <template x-for="b in cfg.lokasyonlar" :key="b.id">
+            <option :value="b.id" x-text="b.ad"></option>
+          </template>
+        </select>
+      </div>
+      <div class="grow min-w-[140px]">
+        <label class="fi-label">Bölge</label>
+        <select class="fi-select" x-model="filtre.bolgeId" @change="filtrele()" :disabled="!filtre.blokId">
+          <option value="">Tümü</option>
+          <template x-for="bo in filtreninBolgeleri()" :key="bo.id">
+            <option :value="bo.id" x-text="bo.ad"></option>
+          </template>
+        </select>
+      </div>
+      <div class="grow min-w-[160px]">
+        <label class="fi-label">Ekipman Türü</label>
+        <select class="fi-select" x-model="filtre.ekipmanTuruId" @change="filtrele()">
+          <option value="">Tümü</option>
+          <template x-for="t in cfg.ekipmanTurleri" :key="t.id">
+            <option :value="t.id" x-text="t.ad"></option>
+          </template>
+        </select>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn-ghost" @click="sifirla()">↺ Sıfırla</button>
+        <button class="btn-primary" @click="excelIndir()" :disabled="logFiltreli.length===0">
+          📥 Excel İndir
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- KPI kartları -->
+  <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="kpi-card" style="--kpi-accent:#3b82f6;">
+      <div class="kpi-title">Toplam Kontrol</div>
+      <div class="kpi-value" x-text="logFiltreli.length.toLocaleString('tr-TR')"></div>
+      <div class="kpi-sub">Seçili tarih aralığında</div>
+    </div>
+    <div class="kpi-card" style="--kpi-accent:#ef4444;">
+      <div class="kpi-title">Kırmızı Etiket</div>
+      <div class="kpi-value" x-text="kpiKirmizi().toLocaleString('tr-TR')"></div>
+      <div class="kpi-sub">
+        <span x-text="kpiYuzde(kpiKirmizi(), logFiltreli.length) + '%'"></span>
+        &nbsp;kritik arıza
+      </div>
+    </div>
+    <div class="kpi-card" style="--kpi-accent:#10b981;">
+      <div class="kpi-title">Aktif Çalışan Ekipman</div>
+      <div class="kpi-value" x-text="kpiAktifEkipman().toLocaleString('tr-TR')"></div>
+      <div class="kpi-sub">Son logu sağlam olanlar</div>
+    </div>
+    <div class="kpi-card" style="--kpi-accent:#f59e0b;">
+      <div class="kpi-title">Ort. Arıza Çözüm</div>
+      <div class="kpi-value" x-text="kpiCozumSuresi()"></div>
+      <div class="kpi-sub">Kırmızı → sağlam geçiş</div>
+    </div>
+  </section>
+
+  <!-- Grafik grid -->
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="panel">
+      <div class="flex items-end justify-between mb-3">
+        <div>
+          <h3>📈 Aylık Kontrol Trendi</h3>
+          <p class="hint">Son 12 ay — toplam kontrol ve arıza sayısı</p>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chTrend"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="flex items-end justify-between mb-3">
+        <div>
+          <h3>🥧 Ekipman Türü Dağılımı</h3>
+          <p class="hint">Kontrollerin tür bazında dağılımı</p>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chTur"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="flex items-end justify-between mb-3">
+        <div>
+          <h3>🕒 Vardiya Analizi</h3>
+          <p class="hint">Vardiyalara göre kontrol durumu</p>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chVardiya"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="flex items-end justify-between mb-3">
+        <div>
+          <h3>🗺️ Bölge Bazlı Kontrol Sayısı</h3>
+          <p class="hint">En çok kontrol yapılan bölgeler (arıza oranlı)</p>
+        </div>
+      </div>
+      <div class="chart-wrap tall"><canvas id="chBolge"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ── FAZ 2: Kondisyon Trend + Maliyet TOP 5 ─────── -->
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="panel">
+      <div class="flex items-end justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3>💚 Ekipman Kondisyon Trendi</h3>
+          <p class="hint">İyi=100, Orta=50, Kötü=0 — seçili ekipmanın zaman içindeki sağlık seyri</p>
+        </div>
+        <select x-model="kondisyonEkipmanId" @change="_kondisyonOlustur()"
+                class="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-semibold min-w-[180px]">
+          <option value="">— Otomatik (en sık) —</option>
+          <template x-for="o in kondisyonSecenekleri" :key="o.id">
+            <option :value="o.id" x-text="o.ad + ' (' + o.sayi + ')'"></option>
+          </template>
+        </select>
+      </div>
+      <div class="chart-wrap"><canvas id="chKondisyon"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <div class="flex items-end justify-between mb-3">
+        <div>
+          <h3>💰 En Çok Maliyet Çıkaran 5 Ekipman</h3>
+          <p class="hint">DÖF kapanışında girilen "Bakım Maliyeti" verisinden agregasyon</p>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chMaliyet"></canvas></div>
+    </div>
+  </section>
+
+  <!-- AI Insight -->
+  <section class="ai-card mb-6">
+    <div class="flex items-start justify-between flex-wrap gap-3 mb-3">
+      <div>
+        <h3 class="text-base font-bold text-indigo-900 flex items-center gap-2">
+          <span>🧠</span> AI Insight — Bu veriler ne anlatıyor?
+        </h3>
+        <p class="text-xs text-indigo-700/70 mt-0.5">
+          Filtrelenmiş son <span x-text="Math.min(logFiltreli.length, 100)"></span> log Gemini'ye gönderilir.
+        </p>
+      </div>
+      <button class="btn-primary" @click="aiOzetIste()" :disabled="aiYukleniyor || logFiltreli.length===0">
+        <span x-show="!aiYukleniyor">✨ Yönetici Özeti Üret</span>
+        <span x-show="aiYukleniyor">Analiz ediliyor…</span>
+      </button>
+    </div>
+    <div class="ai-output" x-show="aiCevap || aiYukleniyor || aiHata">
+      <template x-if="aiYukleniyor">
+        <div class="text-slate-400 text-sm">
+          <span class="animate-pulse">Gemini veriyi işliyor…</span>
+        </div>
+      </template>
+      <template x-if="!aiYukleniyor && aiCevap">
+        <div x-html="aiFormatla(aiCevap)"></div>
+      </template>
+      <template x-if="!aiYukleniyor && aiHata">
+        <div class="text-red-600 text-sm" x-text="aiHata"></div>
+      </template>
+    </div>
+    <div class="text-slate-400 text-xs mt-1 text-center" x-show="!aiCevap && !aiYukleniyor && !aiHata">
+      Henüz özet üretilmedi.
+    </div>
+  </section>
+
+  <!-- Log önizleme -->
+  <section class="panel">
+    <div class="flex items-end justify-between mb-3">
+      <div>
+        <h3>📋 Filtrelenmiş Loglar <span class="text-xs text-slate-400 font-normal">(ilk 20)</span></h3>
+        <p class="hint">Tamamını Excel'e aktarmak için yukarıdaki butonu kullanın.</p>
+      </div>
+    </div>
+    <div class="scroll-x">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Tarih</th>
+            <th>Operatör</th>
+            <th>Vardiya</th>
+            <th>Blok / Bölge</th>
+            <th>Ekipman</th>
+            <th>Durum</th>
+            <th>Öncelik</th>
+            <th>🏷️</th>
+            <th>Görsel</th>
+            <th>Aksiyon</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="l in logFiltreli.slice(0, 20)" :key="l._id">
+            <tr :class="l.yetkinlikEksik ? 'bg-amber-50' : ''">
+              <td x-text="tarihFormat(l._tsDate)"></td>
+              <td>
+                <div x-text="l.operatorAdi || l.operatorEmail || '—'"></div>
+                <!-- FAZ 3: Yetkinlik rozeti + Onayla butonu -->
+                <div x-show="l.yetkinlikEksik" x-cloak class="mt-0.5 inline-flex items-center gap-1 flex-wrap">
+                  <span class="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full"
+                        title="Operatörün yetkinlik kaydı yok. Belge mevcutsa Görsel'den incele.">
+                    ⚠ Onay Bekliyor
+                  </span>
+                  <button @click="yetkinlikOnayla(l)"
+                          title="users/{uid}.yetkinlikler dizisine arrayUnion ile ekipman türü ekle"
+                          class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition">
+                    ✅ Onayla
+                  </button>
+                </div>
+              </td>
+              <td x-text="l.vardiya || '—'"></td>
+              <td>
+                <span x-text="(l.blokAd || '—') + ' / ' + (l.bolgeAd || '—')"></span>
+              </td>
+              <td x-text="l.ekipmanAdi || l.ekipmanTuruAdi || '—'"></td>
+              <td>
+                <span class="badge"
+                      :class="l.basarisizSayisi > 0 ? 'badge-red' : 'badge-green'"
+                      x-text="l.basarisizSayisi > 0 ? 'Arızalı' : 'Sağlam'"></span>
+              </td>
+              <td>
+                <span class="badge"
+                      :class="l.oncelik === 'Kritik' ? 'badge-red' :
+                              l.oncelik === 'Yüksek' ? 'badge-amber' : 'badge-slate'"
+                      x-text="l.oncelik || 'Normal'"></span>
+              </td>
+              <td x-text="l.kirmiziEtiket ? '🏷️' : ''"></td>
+              <!-- FAZ 1: Görsel — tıklanabilir -->
+              <td>
+                <template x-if="l.gorselBase64 || l.gorselUrl || l.yetkinlikBelgesiBase64 || l.yetkinlikBelgeUrl">
+                  <button @click="gorselAc(l)" title="Görseli büyüt"
+                          class="text-[11px] px-2 py-0.5 rounded font-bold bg-indigo-100 hover:bg-indigo-200 text-indigo-700">
+                    👁️ Aç
+                  </button>
+                </template>
+                <template x-if="!(l.gorselBase64 || l.gorselUrl || l.yetkinlikBelgesiBase64 || l.yetkinlikBelgeUrl)">
+                  <span class="text-slate-300 text-xs">—</span>
+                </template>
+              </td>
+              <!-- FAZ 1+2: Aksiyon hücresi -->
+              <td>
+                <div class="inline-flex items-center gap-1 flex-wrap">
+                  <!-- DÖF tetikleyici (Kötü/Orta → Çözüldü geçişi için) -->
+                  <button @click="dofModaliAc(l)"
+                          title="DÖF + Kök Neden Analizi"
+                          class="text-[11px] px-2 py-0.5 rounded font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-700">
+                    🛠️ DÖF
+                  </button>
+                  <button @click="kayitDuzenle(l)" title="Düzenle"
+                          class="text-[11px] px-2 py-0.5 rounded font-bold bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    ✏️
+                  </button>
+                  <button @click="kayitSil(l)" title="Sil"
+                          class="text-[11px] px-2 py-0.5 rounded font-bold bg-red-100 hover:bg-red-200 text-red-700">
+                    🗑️
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="logFiltreli.length === 0">
+            <td colspan="10" class="text-center text-slate-400 py-8">
+              Bu filtrelerle eşleşen log yok.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══ FAZ 1: Görsel önizleme modalı ═══ -->
+  <div x-show="gorselModal" x-cloak
+       @click="gorselModal = null"
+       style="position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+              background:rgba(0,0,0,.85);padding:1rem;cursor:pointer;">
+    <img :src="gorselModal || ''"
+         style="max-height:90vh;max-width:100%;border-radius:12px;box-shadow:0 25px 50px -12px rgba(0,0,0,.6);">
+  </div>
+
+  <!-- ═══ FAZ 2: DÖF Modal (Aksiyon + Sorumlu + Yedek Parça + Maliyet) ═══ -->
+  <div x-show="dofModal.acik" x-cloak
+       @click="dofKapat()"
+       style="position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+              background:rgba(15,23,42,.7);backdrop-filter:blur(4px);padding:1rem;">
+    <div @click.stop
+         class="bg-white rounded-2xl shadow-2xl w-full max-w-xl"
+         style="max-height:92vh;overflow-y:auto;padding:1.5rem;">
+
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+          <span>🛠️</span> DÖF — Düzeltici/Önleyici Faaliyet
+        </h3>
+        <button @click="dofKapat()"
+                class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold">✕</button>
+      </div>
+
+      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4 text-sm">
+        <div class="font-bold text-emerald-800 mb-1">✅ "Çözüldü" olarak kapatıldığında:</div>
+        <div class="text-xs text-emerald-700">
+          <b x-text="dofModal.kayit?.ekipmanAdi || dofModal.kayit?.ekipmanTuruAdi || '—'"></b>
+          · <span x-text="dofModal.kayit?.aciklama || (dofModal.kayit?.basarisizSayisi||0) + ' başarısız madde'"></span>
+        </div>
+      </div>
+
+      <!-- Aksiyon -->
+      <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Alınan Aksiyon *</label>
+      <textarea x-model="dofModal.aksiyon" rows="3" maxlength="1000"
+                placeholder="Ör: Hidrolik hortum değişti, ekipman test edildi, çalışır durumda."
+                class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 resize-none focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
+
+      <!-- Sorumlu -->
+      <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Aksiyon Sorumlusu *</label>
+      <input type="text" x-model="dofModal.sorumlu" maxlength="100"
+             placeholder="Ad Soyad / Departman"
+             class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+
+      <!-- Yedek Parça + Maliyet -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">🧰 Gerekli Yedek Parça</label>
+          <input type="text" x-model="dofModal.yedekParca" maxlength="200"
+                 placeholder="Ör: Hidrolik hortum, M12 cıvata"
+                 class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">💰 Tahmini Maliyet (TL)</label>
+          <input type="number" x-model="dofModal.bakimMaliyeti" min="0" step="0.01"
+                 placeholder="0.00"
+                 class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+      </div>
+
+      <!-- Onay butonları -->
+      <div class="flex gap-2">
+        <button @click="dofKapat()"
+                class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition">
+          Vazgeç
+        </button>
+        <button @click="dofOnayla()"
+                :disabled="dofModal.kaydediliyor || !dofModal.aksiyon?.trim() || !dofModal.sorumlu?.trim()"
+                class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-extrabold rounded-xl text-sm transition shadow-lg shadow-emerald-100">
+          <span x-show="!dofModal.kaydediliyor">✅ DÖF'i Kaydet ve Çöz</span>
+          <span x-show="dofModal.kaydediliyor">Kaydediliyor…</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="footer-placeholder"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     FIREBASE BRIDGE
+════════════════════════════════════════════════════ -->
+<script>
+  window._analizReady = new Promise(r => { window.__analizResolve = r; });
+</script>
+
+<script type="module">
+  import { requireToolAccess, db, showToast } from '../js/app.js';
+  import {
+    doc, getDoc, collection, query, orderBy, limit, getDocs,
+    deleteDoc, updateDoc, serverTimestamp, arrayUnion
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  // Ayarlar + loglar + auth'u paralel hazırla
+  (async () => {
+    try {
+      const user = await requireToolAccess('tool_ekipman', {
+        loadingEl:  'page-loading',
+        authGateEl: 'auth-gate',
+        mainEl:     'main-content'
+      });
+      if (!user) { window.__analizResolve(null); return; }
+
+      // Paralel fetch
+      const [cfgSnap, logSnap] = await Promise.all([
+        getDoc(doc(db, 'settings_ekipman', 'config')).catch(() => null),
+        getDocs(query(
+          collection(db, 'ekipman_loglari'),
+          orderBy('ts', 'desc'),
+          limit(2000)
+        )).catch(() => null)
+      ]);
+
+      const cfg = (cfgSnap && cfgSnap.exists()) ? cfgSnap.data() : { lokasyonlar: [], ekipmanTurleri: [] };
+      const loglar = logSnap
+        ? logSnap.docs.map(d => {
+            const data = d.data();
+            const ts   = data.ts?.toDate?.() || null;
+            return {
+              ...data,
+              _id: d.id,
+              _tsDate: ts,
+              _tsMs: ts ? ts.getTime() : null
+            };
+          })
+        : [];
+
+      window._analizShowToast = showToast;
+      // FAZ 1/2 — Admin CRUD bridge'i (Alpine non-module scope için)
+      window._analizDb         = db;
+      window._analizDoc        = doc;
+      window._analizDeleteDoc  = deleteDoc;
+      window._analizUpdateDoc  = updateDoc;
+      window._analizServerTs   = serverTimestamp;
+      window._analizArrayUnion = arrayUnion;     // FAZ 3: yetkinlikOnayla
+      window.__analizResolve({ user, cfg, loglar });
+    } catch (e) {
+      console.error('[analiz] init hatası:', e);
+      window.__analizResolve({ user: null, cfg: { lokasyonlar:[], ekipmanTurleri:[] }, loglar: [] });
+    }
+  })();
+</script>
+
+<!-- ═══════════════════════════════════════════════════
+     ALPINE COMPONENT
+════════════════════════════════════════════════════ -->
+<script>
+// ──────────────────────────────────────────────────────────────
+// KRİTİK: Chart.js instance'ları Alpine'in reaktif Proxy'sinden
+// UZAK DURMALI. Chart nesneleri kendi içlerinde döngüsel referanslar
+// barındırır (chart.scales.x.chart === chart). Bu nesneler Alpine
+// state'e konulursa Proxy wrapper sonsuz recursion'a düşer ve
+// "Maximum call stack size exceeded" hatası fırlatır.
+// Bu yüzden chartInstances modül scope'ta tutulur — Alpine onu
+// göremez, dolayısıyla reaktifleştirmez.
+// ──────────────────────────────────────────────────────────────
+let chartInstances = { trend: null, tur: null, vardiya: null, bolge: null, kondisyon: null, maliyet: null };
+
+// FAZ 2: "İyi/Orta/Kötü" durum etiketleri → numerik kondisyon puanı (Line Chart için)
+// "Kilitli/Kırmızı Etiket" = 0 (en kötü), "Çalışıyor/Tamam" = 100 (en iyi).
+function _kondisyonPuanFromLog(l) {
+  if (l?.kirmiziEtiket === true) return 0;
+  const d = (l?.durum || '').toLowerCase();
+  if (d.includes('kilit') || d.includes('kırmızı') || d.includes('kotu') || d.includes('kötü')) return 0;
+  if (d.includes('arıza') || d.includes('ariza') || d.includes('orta')) return 50;
+  if (d.includes('çalış') || d.includes('calis') || d.includes('tamam') || d.includes('iyi')) return 100;
+  // basarisizSayisi varsa orta olarak yorumla, yoksa iyi
+  if ((l?.basarisizSayisi || 0) > 0) return 50;
+  return 100;
+}
+
+function AnalizApp() {
+  return {
+    // State
+    user: null,
+    cfg: { lokasyonlar: [], ekipmanTurleri: [] },
+    logHepsi:   [],
+    logFiltreli: [],
+
+    filtre: {
+      dateFrom: '',
+      dateTo:   '',
+      blokId:   '',
+      bolgeId:  '',
+      ekipmanTuruId: ''
+    },
+
+    aiCevap:      '',
+    aiHata:       '',
+    aiYukleniyor: false,
+
+    // ── FAZ 1: Görsel önizleme modalı ─────────────────
+    gorselModal: null,                  // base64 / URL string
+
+    // ── FAZ 2: DÖF Modalı (Aksiyon + Sorumlu + Yedek Parça + Maliyet) ──
+    dofModal: {
+      acik:           false,
+      kayit:          null,
+      aksiyon:        '',
+      sorumlu:        '',
+      yedekParca:     '',               // FAZ 2: Gerekli yedek parça
+      bakimMaliyeti:  '',               // FAZ 2: Tahmini maliyet (TL)
+      kaydediliyor:   false,
+    },
+
+    // ── FAZ 2: Kondisyon Trend Chart için ekipman seçimi ──
+    kondisyonEkipmanId: '',
+
+    _basladi: false,
+
+    // ─── Bootstrap ─────────────────────────────────────
+    // NOT: Bu fonksiyon bir kez çağrılır. Alpine x-init="$nextTick(() => initAnaliz())"
+    // ile DOM stabil olduktan sonra tetiklenir — böylece "Maximum call stack size
+    // exceeded" (x-init reactive loop) hatası oluşmaz.
+    async initAnaliz() {
+      // Reentry guard — olası çoklu tetiklemelere karşı
+      if (this._basladi) return;
+      this._basladi = true;
+
+      const ctx = await window._analizReady;
+      if (!ctx) return;
+      this.user = ctx.user;
+      this.cfg = {
+        lokasyonlar:    Array.isArray(ctx.cfg?.lokasyonlar)    ? ctx.cfg.lokasyonlar    : [],
+        ekipmanTurleri: Array.isArray(ctx.cfg?.ekipmanTurleri) ? ctx.cfg.ekipmanTurleri : []
+      };
+      this.logHepsi = Array.isArray(ctx.loglar) ? ctx.loglar : [];
+
+      // Varsayılan tarih: son 90 gün
+      const bugun  = new Date();
+      const geri90 = new Date(bugun.getTime() - 90*24*60*60*1000);
+      this.filtre.dateTo   = this._dateToInput(bugun);
+      this.filtre.dateFrom = this._dateToInput(geri90);
+
+      // Chart'ları bir kez kur (DOM'da canvas'lar hazır)
+      // $nextTick → reactive flush tamamlandıktan sonra DOM'a dokun
+      this.$nextTick(() => {
+        this.grafikleriKur();
+        // İlk filtre + render (Chart.js nesneleri hazır olduktan sonra)
+        this.filtrele();
+      });
+    },
+
+    // ─── Filtreleme ────────────────────────────────────
+    filtreninBolgeleri() {
+      if (!this.filtre.blokId) return [];
+      const b = this.cfg.lokasyonlar.find(x => x.id === this.filtre.blokId);
+      return Array.isArray(b?.bolgeler) ? b.bolgeler : [];
+    },
+
+    filtrele() {
+      const fromMs = this.filtre.dateFrom ? new Date(this.filtre.dateFrom + 'T00:00:00').getTime() : null;
+      const toMs   = this.filtre.dateTo   ? new Date(this.filtre.dateTo   + 'T23:59:59').getTime() : null;
+
+      this.logFiltreli = this.logHepsi.filter(l => {
+        if (fromMs && (!l._tsMs || l._tsMs < fromMs)) return false;
+        if (toMs   && (!l._tsMs || l._tsMs > toMs  )) return false;
+        if (this.filtre.blokId        && l.blokId        !== this.filtre.blokId)        return false;
+        if (this.filtre.bolgeId       && l.bolgeId       !== this.filtre.bolgeId)       return false;
+        if (this.filtre.ekipmanTuruId && l.ekipmanTuruId !== this.filtre.ekipmanTuruId) return false;
+        return true;
+      });
+
+      this.grafikleriGuncelle();
+    },
+
+    sifirla() {
+      this.filtre = { dateFrom:'', dateTo:'', blokId:'', bolgeId:'', ekipmanTuruId:'' };
+      this.filtrele();
+    },
+
+    // ─── KPI hesaplamaları ─────────────────────────────
+    kpiKirmizi() {
+      return this.logFiltreli.filter(l => l.kirmiziEtiket === true).length;
+    },
+
+    kpiYuzde(pay, payda) {
+      if (!payda) return '0';
+      return ((pay / payda) * 100).toFixed(1);
+    },
+
+    kpiAktifEkipman() {
+      // Her ekipmanId için EN SON log — kirmiziEtiket=false olanları say.
+      const sonLog = new Map();
+      for (const l of this.logFiltreli) {
+        if (!l.ekipmanId || !l._tsMs) continue;
+        const prev = sonLog.get(l.ekipmanId);
+        if (!prev || l._tsMs > prev._tsMs) sonLog.set(l.ekipmanId, l);
+      }
+      let aktif = 0;
+      for (const l of sonLog.values()) {
+        if (!l.kirmiziEtiket) aktif++;
+      }
+      return aktif;
+    },
+
+    kpiCozumSuresi() {
+      // Her ekipmanId için kronolojik sıralı log zinciri üzerinde
+      // kirmizi -> sağlam geçişlerini yakala, süre farkını topla.
+      const byId = new Map();
+      for (const l of this.logFiltreli) {
+        if (!l.ekipmanId || !l._tsMs) continue;
+        if (!byId.has(l.ekipmanId)) byId.set(l.ekipmanId, []);
+        byId.get(l.ekipmanId).push(l);
+      }
+      const deltalar = [];
+      for (const arr of byId.values()) {
+        arr.sort((a,b) => a._tsMs - b._tsMs);
+        let kirmiziStart = null;
+        for (const l of arr) {
+          if (l.kirmiziEtiket && kirmiziStart === null) kirmiziStart = l._tsMs;
+          else if (!l.kirmiziEtiket && kirmiziStart !== null) {
+            deltalar.push(l._tsMs - kirmiziStart);
+            kirmiziStart = null;
+          }
+        }
+      }
+      if (!deltalar.length) return '—';
+      const ortMs = deltalar.reduce((a,b)=>a+b,0) / deltalar.length;
+      const dk = ortMs / 60000;
+      if (dk < 60)   return Math.round(dk) + ' dk';
+      const sa = dk / 60;
+      if (sa < 24)   return sa.toFixed(1) + ' sa';
+      return (sa / 24).toFixed(1) + ' gün';
+    },
+
+    // ─── Chart.js — kurulum ────────────────────────────
+    async grafikleriKur() {
+      // Lazy: Chart.js ilk grafik çağrısında yüklenir (sayfa boot'unda yok)
+      if (typeof Chart === 'undefined' && window.loadScript) {
+        try {
+          await window.loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
+        } catch (e) { console.warn('[analiz] Chart.js lazy load hatası:', e); }
+      }
+      if (typeof Chart === 'undefined') {
+        console.warn('[analiz] Chart.js yüklenmedi');
+        return;
+      }
+      Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+      Chart.defaults.color       = '#64748b';
+
+      // Olası eski instance'ları yok et — tekrar init edilirse "Canvas is
+      // already in use" hatası oluşmasın
+      Object.values(chartInstances).forEach(c => { try { c?.destroy(); } catch(_){} });
+      chartInstances = { trend: null, tur: null, vardiya: null, bolge: null };
+
+      // Trend (line) — iki dataset: toplam kontrol + arıza
+      chartInstances.trend = new Chart(document.getElementById('chTrend'), {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Toplam kontrol',
+              data: [],
+              borderColor: '#4f46e5',
+              backgroundColor: 'rgba(79,70,229,.10)',
+              fill: true, tension: .35, borderWidth: 2,
+              pointBackgroundColor: '#4f46e5', pointRadius: 4, pointHoverRadius: 6
+            },
+            {
+              label: 'Arıza',
+              data: [],
+              borderColor: '#ef4444',
+              backgroundColor: 'rgba(239,68,68,.10)',
+              fill: true, tension: .35, borderWidth: 2,
+              pointBackgroundColor: '#ef4444', pointRadius: 4, pointHoverRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f1f5f9' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+
+      // Ekipman türü (doughnut)
+      chartInstances.tur = new Chart(document.getElementById('chTur'), {
+        type: 'doughnut',
+        data: { labels: [], datasets: [{
+          data: [],
+          backgroundColor: ['#4f46e5','#06b6d4','#f59e0b','#ef4444','#10b981','#8b5cf6','#ec4899','#14b8a6','#64748b','#f97316'],
+          borderWidth: 2, borderColor: '#fff'
+        }]},
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
+        }
+      });
+
+      // Vardiya (stacked bar — öncelik dilimli; labels dinamik)
+      chartInstances.vardiya = new Chart(document.getElementById('chVardiya'), {
+        type: 'bar',
+        data: { labels: [], datasets: [] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f1f5f9' } }
+          }
+        }
+      });
+
+      // Bölge (horizontal bar) — toplam kontrol sayısı
+      chartInstances.bolge = new Chart(document.getElementById('chBolge'), {
+        type: 'bar',
+        data: { labels: [], datasets: [{
+          label: 'Toplam kontrol',
+          data: [],
+          backgroundColor: '#3b82f6',
+          borderRadius: 6
+        }]},
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f1f5f9' } },
+            y: { grid: { display: false } }
+          }
+        }
+      });
+    },
+
+    // ─── Chart.js — güncelleme ─────────────────────────
+    _arizaMi(l) { return (l.basarisizSayisi > 0) || l.kirmiziEtiket === true; },
+
+    grafikleriGuncelle() {
+      // Chart'lar henüz kurulmadıysa çık (race-safe)
+      if (!chartInstances.trend || !chartInstances.tur ||
+          !chartInstances.vardiya || !chartInstances.bolge) return;
+
+      // Ana veri seti TÜM filtrelenmiş kontroller — charts "2 kayıt var ama
+      // boş" durumuna düşmesin diye artık _arizaMi filtresine bağlı değil.
+      const tumu     = this.logFiltreli;
+      const arizalar = tumu.filter(l => this._arizaMi(l));
+
+      // ── TREND: Son 12 ay — iki seri: toplam kontrol + arıza
+      {
+        const bugun      = new Date();
+        const labels     = [];
+        const aylar      = []; // key dizisi, labels ile aynı sırada
+        const toplamMap  = new Map();
+        const arizaMap   = new Map();
+        for (let i = 11; i >= 0; i--) {
+          const d     = new Date(bugun.getFullYear(), bugun.getMonth() - i, 1);
+          const key   = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+          const label = d.toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' });
+          labels.push(label);
+          aylar.push(key);
+          toplamMap.set(key, 0);
+          arizaMap.set(key, 0);
+        }
+        for (const l of tumu) {
+          if (!l._tsDate) continue;
+          const key = l._tsDate.getFullYear() + '-' + String(l._tsDate.getMonth()+1).padStart(2,'0');
+          if (toplamMap.has(key)) {
+            toplamMap.set(key, toplamMap.get(key) + 1);
+            if (this._arizaMi(l)) arizaMap.set(key, arizaMap.get(key) + 1);
+          }
+        }
+        chartInstances.trend.data.labels           = labels;
+        chartInstances.trend.data.datasets[0].data = aylar.map(k => toplamMap.get(k) || 0);
+        chartInstances.trend.data.datasets[1].data = aylar.map(k => arizaMap.get(k)  || 0);
+        chartInstances.trend.update();
+      }
+
+      // ── TÜR: Ekipman türü dağılımı (tüm kontroller)
+      {
+        const sayim = new Map();
+        for (const l of tumu) {
+          const k = l.ekipmanTuruAdi || 'Bilinmeyen';
+          sayim.set(k, (sayim.get(k) || 0) + 1);
+        }
+        const sortlu = Array.from(sayim.entries()).sort((a,b) => b[1]-a[1]).slice(0, 10);
+        chartInstances.tur.data.labels             = sortlu.map(x => x[0]);
+        chartInstances.tur.data.datasets[0].data   = sortlu.map(x => x[1]);
+        chartInstances.tur.update();
+      }
+
+      // ── VARDİYA: stacked bar — durum (Sağlam/Arızalı) × dinamik vardiya
+      {
+        // Veriden dinamik vardiya listesi çıkar
+        const setV = new Set();
+        for (const l of tumu) setV.add(l.vardiya || 'Belirtilmemiş');
+        // Anlamlı sıralama: bilinen vardiyalar önce, gerisi alfabetik
+        const onSira = ['Gündüz', 'Akşam', 'Gece', 'Belirtilmemiş'];
+        const vardilar = Array.from(setV).sort((a,b) => {
+          const ia = onSira.indexOf(a), ib = onSira.indexOf(b);
+          if (ia === -1 && ib === -1) return a.localeCompare(b, 'tr');
+          if (ia === -1) return 1;
+          if (ib === -1) return -1;
+          return ia - ib;
+        });
+
+        const saglamData = vardilar.map(v =>
+          tumu.filter(l => (l.vardiya || 'Belirtilmemiş') === v && !this._arizaMi(l)).length
+        );
+        const arizaData = vardilar.map(v =>
+          tumu.filter(l => (l.vardiya || 'Belirtilmemiş') === v && this._arizaMi(l)).length
+        );
+
+        chartInstances.vardiya.data.labels   = vardilar;
+        chartInstances.vardiya.data.datasets = [
+          { label: 'Sağlam', data: saglamData, backgroundColor: '#10b981', borderRadius: 4 },
+          { label: 'Arızalı', data: arizaData,  backgroundColor: '#ef4444', borderRadius: 4 }
+        ];
+        chartInstances.vardiya.update();
+      }
+
+      // ── BÖLGE: yatay bar — toplam kontrol (arıza oranı tooltip'te olabilir)
+      {
+        const sayim   = new Map();  // toplam
+        const ariMap  = new Map();  // arıza
+        for (const l of tumu) {
+          const k = (l.blokAd ? l.blokAd + ' / ' : '') + (l.bolgeAd || 'Bilinmeyen');
+          sayim.set(k, (sayim.get(k) || 0) + 1);
+          if (this._arizaMi(l)) ariMap.set(k, (ariMap.get(k) || 0) + 1);
+        }
+        const sortlu = Array.from(sayim.entries()).sort((a,b) => b[1]-a[1]).slice(0, 10);
+        chartInstances.bolge.data.labels           = sortlu.map(x => x[0]);
+        chartInstances.bolge.data.datasets[0].data = sortlu.map(x => x[1]);
+        // Dataset label'ı güncelle (artık "Toplam kontrol")
+        chartInstances.bolge.data.datasets[0].label = 'Toplam kontrol';
+        chartInstances.bolge.data.datasets[0].backgroundColor = '#3b82f6';
+        chartInstances.bolge.update();
+      }
+
+      // ── KONDİSYON TREND: seçili ekipman zaman serisi (FAZ 2)
+      this._kondisyonOlustur();
+
+      // ── MALİYET TOP 5: bakimMaliyeti agregasyonu (FAZ 2)
+      this._maliyetOlustur();
+    },
+
+    // ═════════════════════════════════════════════════════
+    // FAZ 1: CRUD — Sil & Düzenle + Görsel modal
+    // ═════════════════════════════════════════════════════
+    async kayitSil(kayit) {
+      if (!kayit?._id) return;
+      const ozet = (kayit.aciklama || kayit.ekipmanAdi || kayit.ekipmanTuruAdi || '—').toString().slice(0, 60);
+      if (!confirm(`Bu kaydı SİLMEK üzeresiniz:\n\n"${ozet}"\n\nGeri alınamaz. Devam edilsin mi?`)) return;
+      try {
+        const ref = window._analizDoc(window._analizDb, 'ekipman_loglari', kayit._id);
+        await window._analizDeleteDoc(ref);
+        // Optimistic UI: hem hepsi hem filtreliden çıkar
+        this.logHepsi    = this.logHepsi.filter(l => l._id !== kayit._id);
+        this.logFiltreli = this.logFiltreli.filter(l => l._id !== kayit._id);
+        this.grafikleriGuncelle();
+        if (window._analizShowToast) window._analizShowToast('Kayıt silindi', 'success');
+      } catch (err) {
+        console.error('[analiz] silme hatası:', err);
+        if (window._analizShowToast) window._analizShowToast('Silme başarısız: ' + (err?.message || 'hata'), 'error');
+      }
+    },
+
+    async kayitDuzenle(kayit) {
+      if (!kayit?._id) return;
+      const yeniAciklama = prompt('Açıklamayı düzenleyin:', kayit.aciklama || '');
+      if (yeniAciklama === null) return;
+      const yeniOncelik = prompt(
+        'Öncelik seçin: Normal | Yüksek | Kritik',
+        kayit.oncelik || 'Normal'
+      );
+      if (yeniOncelik === null) return;
+      const onc = ['Normal', 'Yüksek', 'Kritik'].includes(yeniOncelik) ? yeniOncelik : 'Normal';
+      try {
+        const ref = window._analizDoc(window._analizDb, 'ekipman_loglari', kayit._id);
+        await window._analizUpdateDoc(ref, {
+          aciklama:       yeniAciklama.slice(0, 1000),
+          oncelik:        onc,
+          sonGuncelleme:  window._analizServerTs(),
+        });
+        kayit.aciklama = yeniAciklama;
+        kayit.oncelik  = onc;
+        if (window._analizShowToast) window._analizShowToast('Kayıt güncellendi', 'success');
+      } catch (err) {
+        console.error('[analiz] düzenleme hatası:', err);
+        if (window._analizShowToast) window._analizShowToast('Güncelleme başarısız', 'error');
+      }
+    },
+
+    gorselAc(kayit) {
+      // Güncel kayıtlar Firebase Storage URL'i (gorselUrl/yetkinlikBelgeUrl) yazıyor;
+      // gorselBase64/yetkinlikBelgesiBase64 yalnızca base64 döneminden kalma eski
+      // kayıtlar için geriye dönük uyumluluk amacıyla tutuluyor.
+      this.gorselModal = kayit.gorselUrl || kayit.gorselBase64
+                       || kayit.yetkinlikBelgeUrl || kayit.yetkinlikBelgesiBase64
+                       || null;
+    },
+
+    // ═════════════════════════════════════════════════════
+    // FAZ 2: DÖF Modal — Çözüldü geçişi
+    // ═════════════════════════════════════════════════════
+    dofModaliAc(kayit) {
+      this.dofModal = {
+        acik:          true,
+        kayit,
+        aksiyon:       kayit.dofAksiyon       || '',
+        sorumlu:       kayit.dofSorumlu       || '',
+        yedekParca:    kayit.yedekParca       || '',
+        bakimMaliyeti: kayit.bakimMaliyeti != null ? String(kayit.bakimMaliyeti) : '',
+        kaydediliyor:  false,
+      };
+    },
+    dofKapat() {
+      if (this.dofModal.kaydediliyor) return;
+      this.dofModal.acik = false;
+    },
+    async dofOnayla() {
+      const m = this.dofModal;
+      if (!m.kayit || m.kaydediliyor) return;
+      const aksiyon = (m.aksiyon || '').trim();
+      const sorumlu = (m.sorumlu || '').trim();
+      if (!aksiyon || !sorumlu) {
+        if (window._analizShowToast) window._analizShowToast('Aksiyon ve sorumlu zorunludur', 'warning');
+        return;
+      }
+      const bakimMaliyeti = parseFloat((m.bakimMaliyeti || '').toString().replace(',', '.')) || 0;
+
+      m.kaydediliyor = true;
+      try {
+        const ref = window._analizDoc(window._analizDb, 'ekipman_loglari', m.kayit._id);
+        const patch = {
+          durum:            'Çalışıyor',     // Çözüldü → ekipman tekrar sağlam kabul
+          basarisizSayisi:  0,
+          kirmiziEtiket:    false,
+          dofAksiyon:       aksiyon,
+          dofSorumlu:       sorumlu,
+          dofKapanmaTarihi: new Date().toISOString().slice(0, 10),
+          yedekParca:       (m.yedekParca || '').trim(),
+          bakimMaliyeti,
+          sonGuncelleme:    window._analizServerTs(),
+        };
+        await window._analizUpdateDoc(ref, patch);
+        // Optimistic local mirror
+        Object.assign(m.kayit, patch);
+        // Trend grafiği için kondisyon puanı yansısın
+        this.grafikleriGuncelle();
+        if (window._analizShowToast) window._analizShowToast('DÖF kaydedildi, durum "Çözüldü"', 'success');
+        m.acik = false;
+      } catch (err) {
+        console.error('[analiz] DÖF kaydet hatası:', err);
+        if (window._analizShowToast) window._analizShowToast('Kayıt başarısız: ' + (err?.message || 'hata'), 'error');
+      } finally {
+        m.kaydediliyor = false;
+      }
+    },
+
+    // Hızlı durum değiştirici — "Çözüldü"yse DÖF modalı aç
+    durumDegistir(kayit, yeniDurum) {
+      if (yeniDurum === 'cozuldu') {
+        this.dofModaliAc(kayit);
+      }
+    },
+
+    // ═════════════════════════════════════════════════════
+    // FAZ 2: Kondisyon Trend (seçili ekipman / tür için)
+    // ═════════════════════════════════════════════════════
+    get kondisyonSecenekleri() {
+      // Filtreli loglardan benzersiz ekipman ID'leri (en sık görüleni üste alan basit sıra)
+      const map = new Map();
+      for (const l of this.logFiltreli) {
+        const id = l.ekipmanId || ('tur:' + (l.ekipmanTuruId || ''));
+        const ad = l.ekipmanAdi || l.ekipmanTuruAdi || 'Bilinmeyen';
+        if (!id) continue;
+        const cur = map.get(id) || { id, ad, sayi: 0 };
+        cur.sayi++;
+        map.set(id, cur);
+      }
+      return [...map.values()]
+        .sort((a, b) => b.sayi - a.sayi)
+        .slice(0, 50);
+    },
+
+    _kondisyonOlustur() {
+      const ctx = document.getElementById('chKondisyon');
+      if (!ctx) return;
+
+      // Hangi ekipmanın trendi? Seçili yoksa en çok loglu olanı al
+      let secimId = this.kondisyonEkipmanId;
+      if (!secimId) {
+        const ilk = this.kondisyonSecenekleri[0];
+        if (!ilk) {
+          if (chartInstances.kondisyon) { chartInstances.kondisyon.data.labels = []; chartInstances.kondisyon.data.datasets[0].data = []; chartInstances.kondisyon.update(); }
+          return;
+        }
+        secimId = ilk.id;
+      }
+
+      // Seçilen ID'ye ait log seti — kronolojik
+      const eslesen = this.logFiltreli.filter(l => {
+        const id = l.ekipmanId || ('tur:' + (l.ekipmanTuruId || ''));
+        return id === secimId && l._tsDate;
+      }).sort((a, b) => a._tsMs - b._tsMs);
+
+      const labels = eslesen.map(l => l._tsDate.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit' }));
+      const data   = eslesen.map(l => _kondisyonPuanFromLog(l));
+
+      if (!chartInstances.kondisyon) {
+        chartInstances.kondisyon = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Kondisyon Puanı (0–100)',
+              data,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16,185,129,.12)',
+              fill: true, tension: .3, borderWidth: 2,
+              pointBackgroundColor: data.map(v => v === 100 ? '#10b981' : v === 50 ? '#f59e0b' : '#ef4444'),
+              pointRadius: 5, pointHoverRadius: 7,
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (c) => {
+                    const v = c.parsed.y;
+                    const lbl = v === 100 ? 'İyi' : v === 50 ? 'Orta' : v === 0 ? 'Kötü' : v + '';
+                    return `Durum: ${lbl} (${v})`;
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                min: 0, max: 100,
+                ticks: {
+                  stepSize: 50,
+                  callback: (v) => v === 100 ? 'İyi' : v === 50 ? 'Orta' : v === 0 ? 'Kötü' : v
+                },
+                grid: { color: '#f1f5f9' }
+              },
+              x: { grid: { display: false } }
+            }
+          }
+        });
+      } else {
+        chartInstances.kondisyon.data.labels           = labels;
+        chartInstances.kondisyon.data.datasets[0].data = data;
+        chartInstances.kondisyon.data.datasets[0].pointBackgroundColor =
+          data.map(v => v === 100 ? '#10b981' : v === 50 ? '#f59e0b' : '#ef4444');
+        chartInstances.kondisyon.update();
+      }
+    },
+
+    // ── FAZ 2: En Çok Maliyet Çıkaran 5 Ekipman (Bar Chart) ──
+    // bakimMaliyeti alanı dolu olan tüm logları ekipman bazında topla,
+    // azalan sırayla TOP 5'i göster. Renk: yüksek=koyu kırmızı, düşük=açık.
+    _maliyetOlustur() {
+      const ctx = document.getElementById('chMaliyet');
+      if (!ctx) return;
+
+      const sumByEkipman = new Map();          // key: ekipmanId | tur:turId → { ad, toplam }
+      for (const l of this.logFiltreli) {
+        const tutar = parseFloat(l.bakimMaliyeti) || 0;
+        if (tutar <= 0) continue;
+        const id = l.ekipmanId || ('tur:' + (l.ekipmanTuruId || ''));
+        const ad = l.ekipmanAdi || l.ekipmanTuruAdi || 'Bilinmeyen';
+        if (!id) continue;
+        const cur = sumByEkipman.get(id) || { ad, toplam: 0 };
+        cur.toplam += tutar;
+        cur.ad = ad;       // son güncelliği koru
+        sumByEkipman.set(id, cur);
+      }
+      const sortlu = Array.from(sumByEkipman.values())
+                          .sort((a, b) => b.toplam - a.toplam)
+                          .slice(0, 5);
+      const labels = sortlu.map(x => x.ad);
+      const data   = sortlu.map(x => x.toplam);
+      const max    = Math.max(...data, 1);
+      const colors = data.map(v => {
+        const t = v / max;
+        const r = 239, g = Math.round(180 - 130 * t), b = Math.round(180 - 150 * t);
+        return `rgba(${r},${g},${b},0.85)`;
+      });
+
+      if (!chartInstances.maliyet) {
+        chartInstances.maliyet = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Bakım Maliyeti (TL)',
+              data,
+              backgroundColor: colors,
+              borderRadius: 6,
+              borderSkipped: false,
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (c) => {
+                    const v = Number(c.parsed.x || 0);
+                    return v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: { callback: (v) => Number(v).toLocaleString('tr-TR') + ' ₺' },
+                grid: { color: '#f1f5f9' }
+              },
+              y: { grid: { display: false } }
+            }
+          }
+        });
+      } else {
+        chartInstances.maliyet.data.labels                       = labels;
+        chartInstances.maliyet.data.datasets[0].data             = data;
+        chartInstances.maliyet.data.datasets[0].backgroundColor  = colors;
+        chartInstances.maliyet.update();
+      }
+    },
+
+    // ═════════════════════════════════════════════════════
+    // FAZ 3: Operatör Yetkinlik Onayı
+    // Admin "Onayla" der → users/{operatorUid}.yetkinlikler dizisine
+    // ekipmanTuruId arrayUnion ile eklenir + log'taki yetkinlikEksik=false.
+    // ═════════════════════════════════════════════════════
+    async yetkinlikOnayla(kayit) {
+      if (!kayit?._id || !kayit.operatorUid || !kayit.ekipmanTuruId) {
+        if (window._analizShowToast) window._analizShowToast('Onaylanamadı: operatör veya ekipman türü eksik', 'warning');
+        return;
+      }
+      const ad = kayit.operatorAdi || kayit.operatorEmail || 'Operatör';
+      const tur = kayit.ekipmanTuruAdi || kayit.ekipmanTuruId;
+      if (!confirm(`${ad} kullanıcısına "${tur}" ekipman yetkinliği EKLENECEK.\n\nDevam edilsin mi?`)) return;
+
+      try {
+        // 1) users/{uid}.yetkinlikler arrayUnion(turId)
+        const userRef = window._analizDoc(window._analizDb, 'users', kayit.operatorUid);
+        await window._analizUpdateDoc(userRef, {
+          yetkinlikler: window._analizArrayUnion(kayit.ekipmanTuruId)
+        });
+
+        // 2) Log'taki yetkinlikEksik bayrağını temizle + denetim izi
+        const logRef = window._analizDoc(window._analizDb, 'ekipman_loglari', kayit._id);
+        await window._analizUpdateDoc(logRef, {
+          yetkinlikEksik:    false,
+          yetkinlikOnaylayan: this.user?.uid || null,
+          yetkinlikOnayTar:   window._analizServerTs(),
+          sonGuncelleme:      window._analizServerTs(),
+        });
+
+        // Optimistic UI
+        kayit.yetkinlikEksik = false;
+
+        if (window._analizShowToast) window._analizShowToast(`✅ ${ad} → "${tur}" yetkinliği onaylandı`, 'success');
+      } catch (err) {
+        console.error('[analiz] yetkinlik onay hatası:', err);
+        if (window._analizShowToast) window._analizShowToast('Onay başarısız: ' + (err?.message || 'hata'), 'error');
+      }
+    },
+
+    // ─── Excel Export ──────────────────────────────────
+    async excelIndir() {
+      if (!this.logFiltreli.length) return;
+      // Lazy: SheetJS sadece Excel ihtiyacı oluştuğunda yüklenir
+      if (typeof XLSX === 'undefined' && window.loadScript) {
+        try {
+          await window.loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+        } catch (e) { console.warn('[analiz] SheetJS lazy load hatası:', e); }
+      }
+      if (typeof XLSX === 'undefined') {
+        alert('Excel kütüphanesi yüklenemedi.');
+        return;
+      }
+
+      const rows = this.logFiltreli.map(l => ({
+        'Tarih':              l._tsDate ? l._tsDate.toLocaleString('tr-TR') : '',
+        'Operatör':           l.operatorAdi || '',
+        'E-posta':            l.operatorEmail || '',
+        'Vardiya':            l.vardiya || '',
+        'Blok':               l.blokAd || '',
+        'Bölge':              l.bolgeAd || '',
+        'Ekipman Türü':       l.ekipmanTuruAdi || '',
+        'Ekipman':            l.ekipmanAdi || '',
+        'Durum':              l.durum || '',
+        'Başarısız Madde':    l.basarisizSayisi || 0,
+        'Öncelik':            l.oncelik || 'Normal',
+        'Kırmızı Etiket':     l.kirmiziEtiket ? 'EVET' : 'Hayır',
+        'Görsel Var':         l.gorselVar ? 'EVET' : 'Hayır',
+        'Açıklama':           l.aciklama || '',
+        /* FAZ 2: DÖF + Yedek Parça + Maliyet */
+        'DÖF Aksiyon':        l.dofAksiyon || '',
+        'DÖF Sorumlu':        l.dofSorumlu || '',
+        'DÖF Kapanma':        l.dofKapanmaTarihi || '',
+        'Yedek Parça':        l.yedekParca || '',
+        'Bakım Maliyeti (TL)': l.bakimMaliyeti != null ? l.bakimMaliyeti : '',
+        /* FAZ 3: Operatör Yetkinlik */
+        'Yetkinlik Eksik':    l.yetkinlikEksik ? 'EVET' : 'Hayır',
+        'Yetkinlik Belge Adı': l.yetkinlikBelgesiAdi || ''
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      // Kolon genişlikleri (orijinal 14 + FAZ2(5) + FAZ3(2) = 21)
+      ws['!cols'] = [
+        { wch:18 },{ wch:22 },{ wch:26 },{ wch:10 },{ wch:12 },{ wch:14 },
+        { wch:18 },{ wch:18 },{ wch:12 },{ wch:10 },{ wch:10 },{ wch:14 },
+        { wch:10 },{ wch:40 },
+        { wch:36 },{ wch:20 },{ wch:12 },{ wch:24 },{ wch:14 },
+        { wch:14 },{ wch:24 }
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ekipman Loglari');
+
+      const tarih = new Date().toISOString().slice(0,10);
+      XLSX.writeFile(wb, `ekipman-analiz-${tarih}.xlsx`);
+    },
+
+    // ─── AI Insight ────────────────────────────────────
+    async aiOzetIste() {
+      if (this.aiYukleniyor || this.logFiltreli.length === 0) return;
+      this.aiYukleniyor = true;
+      this.aiCevap = '';
+      this.aiHata  = '';
+
+      // Payload için sadeleştirilmiş log seti (gereksiz alanları çıkar)
+      const orneklem = this.logFiltreli.slice(0, 100).map(l => ({
+        ts:              l._tsDate ? l._tsDate.toISOString() : null,
+        vardiya:         l.vardiya,
+        blokAd:          l.blokAd,
+        bolgeAd:         l.bolgeAd,
+        ekipmanTuruAdi:  l.ekipmanTuruAdi,
+        ekipmanAdi:      l.ekipmanAdi,
+        durum:           l.durum,
+        basarisizSayisi: l.basarisizSayisi,
+        oncelik:         l.oncelik,
+        kirmiziEtiket:   l.kirmiziEtiket
+      }));
+
+      const soru = `Bu veriler ne anlatıyor? Aşağıdaki 4 başlıkta KISA, maddeli (bullet) yönetim özeti üret:
+1) Genel tablo (toplam kontrol / arıza / kırmızı etiket)
+2) En sorunlu 1–2 ekipman türü ve bölge
+3) Vardiya bazında risk uyarısı
+4) Yöneticiye 2 somut aksiyon önerisi`;
+
+      try {
+        const res = await fetch('../api/gemini-chat.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode:   'insight',   // Backend yönetici özeti promptunu seçer
+            soru,
+            loglar: orneklem
+          })
+        });
+
+        const raw = await res.text();
+        let data = null;
+        try { data = JSON.parse(raw); }
+        catch (pe) {
+          console.error('[analiz] AI JSON parse başarısız. HTTP:', res.status, '\nHam yanıt:', raw.substring(0, 300));
+          this.aiHata = `Sunucu geçersiz yanıt döndürdü (HTTP ${res.status}). Detay konsolda.`;
+          return;
+        }
+        if (!res.ok) {
+          this.aiHata = data?.error || `HTTP ${res.status} hatası`;
+          return;
+        }
+        this.aiCevap = data.cevap || 'Yanıt boş geldi.';
+      } catch (e) {
+        this.aiHata = 'Bağlantı hatası: ' + e.message;
+      } finally {
+        this.aiYukleniyor = false;
+      }
+    },
+
+    aiFormatla(metin) {
+      if (!metin) return '';
+      return String(metin)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^\s*[-•]\s+(.+)$/gm, '<div style="padding-left:14px;position:relative;"><span style="position:absolute;left:0;color:#4f46e5;">•</span>$1</div>')
+        .replace(/\n{2,}/g, '<br><br>')
+        .replace(/\n/g, '<br>');
+    },
+
+    // ─── Yardımcılar ───────────────────────────────────
+    _dateToInput(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const g = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${g}`;
+    },
+
+    tarihFormat(d) {
+      if (!d) return '—';
+      return d.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit', year:'2-digit' })
+           + ' ' + d.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
+    }
+  };
+}
+</script>
+
+<!-- Layout render -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof renderLayout === 'function') renderLayout('../');
+  });
+</script>
+
+</body>
+</html>

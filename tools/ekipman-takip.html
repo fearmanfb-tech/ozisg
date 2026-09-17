@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Ekipman Takip & Kontrol | ozisg.com</title>
+  <link rel="stylesheet" href="../css/master.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Html5Qrcode lazy yüklenir (qrEkipmanBaslat çağrılınca) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script defer src="../js/layout.js"></script>
+  <style>
+    [x-cloak]       { display: none !important; }
+    .step-line      { flex:1; height:2px; min-width:16px; transition:background .3s; }
+    .no-scroll::-webkit-scrollbar { display:none; }
+    .no-scroll      { -ms-overflow-style:none; scrollbar-width:none; }
+    #qr-ekipman video { border-radius: 12px; }
+
+    /* Soru cevap butonları */
+    .cevap-btn {
+      flex:1; min-width:0;
+      padding:10px 12px;
+      border-radius:12px;
+      border:2px solid #e5e7eb;
+      background:#fff;
+      font-size:13px; font-weight:600;
+      color:#64748b;
+      transition:all .12s;
+      cursor:pointer;
+    }
+    .cevap-btn:hover { border-color:#93c5fd; background:#f0f9ff; }
+    .cevap-btn.pozitif.secili {
+      border-color:#10b981; background:#10b981; color:#fff;
+      box-shadow:0 3px 12px rgba(16,185,129,.25);
+    }
+    .cevap-btn.negatif.secili {
+      border-color:#ef4444; background:#ef4444; color:#fff;
+      box-shadow:0 3px 12px rgba(239,68,68,.25);
+    }
+    .cevap-btn.notr.secili {
+      border-color:#6b7280; background:#6b7280; color:#fff;
+    }
+
+    /* Slide-over chat panel — transform-tabanlı, Tailwind transition class'larına bağımsız */
+    .chat-panel {
+      position:fixed; top:0; right:0; bottom:0;
+      width: min(420px, 100vw);
+      z-index:60;
+      display:flex; flex-direction:column;
+      background:#fff;
+      box-shadow:-8px 0 40px rgba(0,0,0,.18);
+      transform: translateX(100%);
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+      will-change: transform;
+    }
+    .chat-panel.open { transform: translateX(0); }
+    .chat-backdrop {
+      position:fixed; inset:0; z-index:55;
+      background: rgba(0,0,0,.45);
+      opacity:0; pointer-events:none;
+      transition: opacity .2s;
+    }
+    .chat-backdrop.open { opacity:1; pointer-events:auto; }
+
+    /* Lokasyon/tür kartları */
+    .sec-kart {
+      border:2px solid #e5e7eb; border-radius:14px;
+      padding:14px 12px; background:#fff;
+      transition:all .15s; cursor:pointer;
+      text-align:center;
+    }
+    .sec-kart:hover { border-color:#93c5fd; background:#f0f9ff; transform:translateY(-1px); }
+    .sec-kart.secili {
+      border-color:#2563eb; background:#eff6ff;
+      box-shadow:0 6px 18px rgba(37,99,235,.15);
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+<div id="nav-placeholder"></div>
+
+<!-- Yükleniyor -->
+<div id="page-loading" class="flex items-center justify-center min-h-screen">
+  <div class="text-center text-gray-400">
+    <div class="animate-spin w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm">Yükleniyor…</p>
+  </div>
+</div>
+
+<!-- Yetkisiz -->
+<div id="auth-gate" style="display:none;" class="flex items-center justify-center min-h-screen">
+  <div class="text-center bg-white rounded-2xl shadow p-10 max-w-sm mx-4">
+    <div class="text-5xl mb-4">🔒</div>
+    <h2 class="text-lg font-bold text-gray-800 mb-2">Erişim Kısıtlı</h2>
+    <p class="text-sm text-gray-500">Bu aracı kullanmak için giriş yapmanız ve yetkili olmanız gerekiyor.</p>
+    <a href="../login.html" class="mt-5 inline-block bg-blue-600 text-white rounded-xl px-6 py-2.5 font-semibold text-sm">Giriş Yap</a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ANA İÇERİK
+════════════════════════════════════════════════════ -->
+<main id="main-content" style="display:none;"
+      x-data="EkipmanApp()" x-init="baslat()" x-cloak
+      class="max-w-7xl mx-auto px-4 pt-24 pb-24 min-h-screen">
+
+  <nav class="ekp-tabs" aria-label="Ekipman Sistemi Navigasyonu">
+    <a href="ekipman-takip.html" class="ekp-tab ekp-tab-active">📋 Takip</a>
+    <a href="ekipman-analiz.html" class="ekp-tab">📊 Analiz</a>
+    <a href="ekipman-qr-basim.html" class="ekp-tab">🏷️ QR Basım</a>
+    <a href="ekipman-ayarlar.html" class="ekp-tab">⚙️ Ayarlar</a>
+  </nav>
+
+  <!-- Ayar hatası -->
+  <div x-show="ayarHatasi"
+       class="mb-5 bg-red-50 border border-red-300 rounded-xl p-4 text-sm text-red-700">
+    <div class="font-bold mb-1">⚠️ Sistem Yapılandırması Eksik</div>
+    <p x-text="ayarHatasi"></p>
+    <a x-show="adminMi" href="ekipman-ayarlar.html"
+       class="inline-block mt-2 bg-red-600 text-white rounded-lg px-3 py-1 text-xs font-semibold hover:bg-red-700">
+      ⚙️ Ayarlara Git
+    </a>
+  </div>
+
+  <!-- Üst Bilgi: Sayfa başlığı + Vardiya rozeti (Analiz/QR/Ayarlar linkleri artık üstteki ortak .ekp-tabs navigasyonunda) -->
+  <div x-show="!tamamlandi"
+       class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+          <h1 class="text-2xl font-bold text-gray-900">Ekipman Takip & Kontrol</h1>
+          <p class="text-sm text-gray-500">Günlük ekipman denetim sistemi</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2 bg-white p-1.5 pr-3 rounded-xl shadow-sm border border-gray-100">
+            <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Vardiya</span>
+              <select x-model="vardiya" class="text-xs font-bold text-gray-800 bg-transparent border-none p-0 pr-6 focus:ring-0 cursor-pointer outline-none w-24">
+                <option value="Gündüz">Gündüz</option>
+                <option value="Akşam">Akşam</option>
+                <option value="Gece">Gece</option>
+              </select>
+            </div>
+          </div>
+      </div>
+  </div>
+
+  <!-- Adım Göstergesi -->
+  <div x-show="!tamamlandi && !ayarHatasi"
+       class="flex items-center justify-center mb-8 gap-0">
+    <template x-for="(lbl, i) in adimlar" :key="i">
+      <div class="flex items-center">
+        <div class="flex flex-col items-center">
+          <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all shadow-sm"
+               :class="adim === i+1 ? 'bg-blue-600 text-white ring-4 ring-blue-100 scale-110'
+                      : adim > i+1  ? 'bg-green-500 text-white'
+                      :                'bg-white border-2 border-gray-200 text-gray-400'">
+            <span x-show="adim <= i+1" x-text="i+1"></span>
+            <span x-show="adim > i+1" class="text-sm">✓</span>
+          </div>
+          <span class="text-xs mt-1.5 font-medium hidden sm:block"
+                :class="adim === i+1 ? 'text-blue-600' : adim > i+1 ? 'text-green-600' : 'text-gray-400'"
+                x-text="lbl"></span>
+        </div>
+        <div x-show="i < adimlar.length - 1"
+             class="step-line mx-2 sm:mx-3"
+             :class="adim > i+1 ? 'bg-green-400' : 'bg-gray-200'"></div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       ADIM 1 — LOKASYON (Blok → Bölge)
+  ═════════════════════════════════════════════════════ -->
+  <div x-show="adim === 1 && !tamamlandi">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <h2 class="text-lg font-bold text-gray-800 mb-1">📍 Lokasyon Seç</h2>
+      <p class="text-sm text-gray-400 mb-5">Önce blok, sonra bölge seçin.</p>
+
+      <!-- Blok seçimi -->
+      <div class="mb-5">
+        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          1. Blok
+        </label>
+        <div x-show="cfg.lokasyonlar.length === 0"
+             class="text-center py-6 text-gray-400 text-sm bg-gray-50 rounded-xl border border-dashed border-gray-200">
+          Henüz blok tanımlı değil. Yöneticinizden ayarlamasını isteyin.
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+          <template x-for="b in cfg.lokasyonlar" :key="b.id">
+            <button @click="secBlok(b.id)"
+                    :class="seciliBlokId === b.id ? 'sec-kart secili' : 'sec-kart'">
+              <div class="text-2xl mb-1">🏗️</div>
+              <div class="text-sm font-semibold text-gray-700" x-text="b.ad"></div>
+              <div class="text-xs text-gray-400 mt-0.5">
+                <span x-text="(b.bolgeler?.length || 0) + ' bölge'"></span>
+              </div>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Bölge seçimi -->
+      <div x-show="seciliBlok" class="mb-5">
+        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          2. Bölge
+        </label>
+        <div x-show="(seciliBlok?.bolgeler || []).length === 0"
+             class="text-center py-5 text-gray-400 text-sm bg-amber-50 rounded-xl border border-amber-200">
+          Bu blokta henüz bölge tanımlı değil.
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+          <template x-for="bo in (seciliBlok?.bolgeler || [])" :key="bo.id">
+            <button @click="seciliBolgeId = bo.id"
+                    :class="seciliBolgeId === bo.id ? 'sec-kart secili' : 'sec-kart'">
+              <div class="text-xl mb-1">📌</div>
+              <div class="text-sm font-semibold text-gray-700" x-text="bo.ad"></div>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Devam butonu -->
+      <div class="flex items-center gap-3 pt-4 border-t border-gray-100">
+        <div x-show="!seciliBolgeId" class="flex-1 text-sm text-amber-600">
+          👉 Devam etmek için blok ve bölge seçin.
+        </div>
+        <div x-show="seciliBolgeId" class="flex-1 text-sm text-green-700 font-semibold">
+          ✅ <span x-text="seciliBlok?.ad"></span> / <span x-text="seciliBolge?.ad"></span>
+        </div>
+        <button @click="adim = 2"
+                :disabled="!seciliBolgeId"
+                class="bg-blue-600 text-white rounded-xl px-6 py-2.5 font-bold text-sm disabled:opacity-30 hover:bg-blue-700 transition">
+          Devam →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       ADIM 2 — EKİPMAN TÜRÜ (+ opsiyonel QR)
+  ═════════════════════════════════════════════════════ -->
+  <div x-show="adim === 2 && !tamamlandi">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+      <!-- Sol: Tür kartları -->
+      <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="mb-4">
+          <h2 class="text-lg font-bold text-gray-800">🏭 Ekipman Türünü Seçin</h2>
+          <p class="text-sm text-gray-400 mt-0.5">
+            <span class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+              📍 <span x-text="seciliBlok?.ad + ' / ' + seciliBolge?.ad"></span>
+            </span>
+          </p>
+        </div>
+
+        <div x-show="cfg.ekipmanTurleri.length === 0"
+             class="text-center py-10 text-gray-400 text-sm bg-gray-50 rounded-xl border border-dashed border-gray-200">
+          Henüz ekipman türü tanımlı değil.
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <template x-for="t in cfg.ekipmanTurleri" :key="t.id">
+            <button @click="secTur(t.id)"
+                    :class="seciliTurId === t.id ? 'sec-kart secili' : 'sec-kart'"
+                    class="py-5">
+              <div class="text-3xl mb-1.5" x-text="t.ikon || '📦'"></div>
+              <div class="text-sm font-semibold text-gray-800" x-text="t.ad"></div>
+              <div class="text-xs text-gray-400 mt-1">
+                <span x-text="(t.checklistMaddeler?.length || 0) + ' madde'"></span>
+              </div>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Sağ: Opsiyonel QR + Devam -->
+      <div class="space-y-4">
+
+        <!-- Opsiyonel QR -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div class="mb-3">
+            <h3 class="font-bold text-gray-800 text-sm">📷 Spesifik Ekipman (İsteğe Bağlı)</h3>
+            <p class="text-xs text-gray-400 mt-0.5">Ekipman QR kodu varsa taratın, yoksa bu adımı atlayın.</p>
+          </div>
+
+          <div id="qr-ekipman"
+               class="w-full rounded-xl overflow-hidden bg-gray-50 border-2 border-dashed border-blue-200 mb-3"
+               style="min-height:180px;"></div>
+
+          <div x-show="!qrEkipmanAktif" class="mb-2">
+            <button @click="qrEkipmanBaslat()"
+                    class="w-full border-2 border-dashed border-blue-300 text-blue-600 rounded-xl py-2.5 font-semibold hover:bg-blue-50 transition text-xs">
+              📷 QR Tara
+            </button>
+          </div>
+          <div x-show="qrEkipmanAktif" class="mb-2">
+            <button @click="qrEkipmanDurdur()"
+                    class="w-full bg-red-50 text-red-500 border border-red-200 rounded-xl py-2 font-semibold text-xs hover:bg-red-100 transition">
+              ✕ Durdur
+            </button>
+          </div>
+
+          <div class="flex gap-2">
+            <input x-model="manuelId" type="text" placeholder="ID manuel (EKP-0042)"
+                   @keyup.enter="ekipmanGetir(manuelId)"
+                   class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-400">
+            <button @click="ekipmanGetir(manuelId)"
+                    class="bg-blue-50 text-blue-600 border border-blue-200 rounded-xl px-3 text-xs font-semibold hover:bg-blue-100 transition">Ara</button>
+          </div>
+
+          <!-- Bulunan ekipman -->
+          <div x-show="ekipman && ekipman.durum !== 'Kilitli'"
+               class="mt-3 bg-green-50 border border-green-200 rounded-xl p-3 text-xs">
+            <div class="font-bold text-green-700 mb-1">
+              ✅ <span x-text="ekipman?.adi"></span>
+            </div>
+            <div class="text-gray-600">
+              <div>ID: <span class="font-mono" x-text="ekipman?.id"></span></div>
+              <div>Durum: <span class="font-semibold" x-text="ekipman?.durum || '—'"></span></div>
+            </div>
+            <button @click="ekipman = null; manuelId = ''"
+                    class="mt-2 text-xs text-gray-500 hover:text-gray-700">Kaldır ✕</button>
+          </div>
+
+          <!-- Kilitli uyarı -->
+          <div x-show="ekipman && ekipman.durum === 'Kilitli'"
+               class="mt-3 bg-red-50 border-2 border-red-400 rounded-xl p-3">
+            <div class="font-bold text-red-700 text-xs mb-0.5">🚫 KİLİTLİ — KULLANIM YASAK</div>
+            <p class="text-xs text-red-600">Bu ekipmana kırmızı etiket uygulanmış. Teknik onay gerekir.</p>
+            <button @click="ekipman = null; manuelId = ''"
+                    class="mt-2 w-full bg-gray-100 text-gray-700 rounded-lg py-1.5 text-xs font-semibold">
+              Başka Ekipman
+            </button>
+          </div>
+        </div>
+
+        <!-- Devam -->
+        <button @click="kontroleBasla()"
+                :disabled="!seciliTurId || (ekipman && ekipman.durum === 'Kilitli')"
+                class="w-full bg-blue-600 text-white rounded-xl py-3.5 font-bold text-sm disabled:opacity-30 hover:bg-blue-700 transition">
+          Kontrole Başla →
+        </button>
+        <button @click="adim = 1"
+                class="w-full text-sm text-gray-400 hover:text-gray-600 transition">
+          ← Geri (Lokasyon)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       ADIM 3 — CHECKLIST (Dinamik Soru Tipleri)
+  ═════════════════════════════════════════════════════ -->
+  <div x-show="adim === 3 && !tamamlandi">
+
+    <!-- ── FAZ 3: Yetkinlik Soft-Warning Bandı ────────────
+         Form ENGELLENMEZ — sadece bilgi verilir + opsiyonel sertifika upload.
+         Profilde users/{uid}.yetkinlikler dizisinde seciliTurId yoksa açılır. -->
+    <div x-show="yetkinlikEksik" x-cloak
+         class="mb-5 bg-amber-50 border border-amber-300 rounded-2xl p-4">
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl">⚠️</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-amber-900 text-sm mb-1">Yetkinlik Tanımlanmamış</div>
+          <p class="text-xs text-amber-800 leading-relaxed">
+            Bu ekipman türü (<b x-text="seciliTur?.ad || '—'"></b>) için profil yetkinliğiniz kayıtlı değil.
+            Forma devam edebilirsiniz; ancak <b>aşağıdan belgenizi yükleyebilirsiniz</b> (PDF/Foto).
+            Admin paneli bu kaydı "Yetkinlik Onayı Bekliyor" olarak işaretleyecek.
+          </p>
+
+          <!-- Sertifika upload (sadece eksik durumunda) -->
+          <div class="mt-3 flex items-center gap-2 flex-wrap">
+            <label class="inline-flex items-center gap-2 cursor-pointer bg-white border border-amber-300 hover:bg-amber-100 rounded-xl px-3 py-2 text-xs font-bold text-amber-800 transition">
+              📎 Yetkinlik Belgesi Yükle (Fotoğraf)
+              <input type="file" accept="image/*" class="hidden"
+                     @change="yetkinlikBelgesiSec($event)">
+            </label>
+            <span x-show="yetkinlikBelgesiBase64" class="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+              ✓ <span x-text="yetkinlikBelgesiAdi || 'Belge yüklendi'"></span>
+              <button type="button" @click="yetkinlikBelgesiKaldir()"
+                      class="text-red-500 hover:text-red-700 ml-1">✕</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+      <!-- Sol: Özet kartı -->
+      <div class="lg:col-span-1">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sticky top-4">
+          <h3 class="font-bold text-gray-700 text-sm uppercase tracking-wide mb-4">Kontrol Edilen</h3>
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+              <span x-text="seciliTur?.ikon || '📦'"></span>
+            </div>
+            <div>
+              <div class="font-bold text-gray-800 leading-tight" x-text="ekipman?.adi || seciliTur?.ad"></div>
+              <div class="text-xs text-gray-500 mt-0.5" x-text="ekipman?.id ? ('ID: ' + ekipman.id) : 'Tür bazlı kontrol'"></div>
+            </div>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-500">Blok</span>
+              <span class="font-semibold text-gray-800" x-text="seciliBlok?.ad"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Bölge</span>
+              <span class="font-semibold text-gray-800" x-text="seciliBolge?.ad"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Vardiya</span>
+              <span class="font-semibold text-gray-800" x-text="vardiya"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">İlerleme</span>
+              <span class="font-bold text-blue-600" x-text="kontrolDurumu()"></span>
+            </div>
+          </div>
+
+          <!-- Progress bar -->
+          <div class="mt-4 h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-500"
+                 :class="basarisizSorular().length > 0 ? 'bg-red-400' : 'bg-green-400'"
+                 :style="`width:${kontrolYuzdesi()}%`"></div>
+          </div>
+
+          <!-- Öncelik (arıza varsa) -->
+          <div x-show="basarisizSorular().length > 0"
+               class="mt-4 bg-red-50 border border-red-200 rounded-xl p-3 text-sm">
+            <div class="font-semibold text-red-700 mb-2">Arıza Önceliği</div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <template x-for="p in ['Normal','Yüksek','Kritik']" :key="p">
+                <button @click="oncelik = p"
+                        :class="{
+                          'bg-yellow-400 border-yellow-400 text-white': oncelik === p && p === 'Normal',
+                          'bg-orange-500 border-orange-500 text-white': oncelik === p && p === 'Yüksek',
+                          'bg-red-600   border-red-600   text-white':   oncelik === p && p === 'Kritik',
+                          'border-gray-200 text-gray-600 hover:border-gray-400': oncelik !== p
+                        }"
+                        class="border-2 rounded-lg py-1.5 text-xs font-semibold transition" x-text="p">
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <button @click="adim = 2"
+                  class="mt-5 w-full text-sm text-gray-400 hover:text-gray-600 transition text-center">
+            ← Geri
+          </button>
+        </div>
+      </div>
+
+      <!-- Sağ: Soru listesi -->
+      <div class="lg:col-span-2 flex flex-col gap-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
+            <h2 class="text-lg font-bold text-gray-800">📋 Kontrol Listesi</h2>
+            <span class="text-xs bg-gray-100 text-gray-500 rounded-full px-3 py-1"
+                  x-text="cevaplar.filter(c => c.cevap !== null).length + ' / ' + cevaplar.length + ' tamamlandı'">
+            </span>
+          </div>
+
+          <div x-show="cevaplar.length === 0"
+               class="text-center py-10 text-gray-400 text-sm">
+            Bu tür için kontrol maddesi tanımlı değil.
+          </div>
+
+          <div class="space-y-3">
+            <template x-for="(c, idx) in cevaplar" :key="c.id">
+              <div class="border rounded-xl p-4 transition-all"
+                   :class="c.cevap === null ? 'border-gray-100 bg-gray-50'
+                          : c.basarisiz ? 'border-red-200 bg-red-50'
+                          :              'border-green-200 bg-green-50'">
+
+                <!-- Başlık -->
+                <div class="flex items-start gap-3 mb-3">
+                  <span class="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-xs font-bold text-gray-500"
+                        x-text="idx + 1"></span>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm text-gray-800 leading-snug" x-text="c.baslik"></div>
+                    <div class="text-xs text-gray-400 mt-0.5">
+                      <span x-text="soruTipiLabel(c.tip)"></span>
+                    </div>
+                  </div>
+                  <div x-show="c.cevap !== null"
+                       class="text-xs font-bold flex-shrink-0"
+                       :class="c.basarisiz ? 'text-red-600' : 'text-green-600'">
+                    <span x-show="c.basarisiz">✕ <span x-text="c.cevapLabel"></span></span>
+                    <span x-show="!c.basarisiz">✓ <span x-text="c.cevapLabel"></span></span>
+                  </div>
+                </div>
+
+                <!-- evet_hayir -->
+                <template x-if="c.tip === 'evet_hayir'">
+                  <div class="flex gap-2">
+                    <button @click="cevapVer(c, 'Evet', false)"
+                            :class="['cevap-btn','pozitif', c.cevap==='Evet' ? 'secili':'']">
+                      ✅ Evet
+                    </button>
+                    <button @click="cevapVer(c, 'Hayır', true)"
+                            :class="['cevap-btn','negatif', c.cevap==='Hayır' ? 'secili':'']">
+                      ❌ Hayır
+                    </button>
+                  </div>
+                </template>
+
+                <!-- var_yok -->
+                <template x-if="c.tip === 'var_yok'">
+                  <div class="flex gap-2">
+                    <button @click="cevapVer(c, 'Var', false)"
+                            :class="['cevap-btn','pozitif', c.cevap==='Var' ? 'secili':'']">
+                      📦 Var
+                    </button>
+                    <button @click="cevapVer(c, 'Yok', true)"
+                            :class="['cevap-btn','negatif', c.cevap==='Yok' ? 'secili':'']">
+                      🚫 Yok
+                    </button>
+                  </div>
+                </template>
+
+                <!-- kapsam_disi -->
+                <template x-if="c.tip === 'kapsam_disi'">
+                  <div class="flex gap-2 flex-wrap sm:flex-nowrap">
+                    <button @click="cevapVer(c, 'Uygun', false)"
+                            :class="['cevap-btn','pozitif', c.cevap==='Uygun' ? 'secili':'']">
+                      ✅ Uygun
+                    </button>
+                    <button @click="cevapVer(c, 'Uygun Değil', true)"
+                            :class="['cevap-btn','negatif', c.cevap==='Uygun Değil' ? 'secili':'']">
+                      ❌ Uygun Değil
+                    </button>
+                    <button @click="cevapVer(c, 'Kapsam Dışı', false)"
+                            :class="['cevap-btn','notr', c.cevap==='Kapsam Dışı' ? 'secili':'']">
+                      ➖ Kapsam Dışı
+                    </button>
+                  </div>
+                </template>
+
+                <!-- Başarısızsa not -->
+                <div x-show="c.basarisiz" class="mt-3">
+                  <input x-model="c.not" type="text"
+                         placeholder="Kısa açıklama (isteğe bağlı)…"
+                         class="w-full text-xs border border-red-200 rounded-lg px-3 py-2 bg-white outline-none focus:ring-1 focus:ring-red-400">
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Genel açıklama -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Genel Açıklama (opsiyonel)</label>
+          <textarea x-model="genelAciklama" rows="2"
+                    placeholder="Ek gözlemlerinizi yazın…"
+                    class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none outline-none focus:ring-2 focus:ring-blue-400"></textarea>
+        </div>
+
+        <!-- Devam -->
+        <button @click="adim = 4"
+                :disabled="!kontrolTamamMi()"
+                class="w-full bg-blue-600 text-white rounded-2xl py-4 font-bold text-base disabled:opacity-30 disabled:cursor-not-allowed transition hover:bg-blue-700 shadow">
+          <span x-text="basarisizSorular().length > 0 ? '⚠️ Arıza Detayı & Fotoğraf →' : '✅ Temiz — Özete Geç →'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       ADIM 4 — ÖZET / FOTOĞRAF / GÖNDER
+  ═════════════════════════════════════════════════════ -->
+  <div x-show="adim === 4 && !tamamlandi">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+      <!-- Sol: Özet -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-bold text-gray-800 mb-5">📋 Kontrol Özeti</h2>
+        <div class="space-y-0 text-sm divide-y divide-gray-100">
+          <div class="flex justify-between py-3">
+            <span class="text-gray-500">Blok / Bölge</span>
+            <span class="font-semibold text-gray-800" x-text="seciliBlok?.ad + ' / ' + seciliBolge?.ad"></span>
+          </div>
+          <div class="flex justify-between py-3">
+            <span class="text-gray-500">Ekipman Türü</span>
+            <span class="font-semibold text-gray-800" x-text="(seciliTur?.ikon || '') + ' ' + (seciliTur?.ad || '')"></span>
+          </div>
+          <div x-show="ekipman" class="flex justify-between py-3">
+            <span class="text-gray-500">Spesifik Ekipman</span>
+            <span class="font-semibold text-gray-800" x-text="(ekipman?.adi || '') + ' (' + (ekipman?.id || '') + ')'"></span>
+          </div>
+          <div class="flex justify-between py-3">
+            <span class="text-gray-500">Vardiya</span>
+            <span class="font-semibold text-gray-800" x-text="vardiya"></span>
+          </div>
+          <div class="flex justify-between py-3">
+            <span class="text-gray-500">Sonuç</span>
+            <span class="font-bold"
+                  :class="basarisizSorular().length > 0 ? 'text-red-600' : 'text-green-600'"
+                  x-text="basarisizSorular().length > 0 ? '⚠️ ' + basarisizSorular().length + ' Arıza' : '✅ Temiz'"></span>
+          </div>
+          <div x-show="basarisizSorular().length > 0" class="flex justify-between py-3">
+            <span class="text-gray-500">Öncelik</span>
+            <span class="font-semibold"
+                  :class="{'text-yellow-600':oncelik==='Normal','text-orange-600':oncelik==='Yüksek','text-red-700':oncelik==='Kritik'}"
+                  x-text="oncelik"></span>
+          </div>
+          <div x-show="gorsel" class="flex justify-between py-3">
+            <span class="text-gray-500">Fotoğraf</span>
+            <span class="text-blue-600 font-semibold" x-text="'📷 ' + (gorsel?.boyutKB || 0) + ' KB'"></span>
+          </div>
+        </div>
+
+        <!-- Başarısız sorular -->
+        <div x-show="basarisizSorular().length > 0"
+             class="mt-5 bg-red-50 border border-red-200 rounded-xl p-4">
+          <div class="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">Başarısız Kontroller</div>
+          <ul class="space-y-1.5">
+            <template x-for="c in basarisizSorular()" :key="c.id">
+              <li class="flex items-start gap-2 text-sm text-red-700">
+                <span class="mt-0.5 flex-shrink-0">✕</span>
+                <span>
+                  <span x-text="c.baslik"></span>
+                  <span class="text-red-400 text-xs font-semibold"> — <span x-text="c.cevapLabel"></span></span>
+                  <span x-show="c.not" class="text-red-400 text-xs"> • <span x-text="c.not"></span></span>
+                </span>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Sağ: Fotoğraf + Kırmızı Etiket + Gönder -->
+      <div class="flex flex-col gap-4">
+
+        <!-- Fotoğraf (arıza varsa zorunlu) -->
+        <div x-show="basarisizSorular().length > 0"
+             class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-gray-800 text-sm">
+              📷 Arıza Fotoğrafı
+              <span class="text-red-500 font-normal">(zorunlu)</span>
+            </h3>
+            <span x-show="gorsel" class="text-xs text-green-600 font-semibold">✓ Çekildi</span>
+          </div>
+
+          <div class="relative mb-3">
+            <video x-ref="kameraVideo" autoplay playsinline muted
+                   class="w-full rounded-xl bg-black object-cover"
+                   style="max-height:260px;"
+                   x-show="kameraAktif && !gorsel"></video>
+            <img x-show="gorsel" :src="gorsel?.base64"
+                 class="w-full rounded-xl object-cover" style="max-height:260px;">
+            <div x-show="!kameraAktif && !gorsel"
+                 class="flex flex-col items-center justify-center gap-2 py-10 border-2 border-dashed border-gray-200 rounded-xl">
+              <span class="text-3xl">📷</span>
+              <p class="text-xs text-gray-400">Kamerayı açın</p>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div x-show="!kameraAktif && !gorsel">
+              <button @click="kameraAc()"
+                      class="w-full bg-blue-600 text-white rounded-xl py-2.5 font-bold text-sm hover:bg-blue-700 transition">
+                📷 Kamerayı Aç
+              </button>
+            </div>
+            <div x-show="kameraAktif && !gorsel" class="grid grid-cols-2 gap-2">
+              <button @click="fotografCek()" class="bg-blue-600 text-white rounded-xl py-2.5 font-bold text-sm">📸 Çek</button>
+              <button @click="kameraKapat()" class="bg-gray-100 text-gray-600 rounded-xl py-2.5 font-semibold text-sm">İptal</button>
+            </div>
+            <div x-show="gorsel">
+              <button @click="gorsel = null; kameraAc()"
+                      class="w-full bg-gray-100 text-gray-700 rounded-xl py-2 font-semibold text-sm">
+                🔄 Yeniden Çek
+              </button>
+            </div>
+          </div>
+          <canvas x-ref="kameraCanvas" style="display:none;"></canvas>
+        </div>
+
+        <!-- Kırmızı Etiket (arıza varsa göster) -->
+        <div x-show="basarisizSorular().length > 0"
+             class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <label class="flex items-start gap-3 cursor-pointer select-none">
+            <input type="checkbox" x-model="kirmiziEtiket"
+                   class="mt-0.5 w-5 h-5 accent-red-600 cursor-pointer">
+            <div>
+              <div class="font-semibold text-sm text-gray-800">🏷️ Kırmızı Etiket Uygula</div>
+              <div class="text-xs text-gray-400 mt-0.5">
+                Ekipman Firestore'da "Kilitli" olur, teknik ekip onayına kadar kullanılamaz.
+                <span x-show="!ekipman" class="text-amber-600 block mt-1">
+                  ⚠ Kırmızı etiket için spesifik ekipman ID gerekir (Adım 2'den QR tarayın).
+                </span>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <!-- Hata -->
+        <div x-show="hata"
+             class="bg-orange-50 border border-orange-300 rounded-xl p-3 text-orange-700 text-sm"
+             x-text="hata"></div>
+
+        <!-- Gönder -->
+        <button @click="gonder()"
+                :disabled="gonderiliyor || !gonderilebilirMi()"
+                class="w-full py-4 rounded-2xl font-bold text-white text-base transition shadow-md disabled:opacity-40"
+                :class="kirmiziEtiket ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'">
+          <span x-show="!gonderiliyor"
+                x-text="kirmiziEtiket ? '🏷️ Kırmızı Etiket ile Gönder' : (basarisizSorular().length > 0 ? '⚠️ Arıza Raporu Gönder' : '✅ Raporu Gönder')">
+          </span>
+          <span x-show="gonderiliyor" class="flex items-center justify-center gap-2">
+            <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Gönderiliyor…
+          </span>
+        </button>
+
+        <button @click="adim = 3"
+                class="w-full text-sm text-gray-400 hover:text-gray-600 transition py-1 text-center">
+          ← Geri (Kontrol Listesi)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       TAMAMLANDI
+  ═════════════════════════════════════════════════════ -->
+  <div x-show="tamamlandi" class="text-center py-20 px-4">
+    <div class="text-7xl mb-5"
+         x-text="kirmiziEtiket ? '🏷️' : (basarisizSorular().length > 0 ? '⚠️' : '✅')"></div>
+    <h2 class="text-2xl font-bold text-gray-800 mb-2"
+        x-text="kirmiziEtiket ? 'Kırmızı Etiket Uygulandı!' : (basarisizSorular().length > 0 ? 'Arıza Bildirildi!' : 'Kontrol Tamamlandı!')"></h2>
+    <p class="text-gray-500 mb-1"
+       x-text="(seciliTur?.ad || '') + ' — ' + (seciliBlok?.ad || '') + ' / ' + (seciliBolge?.ad || '') + ' / ' + vardiya"></p>
+    <p x-show="kirmiziEtiket" class="text-red-600 text-sm mb-1">Ekipman kilitlendi, teknik ekip bilgilendirildi.</p>
+    <p class="text-gray-400 text-xs mb-10">Power Automate bildirimleri gönderildi.</p>
+
+    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <button @click="yeniden()" class="px-8 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-2xl transition">
+            Yeni Kontrol Yap
+        </button>
+        <a href="ekipman-analiz.html" class="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg shadow-blue-200 transition flex items-center justify-center gap-2">
+            Raporları İncele
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+        </a>
+    </div>
+  </div>
+
+  <!-- AI CHAT aşağıda, main dışında bağımsız Alpine scope'da -->
+</main>
+
+<!-- ════════════════════════════════════════════════════
+     AI CHAT — BAĞIMSIZ ALPINE SCOPE
+     (main'den tamamen ayrı — adım değişimleri etkilemez)
+═════════════════════════════════════════════════════ -->
+<div x-data="ChatApp()" x-init="baslat()" x-cloak>
+
+  <!-- Backdrop -->
+  <div class="chat-backdrop"
+       :class="acik ? 'open' : ''"
+       @click="kapat()"></div>
+
+  <!-- FAB -->
+  <button @click="ac()"
+          x-show="!acik"
+          class="fixed bottom-6 right-5 z-50 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+          style="background:linear-gradient(135deg,#4f46e5,#7c3aed);"
+          title="AI İSG Asistanı">
+    <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+    </svg>
+    <span class="absolute top-0.5 right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white animate-pulse"></span>
+  </button>
+
+  <!-- Slide-over Panel -->
+  <div class="chat-panel" :class="acik ? 'open' : ''">
+
+    <!-- Başlık -->
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white text-base flex-shrink-0"
+             style="background:linear-gradient(135deg,#4f46e5,#7c3aed);">🤖</div>
+        <div>
+          <div class="font-bold text-gray-800 text-sm">AI İSG Asistanı</div>
+          <div class="text-xs text-green-500 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 bg-green-500 rounded-full inline-block"></span>
+            Ekipman logları analiz modu
+          </div>
+        </div>
+      </div>
+      <button @click="kapat()"
+              class="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mesajlar -->
+    <div x-ref="mesajListesi" class="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      <div x-show="mesajlar.length === 0" class="text-center text-gray-400 text-sm py-12">
+        <div class="text-5xl mb-3">🤖</div>
+        <p class="font-medium text-gray-600 mb-1">Ekipman logları hakkında soru sor!</p>
+        <p class="text-xs">Tüm Firestore verilerini otomatik analiz eder.</p>
+      </div>
+
+      <template x-for="(m, i) in mesajlar" :key="i">
+        <div :class="m.rol === 'user' ? 'flex justify-end' : 'flex justify-start gap-2'">
+          <div x-show="m.rol !== 'user'"
+               class="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
+               :class="m.rol === 'hata' ? 'bg-red-100' : 'bg-indigo-100'">
+            <span x-text="m.rol === 'hata' ? '⚠️' : '🤖'"></span>
+          </div>
+          <div class="max-w-[85%] text-sm px-4 py-2.5 rounded-2xl leading-relaxed"
+               :class="{
+                 'bg-indigo-600 text-white rounded-br-sm': m.rol === 'user',
+                 'bg-gray-100 text-gray-800 rounded-bl-sm': m.rol === 'ai',
+                 'bg-red-50 text-red-700 border border-red-200 rounded-bl-sm': m.rol === 'hata'
+               }"
+               x-html="formatla(m.metin)"></div>
+        </div>
+      </template>
+
+      <div x-show="yaziyor" class="flex justify-start gap-2">
+        <div class="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">🤖</div>
+        <div class="bg-gray-100 rounded-2xl rounded-bl-sm px-4 py-3">
+          <div class="flex gap-1 items-center">
+            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:0ms"></div>
+            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:150ms"></div>
+            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay:300ms"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hızlı sorular -->
+    <div x-show="mesajlar.length === 0"
+         class="px-4 pb-3 flex gap-2 overflow-x-auto no-scroll flex-shrink-0">
+      <template x-for="s in hizliSorular" :key="s">
+        <button @click="soru = s; chatGonder()"
+                class="whitespace-nowrap text-xs border rounded-full px-3 py-1.5 transition flex-shrink-0 hover:bg-indigo-100"
+                style="background:#eef2ff;color:#4f46e5;border-color:#c7d2fe;">
+          <span x-text="s"></span>
+        </button>
+      </template>
+    </div>
+
+    <!-- Giriş -->
+    <div class="px-4 pt-2 pb-5 border-t border-gray-100 flex-shrink-0">
+      <div class="flex gap-2 items-end">
+        <textarea x-model="soru"
+                  @keydown.enter.prevent="!$event.shiftKey && chatGonder()"
+                  rows="1"
+                  placeholder="Sorunuzu yazın… (Enter = gönder)"
+                  :disabled="yaziyor"
+                  class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
+                  style="max-height:80px;"></textarea>
+        <button @click="chatGonder()"
+                :disabled="!soru.trim() || yaziyor"
+                class="w-10 h-10 rounded-xl flex items-center justify-center text-white transition disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                style="background:linear-gradient(135deg,#4f46e5,#7c3aed);">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.269 20.876L5.999 12zm0 0h7.5"/>
+          </svg>
+        </button>
+      </div>
+      <p class="text-xs text-gray-300 mt-1.5 text-center">Shift+Enter yeni satır • Enter gönder</p>
+    </div>
+  </div>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     1. SENKRON INLINE — Promise'ler ERKEN kurulmalı
+════════════════════════════════════════════════════ -->
+<script>
+  window._ekReady         = new Promise(function(r){ window.__ekReadyResolve = r; });
+  window._ekSettingsReady = new Promise(function(r){ window.__ekSettingsResolve = r; });
+</script>
+
+<!-- ═══════════════════════════════════════════════════
+     2. FİREBASE BRIDGE (module scope)
+════════════════════════════════════════════════════ -->
+<script type="module">
+  import { requireToolAccess, db, showToast } from '../js/app.js';
+  import { app } from '../js/firebase-config.js';
+  import {
+    doc, getDoc, updateDoc, addDoc, setDoc,
+    collection, serverTimestamp,
+    getDocs, query, orderBy, limit
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+  // GÖREV 3: Firebase Storage standardizasyonu — base64 KALDIRILDI
+  import {
+    getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
+
+  const _ekStorage = getStorage(app);
+
+  // Bridge'e Storage upload helper'ı ekle
+  async function _ekUploadGorsel(blob, uid, name) {
+    const safe = (name || 'gorsel').replace(/[^\w.\-]+/g, '_');
+    const path = `ekipman/${uid}/${Date.now()}_${safe}`;
+    const ref  = storageRef(_ekStorage, path);
+    const snap = await uploadBytes(ref, blob, { contentType: blob.type || 'image/jpeg' });
+    const url  = await getDownloadURL(snap.ref);
+    return { url, path };
+  }
+  async function _ekDeleteGorsel(path) {
+    if (!path) return;
+    try { await deleteObject(storageRef(_ekStorage, path)); } catch (_) {}
+  }
+
+  window._ekBridge = {
+    db, showToast, doc, getDoc, updateDoc, addDoc, setDoc, collection, serverTimestamp,
+    uploadGorsel: _ekUploadGorsel,
+    deleteGorsel: _ekDeleteGorsel,
+  };
+
+  window._ekGetLogs = () => getDocs(
+    query(collection(db, 'ekipman_loglari'), orderBy('ts', 'desc'), limit(80))
+  );
+
+  // Ayarlar
+  (async () => {
+    try {
+      const snap = await getDoc(doc(db, 'settings_ekipman', 'config'));
+      window.__ekSettingsResolve(snap.exists() ? snap.data() : null);
+    } catch (e) {
+      console.error('[ekipman] settings hatası:', e);
+      window.__ekSettingsResolve(null);
+    }
+  })();
+
+  // Auth + yetki + rol
+  (async () => {
+    try {
+      const user = await requireToolAccess('tool_ekipman', {
+        loadingEl:  'page-loading',
+        authGateEl: 'auth-gate',
+        mainEl:     'main-content'
+      });
+      if (!user) { window.__ekReadyResolve(null); return; }
+      let rol = 'user';
+      let yetkinlikler = [];        // FAZ 3: Operatörün yetkinlik aldığı ekipman türü ID'leri
+      try {
+        const uSnap = await getDoc(doc(db, 'users', user.uid));
+        if (uSnap.exists()) {
+          const ud = uSnap.data() || {};
+          rol = ud.role || ud.rol || 'user';
+          // Şema: users/{uid}.yetkinlikler = ['turId1', 'turId2', ...]
+          if (Array.isArray(ud.yetkinlikler)) yetkinlikler = ud.yetkinlikler;
+        }
+      } catch (_) {}
+      window.__ekReadyResolve({ user, rol, yetkinlikler });
+    } catch (e) {
+      console.error('[ekipman] auth hatası:', e);
+      window.__ekReadyResolve(null);
+    }
+  })();
+</script>
+
+<!-- ═══════════════════════════════════════════════════
+     3. ALPINE COMPONENT
+════════════════════════════════════════════════════ -->
+<script>
+function EkipmanApp() {
+  return {
+
+    // ── State ──────────────────────────────────────────
+    user:          null,
+    adminMi:       false,
+    adim:          1,
+    adimlar:       ['Lokasyon', 'Ekipman Türü', 'Kontrol Listesi', 'Gönder'],
+    vardilar: [
+      { ad: 'Gece',   ikon: '🌙', saat: '00:00–08:00' },
+      { ad: 'Gündüz', ikon: '☀️', saat: '08:00–16:00' },
+      { ad: 'Akşam',  ikon: '🌆', saat: '16:00–00:00' }
+    ],
+    vardiya: '',
+    ayarHatasi: null,
+
+    // Config (Firestore settings_ekipman/config)
+    cfg: { lokasyonlar: [], ekipmanTurleri: [], webhookUrl: '', systemPrompt: '' },
+
+    // Seçimler
+    seciliBlokId:   '',
+    seciliBolgeId:  '',
+    seciliTurId:    '',
+    seciliBlok:     null,  // reactive pointer
+    seciliBolge:    null,
+    seciliTur:      null,
+
+    // Spesifik ekipman (opsiyonel)
+    ekipman:        null,
+    manuelId:       '',
+    qrEkipmanAktif: false,
+    _qrEkipman:     null,
+
+    // Cevaplar
+    cevaplar:       [],
+    genelAciklama:  '',
+    oncelik:        'Normal',
+
+    // Kamera / fotoğraf
+    kameraAktif:   false,
+    _camStream:    null,
+    gorsel:        null,
+
+    // Gönder
+    kirmiziEtiket: false,
+    gonderiliyor:  false,
+    tamamlandi:    false,
+    hata:          null,
+
+    // ── FAZ 3: Operatör Yetkinlik (Soft-Warning) ──────
+    yetkinlikler:           [],     // Kullanıcının profil yetkinlik dizisi (ekipmanTuruId[])
+    yetkinlikEksik:         false,  // Seçilen ekipman türü için yetkinlik yok mu?
+    yetkinlikBelgesiBase64: '',     // Eksikse opsiyonel sertifika fotoğrafı
+    yetkinlikBelgesiAdi:    '',     // Görüntülenen dosya adı
+
+    // ── Başlat ────────────────────────────────────────
+    async baslat() {
+      const auth = await window._ekReady;
+      if (!auth) return;
+      this.user         = auth.user;
+      this.adminMi      = auth.rol === 'admin' || auth.rol === 'superadmin';
+      this.yetkinlikler = Array.isArray(auth.yetkinlikler) ? auth.yetkinlikler : [];
+
+      this.vardiya = this._otomatikVardiya();
+
+      const cfg = await window._ekSettingsReady;
+      if (!cfg) {
+        this.ayarHatasi = 'Sistem yapılandırması bulunamadı (settings_ekipman/config). Yöneticinizden "Ekipman Ayarları" üzerinden kurulum yapmasını isteyin.';
+        return;
+      }
+
+      // Normalize
+      this.cfg = {
+        webhookUrl:   cfg.webhookUrl   || '',
+        systemPrompt: cfg.systemPrompt || '',
+        lokasyonlar:  Array.isArray(cfg.lokasyonlar)
+          ? cfg.lokasyonlar.map(b => ({
+              id: b.id, ad: b.ad,
+              bolgeler: Array.isArray(b.bolgeler) ? b.bolgeler : []
+            }))
+          : [],
+        ekipmanTurleri: Array.isArray(cfg.ekipmanTurleri)
+          ? cfg.ekipmanTurleri.map(t => ({
+              id: t.id, ad: t.ad, ikon: t.ikon || '📦',
+              checklistMaddeler: Array.isArray(t.checklistMaddeler) ? t.checklistMaddeler : []
+            }))
+          : []
+      };
+
+      if (!this.cfg.webhookUrl) {
+        this.ayarHatasi = 'Webhook URL yapılandırılmamış. Sistem Ayarları\'ndan ekleyin.';
+      } else if (this.cfg.lokasyonlar.length === 0) {
+        this.ayarHatasi = 'Henüz lokasyon tanımlanmamış. Ayarlardan blok/bölge ekleyin.';
+      } else if (this.cfg.ekipmanTurleri.length === 0) {
+        this.ayarHatasi = 'Henüz ekipman türü tanımlanmamış. Ayarlardan ekipman türü ekleyin.';
+      }
+
+      // Reactive pointer watcher'ları
+      this.$watch('seciliBlokId', (id) => {
+        this.seciliBlok  = id ? this.cfg.lokasyonlar.find(b => b.id === id) || null : null;
+        this.seciliBolgeId = ''; // blok değiştiğinde bölge sıfırla
+      });
+      this.$watch('seciliBolgeId', (id) => {
+        this.seciliBolge = (id && this.seciliBlok)
+          ? (this.seciliBlok.bolgeler || []).find(b => b.id === id) || null
+          : null;
+      });
+      this.$watch('seciliTurId', (id) => {
+        this.seciliTur = id ? this.cfg.ekipmanTurleri.find(t => t.id === id) || null : null;
+        // FAZ 3: Yetkinlik kontrolü — admin/superadmin/saha_sefi her zaman muaf
+        if (!id || this.adminMi) {
+          this.yetkinlikEksik = false;
+        } else {
+          this.yetkinlikEksik = !this.yetkinlikler.includes(id);
+        }
+      });
+
+      // Adım 2'ye girince spesifik ekipman QR'ı durdur (pasif)
+      this.$watch('adim', async (yeni, eski) => {
+        if (eski === 2) await this.qrEkipmanDurdur();
+        if (yeni === 4 && this.basarisizSorular().length > 0 && !this.gorsel) {
+          await this.$nextTick();
+          this.kameraAc();
+        }
+        if (yeni !== 4) this.kameraKapat();
+      });
+    },
+
+    // ── Vardiya ───────────────────────────────────────
+    _otomatikVardiya() {
+      const h = new Date().getHours();
+      if (h >= 0  && h < 8)  return 'Gece';
+      if (h >= 8  && h < 16) return 'Gündüz';
+      return 'Akşam';
+    },
+
+    // ── Seçiciler ─────────────────────────────────────
+    secBlok(id) {
+      this.seciliBlokId = id;
+    },
+    secTur(id) {
+      this.seciliTurId = id;
+    },
+
+    // ── Spesifik Ekipman (QR opsiyonel) ───────────────
+    // FIX: Alpine x-show div'i gizlerken html5-qrcode çöküyor.
+    //      Önce state'i aktif et → $nextTick ile DOM güncellensin → setTimeout ile
+    //      layout stabilleşsin → sonra start() çağrısı yap.
+    async qrEkipmanBaslat() {
+      if (this._qrEkipman || this.qrEkipmanAktif) return;
+      // Lazy: Html5Qrcode kütüphanesi sadece QR taraması istendiğinde yüklenir
+      if (typeof Html5Qrcode === 'undefined' && window.loadScript) {
+        try {
+          await window.loadScript('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js');
+        } catch (e) { console.warn('[ekipman] Html5Qrcode lazy load hatası:', e); }
+      }
+      if (typeof Html5Qrcode === 'undefined') {
+        try { window._ekBridge.showToast('QR kütüphanesi yüklenemedi.', 'error'); } catch(_){}
+        return;
+      }
+      this.qrEkipmanAktif = true;           // Önce UI'yi güncelle
+      await this.$nextTick();                // Alpine'in DOM'u yeniden render etmesini bekle
+      await new Promise(r => setTimeout(r, 80));  // Layout stabilleşsin
+
+      const el = document.getElementById('qr-ekipman');
+      if (!el || !el.offsetParent) {
+        // Div hâlâ gizli (display:none) → başlatma
+        this.qrEkipmanAktif = false;
+        return;
+      }
+      try {
+        this._qrEkipman = new Html5Qrcode('qr-ekipman');
+        await this._qrEkipman.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 180, height: 180 } },
+          (decoded) => { this.qrEkipmanDurdur(); this.ekipmanGetir(decoded); },
+          (_errMsg) => { /* tarama sürecindeki okuma hataları — sessiz */ }
+        );
+      } catch (e) {
+        this._qrEkipman = null;
+        this.qrEkipmanAktif = false;
+        try { window._ekBridge.showToast('Kamera açılamadı: ' + e.message, 'error'); } catch(_) {}
+        console.warn('[ekipman] QR başlatılamadı:', e);
+      }
+    },
+
+    async qrEkipmanDurdur() {
+      const inst = this._qrEkipman;
+      this._qrEkipman = null;
+      this.qrEkipmanAktif = false;
+      if (!inst) return;
+      try {
+        // isScanning false iken stop() çağırmak exception fırlatır
+        if (inst.isScanning) await inst.stop();
+      } catch (e) {
+        console.warn('[ekipman] QR stop:', e.message);
+      }
+      try { inst.clear(); } catch (_) {}
+    },
+
+    async ekipmanGetir(id) {
+      const trimmed = (id || '').trim();
+      if (!trimmed) return;
+      await this.qrEkipmanDurdur();
+      try {
+        const { db, doc, getDoc } = window._ekBridge;
+        const snap = await getDoc(doc(db, 'ekipmanlar', trimmed));
+        if (!snap.exists()) {
+          try { window._ekBridge.showToast('Ekipman bulunamadı: ' + trimmed, 'error'); } catch(_) {}
+          return;
+        }
+        this.ekipman = { id: snap.id, ...snap.data() };
+        // Tür eşleşmesi
+        if (this.ekipman.turId) {
+          const tur = this.cfg.ekipmanTurleri.find(t => t.id === this.ekipman.turId);
+          if (tur) this.seciliTurId = tur.id;
+        } else if (this.ekipman.tur) {
+          const tur = this.cfg.ekipmanTurleri.find(t => t.ad.toLowerCase() === String(this.ekipman.tur).toLowerCase());
+          if (tur) this.seciliTurId = tur.id;
+        }
+      } catch (e) {
+        console.error('[ekipman] getir hatası:', e);
+        try { window._ekBridge.showToast('Firestore hatası: ' + e.message, 'error'); } catch(_) {}
+      }
+    },
+
+    // ── Kontrole Başla (Adım 2 → 3) ───────────────────
+    kontroleBasla() {
+      if (!this.seciliTurId) return;
+      if (this.ekipman && this.ekipman.durum === 'Kilitli') return;
+      const tur = this.cfg.ekipmanTurleri.find(t => t.id === this.seciliTurId);
+      if (!tur) return;
+      // Soruları build et
+      this.cevaplar = (tur.checklistMaddeler || []).map(m => ({
+        id:         m.id,
+        baslik:     m.baslik,
+        tip:        m.tip || 'evet_hayir',
+        cevap:      null,       // string (Evet / Hayır / Var / …)
+        cevapLabel: '',
+        basarisiz:  false,
+        not:        ''
+      }));
+      this.genelAciklama = '';
+      this.oncelik       = 'Normal';
+      this.gorsel        = null;
+      this.kirmiziEtiket = false;
+      this.adim = 3;
+    },
+
+    // ── Cevap Ver ─────────────────────────────────────
+    cevapVer(soru, cevap, basarisiz) {
+      soru.cevap      = cevap;
+      soru.cevapLabel = cevap;
+      soru.basarisiz  = !!basarisiz;
+      if (!basarisiz) soru.not = '';
+    },
+
+    // ── Yardımcılar ───────────────────────────────────
+    soruTipiLabel(tip) {
+      if (tip === 'evet_hayir')  return 'Evet / Hayır sorusu';
+      if (tip === 'var_yok')     return 'Var / Yok sorusu';
+      if (tip === 'kapsam_disi') return 'Uygun / Uygun Değil / Kapsam Dışı';
+      return tip || '';
+    },
+
+    basarisizSorular() {
+      return this.cevaplar.filter(c => c.basarisiz === true);
+    },
+
+    kontrolTamamMi() {
+      return this.cevaplar.length > 0 && this.cevaplar.every(c => c.cevap !== null);
+    },
+
+    kontrolDurumu() {
+      const t = this.cevaplar.length;
+      const b = this.cevaplar.filter(c => c.cevap !== null).length;
+      return `${b}/${t}`;
+    },
+
+    kontrolYuzdesi() {
+      const t = this.cevaplar.length;
+      if (!t) return 0;
+      return Math.round(this.cevaplar.filter(c => c.cevap !== null).length / t * 100);
+    },
+
+    gonderilebilirMi() {
+      // Başarısız varsa fotoğraf zorunlu
+      if (this.basarisizSorular().length > 0 && !this.gorsel) return false;
+      // Kırmızı etiket için spesifik ekipman şart
+      if (this.kirmiziEtiket && !this.ekipman) return false;
+      return true;
+    },
+
+    // ── Kamera / Fotoğraf ─────────────────────────────
+    // FIX: video elementi x-show altında → kameraAktif'i ÖNCE true yap ki element
+    //      görünür olsun, sonra srcObject ata. Aksi halde play() hata verir.
+    async kameraAc() {
+      // Zaten açıksa tekrar açma
+      if (this.kameraAktif || this._camStream) return;
+      this.kameraAktif = true;                     // Video elementi göster
+      await this.$nextTick();                       // Alpine DOM güncellesin
+      await new Promise(r => setTimeout(r, 50));   // Layout stabilleşsin
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        this._camStream = stream;
+        const v = this.$refs.kameraVideo;
+        if (v) {
+          v.srcObject = stream;
+          try { await v.play(); } catch (_) { /* autoplay attribute işini görür */ }
+        }
+      } catch (e) {
+        // İzin reddedildi / cihaz yok → temizlik yap
+        this.kameraAktif = false;
+        if (this._camStream) {
+          try { this._camStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+          this._camStream = null;
+        }
+        try { window._ekBridge.showToast('Kamera erişimi reddedildi: ' + e.message, 'error'); } catch(_) {}
+        console.warn('[ekipman] kameraAc:', e);
+      }
+    },
+
+    fotografCek() {
+      const video  = this.$refs.kameraVideo;
+      const canvas = this.$refs.kameraCanvas;
+      if (!video || !canvas) return;
+      const MAX = 800;
+      let w = video.videoWidth, h = video.videoHeight;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+      const base64  = canvas.toDataURL('image/jpeg', 0.55);
+      const boyutKB = Math.round(base64.length * 3 / 4 / 1024);
+      const tarih   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      this.gorsel = {
+        base64,
+        boyutKB,
+        dosyaAdi: `${this.ekipman?.id || (this.seciliTur?.ad || 'EKP').replace(/\s+/g,'_')}_${tarih}.jpg`
+      };
+      this.kameraKapat();
+    },
+
+    kameraKapat() {
+      if (this._camStream) {
+        this._camStream.getTracks().forEach(t => t.stop());
+        this._camStream = null;
+      }
+      this.kameraAktif = false;
+    },
+
+    // ── FAZ 3: Yetkinlik Belgesi (sertifika fotoğrafı) ────
+    // Canvas ile maksimum 1200px + JPEG 0.7 sıkıştırma → Firestore 1MB sınırı altı.
+    async yetkinlikBelgesiSec(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        try { window._ekBridge.showToast('Sadece fotoğraf yüklenebilir', 'error'); } catch(_){}
+        event.target.value = '';
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        try { window._ekBridge.showToast('Dosya çok büyük (max 10MB)', 'error'); } catch(_){}
+        event.target.value = '';
+        return;
+      }
+      try {
+        const b64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(reader.error);
+          reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+              let { width, height } = img;
+              const maxSize = 1200;
+              if (width > height && width > maxSize) {
+                height = Math.round(height * (maxSize / width)); width = maxSize;
+              } else if (height >= width && height > maxSize) {
+                width  = Math.round(width  * (maxSize / height)); height = maxSize;
+              }
+              const c = document.createElement('canvas');
+              c.width = width; c.height = height;
+              c.getContext('2d').drawImage(img, 0, 0, width, height);
+              resolve(c.toDataURL('image/jpeg', 0.7));
+            };
+            img.onerror = () => reject(new Error('Görsel okunamadı'));
+            img.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+        const boyutKB = Math.round((b64.length * 3 / 4) / 1024);
+        if (boyutKB > 700) {
+          try { window._ekBridge.showToast('Belge sıkıştırma sonrası bile çok büyük', 'error'); } catch(_){}
+          return;
+        }
+        this.yetkinlikBelgesiBase64 = b64;
+        this.yetkinlikBelgesiAdi    = file.name;
+      } catch (e) {
+        console.error('[ekipman] yetkinlik belge hatası:', e);
+        try { window._ekBridge.showToast('Belge işlenemedi', 'error'); } catch(_){}
+      }
+      event.target.value = '';
+    },
+    yetkinlikBelgesiKaldir() {
+      this.yetkinlikBelgesiBase64 = '';
+      this.yetkinlikBelgesiAdi    = '';
+    },
+
+    // ── Payload ───────────────────────────────────────
+    payloadOlustur() {
+      return {
+        meta: {
+          olusturmaTarihi: new Date().toISOString(),
+          vardiya:  this.vardiya,
+          kaynak:   'ozisg-ekipman-takip-v3',
+          operator: {
+            uid:   this.user.uid,
+            ad:    this.user.displayName || this.user.email,
+            email: this.user.email
+          }
+        },
+        lokasyon: {
+          blokId:   this.seciliBlokId,
+          blokAd:   this.seciliBlok?.ad || '',
+          bolgeId:  this.seciliBolgeId,
+          bolgeAd:  this.seciliBolge?.ad || ''
+        },
+        ekipmanTuru: {
+          id:   this.seciliTurId,
+          ad:   this.seciliTur?.ad || '',
+          ikon: this.seciliTur?.ikon || ''
+        },
+        ekipman: this.ekipman ? {
+          id:            this.ekipman.id,
+          adi:           this.ekipman.adi || '',
+          tur:           this.ekipman.tur || '',
+          bolge:         this.ekipman.bolge || '',
+          oncekiDurum:   this.ekipman.durum || '',
+          oncekiVardiya: this.ekipman.sonVardiya || ''
+        } : null,
+        kontrol: {
+          sonuc: this.kirmiziEtiket ? 'KirmiziEtiket'
+               : (this.basarisizSorular().length > 0 ? 'Arıza' : 'Tamam'),
+          oncelik:         this.oncelik,
+          aciklama:        this.genelAciklama,
+          basarisizSayisi: this.basarisizSorular().length,
+          sorular:         this.cevaplar.map(c => ({
+            id:        c.id,
+            baslik:    c.baslik,
+            tip:       c.tip,
+            cevap:     c.cevap,
+            basarisiz: c.basarisiz,
+            not:       c.not || ''
+          }))
+        },
+        gorsel: this.gorsel ? {
+          base64Data: this.gorsel.base64,
+          dosyaAdi:   this.gorsel.dosyaAdi,
+          boyutKB:    this.gorsel.boyutKB
+        } : null,
+        kirmiziEtiket: {
+          aktif:     this.kirmiziEtiket,
+          sebep:     this.kirmiziEtiket
+                     ? `${this.oncelik} seviye arıza — kullanım durduruldu` : '',
+          raporEden: this.user.displayName || this.user.email
+        }
+      };
+    },
+
+    // ── Firestore işlemleri ───────────────────────────
+    async firestoreIsle() {
+      const { db, doc, updateDoc, addDoc, collection, serverTimestamp, uploadGorsel } = window._ekBridge;
+      const basarisiz = this.basarisizSorular().length;
+      const yeniDurum = this.kirmiziEtiket ? 'Kilitli'
+                      : (basarisiz > 0 ? 'Arıza' : 'Çalışıyor');
+
+      // GÖREV 3: Eğer fotoğraf çekildiyse base64 yerine Firebase Storage'a yükle.
+      // Sonrasında Firestore'a sadece URL + Path yazılır → 1MB doc sınırı sorunu YOK.
+      let gorselUrl  = '';
+      let gorselPath = '';
+      if (this.gorsel?.base64 && uploadGorsel) {
+        try {
+          const blob = await (await fetch(this.gorsel.base64)).blob();
+          const id   = this.ekipman?.id || this.seciliTurId || 'kontrol';
+          const name = `${id}.jpg`;
+          const r = await uploadGorsel(blob, this.user.uid, name);
+          gorselUrl  = r.url;
+          gorselPath = r.path;
+        } catch (e) {
+          console.warn('[ekipman] Storage upload başarısız, görselsiz devam:', e?.message || e);
+        }
+      }
+      // Yetkinlik belgesi de aynı şekilde
+      let yetkinlikBelgeUrl = '';
+      let yetkinlikBelgePath = '';
+      if (this.yetkinlikBelgesiBase64 && uploadGorsel) {
+        try {
+          const blob = await (await fetch(this.yetkinlikBelgesiBase64)).blob();
+          const r = await uploadGorsel(blob, this.user.uid, `yetkinlik_${this.yetkinlikBelgesiAdi || 'belge.jpg'}`);
+          yetkinlikBelgeUrl  = r.url;
+          yetkinlikBelgePath = r.path;
+        } catch (e) {
+          console.warn('[ekipman] yetkinlik belgesi upload başarısız:', e?.message || e);
+        }
+      }
+
+      // Spesifik ekipman varsa durumunu güncelle. NOT: bu hata BİLİNÇLİ olarak
+      // yutulmuyor — eğer bu yazma başarısız olur da log kaydı yine de
+      // yazılırsa, ekipmanın canlı durumu (özellikle kirmiziEtiket/kilitleme)
+      // log geçmişiyle senkron dışı kalır ve bu bir güvenlik riski olur
+      // (örn. kilitlenmesi gereken bir ekipman "Çalışıyor" görünmeye devam
+      // eder). Hata yukarıdaki gonder()'ın try/catch'ine yükselip kullanıcıya
+      // gösterilsin ki tekrar denesin.
+      if (this.ekipman?.id) {
+        await updateDoc(doc(db, 'ekipmanlar', this.ekipman.id), {
+          durum:         yeniDurum,
+          sonVardiya:    this.vardiya,
+          sonKontrol:    serverTimestamp(),
+          sonOperator:   this.user.email,
+          kirmiziEtiket: this.kirmiziEtiket
+        });
+      }
+
+      // Log
+      await addDoc(collection(db, 'ekipman_loglari'), {
+        // Operatör
+        operatorUid:     this.user.uid,
+        operatorEmail:   this.user.email,
+        operatorAdi:     this.user.displayName || this.user.email,
+        // Zaman
+        vardiya:         this.vardiya,
+        ts:              serverTimestamp(),
+        // Lokasyon
+        blokId:          this.seciliBlokId,
+        blokAd:          this.seciliBlok?.ad || '',
+        bolgeId:         this.seciliBolgeId,
+        bolgeAd:         this.seciliBolge?.ad || '',
+        // Tür
+        ekipmanTuruId:   this.seciliTurId,
+        ekipmanTuruAdi:  this.seciliTur?.ad || '',
+        // Spesifik ekipman (varsa)
+        ekipmanId:       this.ekipman?.id || null,
+        ekipmanAdi:      this.ekipman?.adi || null,
+        // Sonuç
+        durum:           yeniDurum,
+        basarisizSayisi: basarisiz,
+        oncelik:         this.oncelik,
+        aciklama:        this.genelAciklama,
+        kirmiziEtiket:   this.kirmiziEtiket,
+        gorselVar:       !!gorselUrl,
+        // GÖREV 3: base64 yerine Firebase Storage URL + Path
+        gorselUrl:       gorselUrl,
+        gorselPath:      gorselPath,
+        // Detaylı sorular
+        sorular:         this.cevaplar.map(c => ({
+          id:        c.id,
+          baslik:    c.baslik,
+          tip:       c.tip,
+          cevap:     c.cevap,
+          basarisiz: c.basarisiz,
+          not:       c.not || ''
+        })),
+        // ── FAZ 3: Yetkinlik soft-warning izi (Storage URL'siyle) ──
+        yetkinlikEksik:        !!this.yetkinlikEksik,
+        yetkinlikBelgeUrl:     yetkinlikBelgeUrl,
+        yetkinlikBelgePath:    yetkinlikBelgePath,
+        yetkinlikBelgesiAdi:   this.yetkinlikBelgesiAdi || ''
+      });
+    },
+
+    // ── Gönder ────────────────────────────────────────
+    async gonder() {
+          if (!this.gonderilebilirMi() || this.gonderiliyor) return;
+          this.hata = null;
+          this.gonderiliyor = true;
+
+          try {
+            // 1) RPA İçin Payload Hazırlığı
+            const payload = {
+              zaman:        new Date().toISOString(),
+              kullanici:    this.user?.email || 'Bilinmeyen',
+              vardiya:      this.vardiya,
+              blok:         this.seciliBlokId,
+              bolge:        this.seciliBolgeId,
+              ekipmanTur:   this.seciliTurId,
+              ekipmanId:    this.ekipman?.id || this.manuelId,
+              oncelik:      this.oncelik,
+              kirmiziEtiket:this.kirmiziEtiket,
+              cevaplar:     this.cevaplar,
+              aciklama:     this.genelAciklama,
+              gorsel:       this.gorsel
+            };
+
+            // 2) ÖNCE FİRESTORE'A KAYDET (Her zaman lokal çalışsın)
+            await this.firestoreIsle();
+
+            // 3) POWER AUTOMATE (WEBHOOK) OPSİYONEL TETİKLEME
+            if (this.cfg.webhookUrl && this.cfg.webhookUrl.trim() !== '') {
+              try {
+                const res = await fetch(this.cfg.webhookUrl, {
+                  method:  'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body:    JSON.stringify(payload)
+                });
+                if (!res.ok && res.status !== 202) {
+                  console.warn(`RPA Webhook yanıt vermedi: HTTP ${res.status}`);
+                }
+              } catch (webhookErr) {
+                console.warn('RPA Webhook ağına ulaşılamadı:', webhookErr);
+              }
+            } else {
+              console.info("Webhook tanımlı değil, sadece veritabanına kaydedildi.");
+            }
+
+            // 4) BAŞARIYLA TAMAMLA
+            this.tamamlandi = true;
+            window._ekBridge.showToast(
+              this.kirmiziEtiket ? '🏷️ Kırmızı Etiket uygulandı. Rapor veritabanına işlendi.'
+                                 : '✅ Kontrol raporu başarıyla kaydedildi.',
+              'success'
+            );
+
+          } catch (e) {
+            this.hata = 'Kayıt hatası: ' + e.message;
+            window._ekBridge.showToast(this.hata, 'error');
+          } finally {
+            this.gonderiliyor = false;
+          }
+        },
+
+    // ── Sıfırla ───────────────────────────────────────
+    yeniden() {
+      this.kameraKapat();
+      this.qrEkipmanDurdur();
+      this.adim           = 1;
+      this.seciliBlokId   = '';
+      this.seciliBolgeId  = '';
+      this.seciliTurId    = '';
+      this.ekipman        = null;
+      this.manuelId       = '';
+      this.cevaplar       = [];
+      this.genelAciklama  = '';
+      this.oncelik        = 'Normal';
+      this.gorsel         = null;
+      this.kirmiziEtiket  = false;
+      this.tamamlandi     = false;
+      this.hata           = null;
+      this.vardiya        = this._otomatikVardiya();
+      // FAZ 3 reset
+      this.yetkinlikEksik         = false;
+      this.yetkinlikBelgesiBase64 = '';
+      this.yetkinlikBelgesiAdi    = '';
+    }
+  };
+}
+
+/* ══════════════════════════════════════════════════════
+   AI CHATBOT — Bağımsız Alpine component
+   Ana EkipmanApp'ten tamamen izole. window._ekGetLogs ve
+   window._ekSettingsReady köprüleri üzerinden çalışır.
+══════════════════════════════════════════════════════ */
+function ChatApp() {
+  return {
+    acik:          false,
+    mesajlar:      [],
+    soru:          '',
+    yaziyor:       false,
+    _systemPrompt: '',
+    hizliSorular: [
+      'Bu hafta kaç arıza?',
+      'Kırmızı etiketli ekipmanlar?',
+      'En sorunlu bölge?',
+      'Son kritik arıza ne zaman?'
+    ],
+
+    async baslat() {
+      // systemPrompt'u ayarlardan bir kez çek
+      try {
+        const cfg = await window._ekSettingsReady;
+        this._systemPrompt = cfg?.systemPrompt || '';
+      } catch (_) {}
+    },
+
+    ac()    { this.acik = true;  },
+    kapat() { this.acik = false; },
+
+    async _altaKaydir() {
+      await this.$nextTick();
+      const el = this.$refs.mesajListesi;
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+
+    async chatGonder() {
+      const s = (this.soru || '').trim();
+      if (!s || this.yaziyor) return;
+      this.soru = '';
+      this.mesajlar.push({ rol: 'user', metin: s });
+      this.yaziyor = true;
+      await this._altaKaydir();
+
+      try {
+        // Logları Firestore'dan çek (bridge fonksiyonu)
+        let loglar = [];
+        if (typeof window._ekGetLogs === 'function') {
+          const snap = await window._ekGetLogs();
+          loglar = snap.docs.map(d => {
+            const data = d.data();
+            return { ...data, ts: data.ts?.toDate?.()?.toISOString() ?? null };
+          });
+        }
+
+        const res = await fetch('../api/gemini-chat.php', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            mode: 'chat',   // Backend Depo Ekipman Asistanı promptunu seçer
+            soru: s,
+            loglar
+          })
+        });
+
+        // Ham metni önce oku — JSON olmayan (HTML hata) yanıtlara karşı savunma
+        const rawText = await res.text();
+        let data = null;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.error(
+            '[ChatApp] JSON parse başarısız. HTTP:', res.status,
+            '\nHam yanıt (ilk 300 karakter):',
+            rawText.substring(0, 300)
+          );
+          this.mesajlar.push({
+            rol:   'hata',
+            metin: `Sunucu geçersiz yanıt döndürdü (HTTP ${res.status}). Detay için konsolu kontrol edin.`
+          });
+          return;
+        }
+
+        if (!res.ok) {
+          this.mesajlar.push({
+            rol:   'hata',
+            metin: (data && data.error) ? data.error : `HTTP ${res.status} hatası`
+          });
+          return;
+        }
+
+        this.mesajlar.push({
+          rol:   data.cevap ? 'ai' : 'hata',
+          metin: data.cevap || data.error || 'Yanıt alınamadı.'
+        });
+      } catch (e) {
+        this.mesajlar.push({ rol: 'hata', metin: 'Bağlantı hatası: ' + e.message });
+      } finally {
+        this.yaziyor = false;
+        this._altaKaydir();
+      }
+    },
+
+    formatla(metin) {
+      if (!metin) return '';
+      return String(metin)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^[-•]\s(.+)$/gm, '&bull; $1')
+        .replace(/\n/g, '<br>');
+    }
+  };
+}
+</script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof renderLayout === 'function') renderLayout('../');
+  });
+</script>
+</body>
+</html>

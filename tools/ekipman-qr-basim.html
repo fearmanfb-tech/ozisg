@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ekipman QR Basım | ozisg.com</title>
+  <link rel="stylesheet" href="../css/master.css">
+
+  <!-- Tailwind + Alpine -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+  <!-- QR generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Ortak layout -->
+  <script defer src="../js/layout.js"></script>
+
+  <style>
+    [x-cloak] { display:none !important; }
+
+    /* ══════════════════════════════════════════════
+       EKRAN GÖRÜNÜMÜ — Kart Tasarımı
+    ═══════════════════════════════════════════════ */
+    .qr-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      transition: box-shadow .15s, transform .15s;
+      /* Baskıda sayfa bölünmesini engelle */
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .qr-card:hover {
+      box-shadow: 0 6px 16px rgba(30,41,59,.08);
+      transform: translateY(-1px);
+    }
+
+    .qr-brand {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.08em;
+      text-transform: lowercase;
+    }
+
+    .qr-holder {
+      width: 130px;
+      height: 130px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      background: #fff;
+    }
+    /* qrcodejs ya <canvas> ya da <img> oluşturur — ikisini de esnet */
+    .qr-holder canvas,
+    .qr-holder img {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    .qr-name {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+      text-align: center;
+      line-height: 1.2;
+      margin-top: 4px;
+      word-break: break-word;
+    }
+    .qr-id {
+      font-size: 10px;
+      font-weight: 700;
+      color: #475569;
+      font-family: 'Courier New', monospace;
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+
+    /* ══════════════════════════════════════════════
+       BASKI — @media print
+       A4: 210mm × 297mm, 10mm margin ile çalışma alanı 190mm × 277mm
+       4 sütun × 7 satır = 28 etiket / sayfa
+    ═══════════════════════════════════════════════ */
+    @media print {
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+
+      /* Tüm görsel arka plan/efekt sıfırla */
+      html, body {
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      /* no-print sınıfı: nav, butonlar, header, footer gizli */
+      .no-print { display: none !important; }
+
+      /* Main'in layout padding'ini baskıda kaldır */
+      #main-content {
+        padding: 0 !important;
+        max-width: none !important;
+        min-height: auto !important;
+      }
+
+      /* Print area: sayfaya tam otursun */
+      #print-area {
+        display: block !important;
+        width: 100%;
+      }
+
+      /* Grid 4 sütun — gap minimum */
+      #print-area .qr-grid {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: 3mm !important;
+      }
+
+      /* Kartlar siyah-beyaz, nötr çerçeve */
+      .qr-card {
+        border: 1px solid #000 !important;
+        border-radius: 4px !important;
+        box-shadow: none !important;
+        background: #fff !important;
+        padding: 6px 4px !important;
+        gap: 2px !important;
+        transform: none !important;
+      }
+      .qr-brand { color: #000 !important; font-size: 9px !important; }
+      .qr-name  { color: #000 !important; font-size: 11px !important; margin-top: 2px !important; }
+      .qr-id    { color: #000 !important; font-size: 8px !important; }
+      .qr-holder {
+        width: 38mm !important;
+        height: 38mm !important;
+        padding: 0 !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+<div id="nav-placeholder" class="no-print"></div>
+
+<!-- Yükleniyor -->
+<div id="page-loading" class="flex items-center justify-center min-h-screen">
+  <div class="text-center text-gray-400">
+    <div class="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm">Yükleniyor…</p>
+  </div>
+</div>
+
+<!-- Yetkisiz -->
+<div id="auth-gate" style="display:none;" class="flex items-center justify-center min-h-screen">
+  <div class="text-center bg-white rounded-2xl shadow p-10 max-w-sm mx-4">
+    <div class="text-5xl mb-4">🔒</div>
+    <h2 class="text-lg font-bold text-gray-800 mb-2">Erişim Kısıtlı</h2>
+    <p class="text-sm text-gray-500">Bu sayfayı görüntülemek için giriş yapmanız ve yetkili olmanız gerekiyor.</p>
+    <a href="../login.html" class="mt-5 inline-block bg-indigo-600 text-white rounded-xl px-6 py-2.5 font-semibold text-sm">Giriş Yap</a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ANA İÇERİK
+════════════════════════════════════════════════════ -->
+<main id="main-content" style="display:none;"
+      x-data="QrBasimApp()" x-init="$nextTick(() => initQR())" x-cloak
+      class="max-w-7xl mx-auto px-4 pt-24 pb-16 min-h-screen">
+
+  <nav class="ekp-tabs no-print" aria-label="Ekipman Sistemi Navigasyonu">
+    <a href="ekipman-takip.html" class="ekp-tab">📋 Takip</a>
+    <a href="ekipman-analiz.html" class="ekp-tab">📊 Analiz</a>
+    <a href="ekipman-qr-basim.html" class="ekp-tab ekp-tab-active">🏷️ QR Basım</a>
+    <a href="ekipman-ayarlar.html" class="ekp-tab">⚙️ Ayarlar</a>
+  </nav>
+
+  <!-- Başlık + Yazdır (baskıda gizli) -->
+  <div class="no-print mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <span>🖨️</span> Ekipman QR Basım
+      </h1>
+      <p class="text-sm text-gray-500">Her cihaz/plaka için yazdırılabilir QR etiketleri. A4 kağıda 4×7 = 28 etiket.</p>
+      <div class="mt-3 bg-blue-50 border border-blue-200 text-blue-800 text-sm p-3 rounded-xl flex items-start gap-2 max-w-2xl">
+        <span class="text-lg">💡</span>
+        <div>
+          <strong>Saha Entegrasyonu:</strong> Bu sayfadan etiket kağıdına çıktı alıp, sahada ilgili transpalet, forklift ve diğer ekipmanların üzerine yapıştırarak sistemi canlıya alabilirsiniz.
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button @click="yazdir()" :disabled="ekipmanlar.length === 0 || yukleniyor"
+              class="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-100 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+        </svg>
+        Yazdır
+      </button>
+    </div>
+  </div>
+
+  <!-- Özet çubuğu -->
+  <div class="no-print mb-4 flex items-center gap-3 text-xs text-gray-500">
+    <span>📦 Toplam cihaz:</span>
+    <span class="font-bold text-slate-800" x-text="ekipmanlar.length"></span>
+    <span class="text-gray-300">•</span>
+    <span>📄 Tahmini sayfa:</span>
+    <span class="font-bold text-indigo-600" x-text="Math.max(1, Math.ceil(ekipmanlar.length / 28))"></span>
+  </div>
+
+  <!-- Yükleniyor durumu -->
+  <div x-show="yukleniyor" class="no-print text-center py-16 text-gray-400">
+    <div class="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm">Ekipmanlar yükleniyor ve QR kodları üretiliyor…</p>
+  </div>
+
+  <!-- Boş durum -->
+  <div x-show="!yukleniyor && ekipmanlar.length === 0"
+       class="no-print bg-white rounded-2xl p-10 text-center text-gray-400 border border-dashed border-gray-200">
+    <div class="text-5xl mb-3">📭</div>
+    <p class="text-sm mb-3">Henüz cihaz tanımı yok. Ekipman Ayarları &rsaquo; Envanter sekmesinden cihaz ekleyin.</p>
+    <a href="ekipman-ayarlar.html"
+       class="inline-block bg-indigo-600 text-white rounded-xl px-5 py-2 text-xs font-semibold hover:bg-indigo-700">
+      ⚙️ Envanter Ayarlarına Git
+    </a>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       YAZDIRMA ALANI — Ekranda grid, baskıda 4 sütun
+  ════════════════════════════════════════════════════ -->
+  <div id="print-area" x-show="!yukleniyor && ekipmanlar.length > 0">
+    <div class="qr-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <template x-for="e in ekipmanlar" :key="e.id">
+        <div class="qr-card">
+          <div class="qr-brand">ozisg.com</div>
+          <div class="qr-holder" :data-qr-id="e.id"></div>
+          <div class="qr-name">
+            <span x-text="(e.ikon ? e.ikon + ' ' : '') + e.ad"></span>
+          </div>
+          <div class="qr-id" x-text="e.id"></div>
+        </div>
+      </template>
+    </div>
+  </div>
+</main>
+
+<div id="footer-placeholder" class="no-print"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     FIREBASE BRIDGE (auth + config)
+════════════════════════════════════════════════════ -->
+<script>
+  window._qrReady = new Promise(r => { window.__qrResolve = r; });
+</script>
+
+<script type="module">
+  import { requireToolAccess, db, showToast } from '../js/app.js';
+  import {
+    doc, getDoc, collection, getDocs
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  (async () => {
+    try {
+      const user = await requireToolAccess('tool_ekipman', {
+        loadingEl:  'page-loading',
+        authGateEl: 'auth-gate',
+        mainEl:     'main-content'
+      });
+      if (!user) { window.__qrResolve(null); return; }
+
+      // Paralel çek: config (tür adı eşlemesi için) + ekipmanlar koleksiyonu
+      const [cfgSnap, ekSnap] = await Promise.all([
+        getDoc(doc(db, 'settings_ekipman', 'config')).catch(() => null),
+        getDocs(collection(db, 'ekipmanlar')).catch(() => null)
+      ]);
+
+      const cfg = (cfgSnap && cfgSnap.exists()) ? cfgSnap.data() : {};
+
+      // Tür ID → { ad, ikon } haritası (ikon'u QR etiketinde göstermek için)
+      const turMap = {};
+      if (Array.isArray(cfg.ekipmanTurleri)) {
+        for (const t of cfg.ekipmanTurleri) {
+          if (t?.id) turMap[t.id] = { ad: t.ad || '', ikon: t.ikon || '' };
+        }
+      }
+
+      // Cihaz listesi (doc.id = plaka/ID, doc.data().adi = cihaz adı)
+      const cihazlar = [];
+      if (ekSnap) {
+        ekSnap.forEach(d => {
+          const data = d.data() || {};
+          const tur  = turMap[data.turId] || {};
+          cihazlar.push({
+            id:    d.id,
+            adi:   data.adi || d.id,
+            turId: data.turId || '',
+            turAd: tur.ad || '',
+            ikon:  tur.ikon || '🏷️'
+          });
+        });
+      }
+
+      window._qrShowToast = showToast;
+      window.__qrResolve({ user, cihazlar });
+    } catch (e) {
+      console.error('[qr-basim] init hatası:', e);
+      window.__qrResolve({ user: null, cihazlar: [] });
+    }
+  })();
+</script>
+
+<!-- ═══════════════════════════════════════════════════
+     ALPINE COMPONENT
+════════════════════════════════════════════════════ -->
+<script>
+function QrBasimApp() {
+  return {
+    user:        null,
+    ekipmanlar:  [],     // [{ id, ad, ikon }]
+    yukleniyor:  true,
+    _basladi:    false,
+
+    // ─── Bootstrap ──────────────────────────────────
+    async initQR() {
+      if (this._basladi) return;
+      this._basladi = true;
+
+      const ctx = await window._qrReady;
+      if (!ctx || !ctx.user) {
+        this.yukleniyor = false;
+        return;
+      }
+
+      this.user = ctx.user;
+
+      // Firestore /ekipmanlar koleksiyonundan gelen cihazlar
+      // (QR içeriği = cihaz ID/plaka; etiketin altı = "ikon + cihaz adı")
+      const cihazlar = Array.isArray(ctx.cihazlar) ? ctx.cihazlar : [];
+      this.ekipmanlar = cihazlar
+        .filter(c => c && c.id)
+        .map(c => ({
+          id:   String(c.id),
+          ad:   String(c.adi || c.id),
+          ikon: c.ikon || '🏷️',
+          turAd: c.turAd || ''
+        }))
+        // Plaka/ID'ye göre alfabetik (T-301 → T-302 … sıralı basım için)
+        .sort((a, b) => a.id.localeCompare(b.id, 'tr'));
+
+      this.yukleniyor = false;
+
+      // DOM render olduktan sonra QR'ları üret
+      this.$nextTick(() => this._qrleriUret());
+    },
+
+    // ─── QR üretimi ────────────────────────────────
+    // NOT: qrcodejs kütüphanesi her holder DIV'in içine <canvas> + <img>
+    // ekler. Alpine reactive takibine girmesin diye DOM'a doğrudan yazıyoruz.
+    _qrleriUret() {
+      if (typeof QRCode === 'undefined') {
+        console.warn('[qr-basim] QRCode kütüphanesi yüklenmedi');
+        if (window._qrShowToast) {
+          window._qrShowToast('QR kod kütüphanesi yüklenemedi', 'error');
+        }
+        return;
+      }
+
+      // Tüm qr-holder div'lerini tara ve içine QR çiz
+      const holders = document.querySelectorAll('.qr-holder[data-qr-id]');
+      holders.forEach(holder => {
+        const id = holder.getAttribute('data-qr-id');
+        if (!id) return;
+        // Önceki QR'ı temizle (re-render senaryosu için)
+        holder.innerHTML = '';
+        try {
+          new QRCode(holder, {
+            text:         id,
+            width:        256,    // Yüksek çözünürlük → baskıda net
+            height:       256,
+            colorDark:    '#000000',
+            colorLight:   '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } catch (err) {
+          console.warn('[qr-basim] QR üretilemedi:', id, err);
+        }
+      });
+    },
+
+    // ─── Yazdır ─────────────────────────────────────
+    yazdir() {
+      if (this.ekipmanlar.length === 0) return;
+      // QR render tamamlandığından emin ol, sonra yazdırma diyaloğunu aç
+      this.$nextTick(() => {
+        setTimeout(() => window.print(), 100);
+      });
+    }
+  };
+}
+</script>
+
+<!-- Layout render -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof renderLayout === 'function') renderLayout('../');
+  });
+</script>
+
+</body>
+</html>
