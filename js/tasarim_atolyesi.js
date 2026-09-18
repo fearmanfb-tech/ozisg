@@ -188,8 +188,9 @@ function cloneBrushesSync(list, nameFn) {
 // ── Akıllı Kılavuzlar (Smart Guides) ─────────────────────────────────────
 // Serbest gövde sürüklemesinde sürüklenen grubun sınır kutusunun min/orta/maks
 // değerleri, sahnedeki DİĞER parçaların aynı değerlerine ekran-pikseli eşiği (≈8px)
-// içinde yaklaşınca X/Z'de o değere yapışır ve geçici kesik çizgi çizilir. Ctrl basılıyken
-// kapalıdır (CAD standardı: "yapışmayı geçici devre dışı bırak").
+// içinde yaklaşınca X/Z'de o değere yapışır ve geçici kesik çizgi çizilir. Aynı mantık gizmo
+// (ok) ile taşımada tutulan eksenlerde (Y dahil) ve ölçeklemede de çalışır; ayrıca 8 köşe
+// kenetlenmesi vardır (bkz. findCornerSnap). Ctrl basılıyken kapalıdır (CAD standardı).
 const SMART_GUIDE_PX = 8;
 let smartGuideLines = [];
 let dragStaticBoxes = null; // sürükleme başında bir kez hesaplanır: sabit parçaların Box3'leri
@@ -238,36 +239,123 @@ function findAxisSnap(moving, statics, axis, threshold) {
     return best;
 }
 
-// Sürüklenen grubu (dragList) gerekirse yapıştırır + kılavuz çizgilerini günceller.
-// Yapışmadan sonraki gerçek (dx, dz) ötelemesini döndürür.
-function applySmartGuides(dragList, startPositions) {
+// Bir eksenin kılavuz çizgisi: X → Z boyunca pembe, Z → X boyunca mavi, Y → X boyunca yeşil.
+// `box` yapışma SONRASI hareketli kutu, `other` hedef parçanın kutusudur.
+function drawAxisGuide(axis, target, box, other) {
+    const y = box.min.y + 0.2;
+    if (axis === "x") {
+        const z0 = Math.min(box.min.z, other.min.z) - 4, z1 = Math.max(box.max.z, other.max.z) + 4;
+        addGuideLine(new THREE.Vector3(target, y, z0), new THREE.Vector3(target, y, z1), 0xff2d95);
+    } else if (axis === "z") {
+        const x0 = Math.min(box.min.x, other.min.x) - 4, x1 = Math.max(box.max.x, other.max.x) + 4;
+        addGuideLine(new THREE.Vector3(x0, y, target), new THREE.Vector3(x1, y, target), 0x00b8ff);
+    } else {
+        const zc = (box.min.z + box.max.z) / 2;
+        const x0 = Math.min(box.min.x, other.min.x) - 4, x1 = Math.max(box.max.x, other.max.x) + 4;
+        addGuideLine(new THREE.Vector3(x0, target, zc), new THREE.Vector3(x1, target, zc), 0x00c853);
+    }
+}
+
+// ── Köşe kenetlenmesi (3D Vertex / Corner Snap) ─────────────────────────
+// Hareketli kutunun 8 köşesinden biri, sabit bir parçanın 8 köşesinden birine yaklaşınca
+// (ekranda ≈CORNER_SNAP_PX piksel, en çok CORNER_SNAP_MAX mm) izin verilen eksenlerin
+// HEPSİNDE tam o köşeye oturur. Eksen çizgisi yapışmasından önceliklidir (mıknatıs etkisi).
+// Serbest gövde sürüklemesi düzlemsel (Y sabit) olduğundan, Y'de zaten aynı seviyede
+// (fark ≤ CORNER_LOCKED_AXIS_EPS) olmayan köşeler adaydır — örn. zemindeki iki parçanın alt köşeleri.
+const CORNER_SNAP_PX = 14;
+const CORNER_SNAP_MAX = 3; // mm
+const CORNER_LOCKED_AXIS_EPS = 0.05; // mm — izin verilmeyen eksende kabul edilen sapma
+
+function worldPerPixelAt(point) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const dist = camera.position.distanceTo(point);
+    return (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / Math.max(1, rect.height);
+}
+
+function cornerSnapThreshold(box) {
+    return THREE.MathUtils.clamp(CORNER_SNAP_PX * worldPerPixelAt(box.getCenter(new THREE.Vector3())), 0.5, CORNER_SNAP_MAX);
+}
+
+function boxCorners(box) {
+    const out = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) out.push(new THREE.Vector3(x, y, z));
+    return out;
+}
+
+// axes: yapışmaya izin verilen eksenler (["x","z"] gövde sürüklemesi; gizmo'da tutulan eksen[ler]).
+// Döndürür: {delta: Vector3 (izin verilmeyen eksenlerde 0), point: hedef köşe, dist, other} | null
+function findCornerSnap(moving, statics, axes, threshold) {
+    const mc = boxCorners(moving);
+    const AX = ["x", "y", "z"];
+    let best = null;
+    for (const s of statics) {
+        for (const t of boxCorners(s)) {
+            for (const m of mc) {
+                let sq = 0, ok = true;
+                for (const a of AX) {
+                    const d = t[a] - m[a];
+                    if (axes.includes(a)) sq += d * d;
+                    else if (Math.abs(d) > CORNER_LOCKED_AXIS_EPS) { ok = false; break; }
+                }
+                if (!ok) continue;
+                const dist = Math.sqrt(sq);
+                if (dist <= threshold && (!best || dist < best.dist)) {
+                    best = {
+                        dist, point: t, other: s,
+                        delta: new THREE.Vector3(axes.includes("x") ? t.x - m.x : 0, axes.includes("y") ? t.y - m.y : 0, axes.includes("z") ? t.z - m.z : 0),
+                    };
+                }
+            }
+        }
+    }
+    return best;
+}
+
+// Kilitlenen köşenin üstünde geçici, ekran boyutu sabit şeffaf kırmızı küre.
+function addCornerMarker(point) {
+    const radius = Math.max(0.6, 6 * worldPerPixelAt(point));
+    const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(radius, 16, 12),
+        new THREE.MeshBasicMaterial({ color: 0xff2d2d, transparent: true, opacity: 0.65, depthTest: false, depthWrite: false })
+    );
+    mesh.position.copy(point);
+    mesh.renderOrder = 1000;
+    mesh.userData.isHelper = true;
+    scene.add(mesh);
+    smartGuideLines.push(mesh);
+}
+
+// Hareketli kutu (`moving`, yapışmadan ÖNCEKİ konumda) için gerekli ötelemeyi bulur ve kılavuzları
+// (yapışma SONRASI konuma göre) çizer: önce köşe, olmazsa eksen başına min/orta/maks yapışması.
+// Sadece `axes` içindeki eksenlerde öteleme üretir; kimseyi taşımaz → çağıran uygular. Yoksa null.
+function snapMovingBox(moving, axes) {
     clearSmartGuides();
-    if (!dragStaticBoxes || dragStaticBoxes.length === 0) return;
-    const moving = unionBox(dragList);
-    if (moving.isEmpty()) return;
+    if (!dragStaticBoxes || dragStaticBoxes.length === 0 || moving.isEmpty() || axes.length === 0) return null;
+
+    const corner = findCornerSnap(moving, dragStaticBoxes, axes, cornerSnapThreshold(moving));
+    if (corner) {
+        addCornerMarker(corner.point);
+        return corner.delta;
+    }
 
     const threshold = smartGuideThreshold(moving);
+    const delta = new THREE.Vector3();
+    const snaps = [];
+    axes.forEach((a) => {
+        const s = findAxisSnap(moving, dragStaticBoxes, a, threshold);
+        if (s) { delta[a] = s.delta; snaps.push([a, s]); }
+    });
+    if (snaps.length === 0) return null;
+    const snapped = moving.clone().translate(delta);
+    snaps.forEach(([a, s]) => drawAxisGuide(a, s.target, snapped, s.other));
+    return delta;
+}
 
-    const sx = findAxisSnap(moving, dragStaticBoxes, "x", threshold);
-    const sz = findAxisSnap(moving, dragStaticBoxes, "z", threshold);
-    if (sx || sz) {
-        dragList.forEach((b) => {
-            if (sx) b.position.x += sx.delta;
-            if (sz) b.position.z += sz.delta;
-            b.updateMatrixWorld();
-        });
-        if (sx) { moving.min.x += sx.delta; moving.max.x += sx.delta; }
-        if (sz) { moving.min.z += sz.delta; moving.max.z += sz.delta; }
-    }
-    const y = moving.min.y + 0.2;
-    if (sx) {
-        const z0 = Math.min(moving.min.z, sx.other.min.z) - 4, z1 = Math.max(moving.max.z, sx.other.max.z) + 4;
-        addGuideLine(new THREE.Vector3(sx.target, y, z0), new THREE.Vector3(sx.target, y, z1), 0xff2d95);
-    }
-    if (sz) {
-        const x0 = Math.min(moving.min.x, sz.other.min.x) - 4, x1 = Math.max(moving.max.x, sz.other.max.x) + 4;
-        addGuideLine(new THREE.Vector3(x0, y, sz.target), new THREE.Vector3(x1, y, sz.target), 0x00b8ff);
-    }
+// Serbest gövde sürüklemesi (X/Z düzleminde): sürüklenen grubu (dragList) yapıştırır + kılavuzları çizer.
+function applySmartGuides(dragList) {
+    const delta = snapMovingBox(unionBox(dragList), ["x", "z"]);
+    if (!delta) return;
+    dragList.forEach((b) => { b.position.add(delta); b.updateMatrixWorld(); });
 }
 
 // ── Ölçeklemede Sabit Kenar (Anchored Scaling) + Akıllı Kılavuzlar ────────
@@ -279,6 +367,7 @@ function applySmartGuides(dragList, startPositions) {
 // Dünya Box3 farkı yerine yerel köşe kullanmak döndürülmüş objelerde de doğrudur (ölçek yerel
 // eksenlerde uygulanır); taban dönmemiş bir objede Y-min, X/Z için min kenarlar sabit kalır.
 let scaleDrag = null; // {pos0, quat, scale0, lbox, box0} — yalnızca gizmo ölçekleme sürerken
+let translateDrag = null; // {pos0, box0} — yalnızca gizmo taşıma sürerken (bkz. objectChange)
 
 function localBox(brush) {
     if (!brush.geometry.boundingBox) brush.geometry.computeBoundingBox();
@@ -369,20 +458,7 @@ function snapScaleToGuides(brush) {
     brush.position.copy(anchoredPosition(best.scale));
     brush.updateMatrixWorld();
 
-    const box = scaledWorldBox(best.scale);
-    const { snap, wa } = best;
-    const y = box.min.y + 0.2;
-    if (wa === "x") {
-        const z0 = Math.min(box.min.z, snap.other.min.z) - 4, z1 = Math.max(box.max.z, snap.other.max.z) + 4;
-        addGuideLine(new THREE.Vector3(snap.target, y, z0), new THREE.Vector3(snap.target, y, z1), 0xff2d95);
-    } else if (wa === "z") {
-        const x0 = Math.min(box.min.x, snap.other.min.x) - 4, x1 = Math.max(box.max.x, snap.other.max.x) + 4;
-        addGuideLine(new THREE.Vector3(x0, y, snap.target), new THREE.Vector3(x1, y, snap.target), 0x00b8ff);
-    } else {
-        const zc = (box.min.z + box.max.z) / 2;
-        const x0 = Math.min(box.min.x, snap.other.min.x) - 4, x1 = Math.max(box.max.x, snap.other.max.x) + 4;
-        addGuideLine(new THREE.Vector3(x0, snap.target, zc), new THREE.Vector3(x1, snap.target, zc), 0x00c853);
-    }
+    drawAxisGuide(best.wa, best.snap.target, scaledWorldBox(best.scale), best.snap.other);
 }
 
 // ── Yüzüstü Yatır: hover vurgusu ─────────────────────────────────────────
@@ -630,9 +706,11 @@ function init3D() {
         }
         // Ölçekleme: karşı yüzü sabit tut + akıllı kılavuzlar için sabit parçaların kutuları.
         scaleDrag = null;
-        if (currentTransformMode === "scale") {
-            beginScaleDrag(selected);
+        translateDrag = null;
+        if (currentTransformMode === "scale" || currentTransformMode === "translate") {
             const active = activeSelectionList();
+            if (currentTransformMode === "scale") beginScaleDrag(selected);
+            else translateDrag = { pos0: selected.position.clone(), box0: unionBox(active) };
             dragStaticBoxes = visibleCsgChildren()
                 .filter((c) => !active.includes(c))
                 .map((c) => { c.updateMatrixWorld(true); return new THREE.Box3().setFromObject(c); });
@@ -676,6 +754,7 @@ function init3D() {
         // ve `ndcFromEvent` bu fonksiyonun ALTINDA tanımlı olsa da, bu callback
         // sadece init3D() TAMAMEN çalıştıktan SONRA (bir olay anında) tetiklenir
         // — closure + JS'in çalışma zamanı sırası gereği bu güvenli.
+        let magneticHit = false;
         if (magneticSnapEnabled && currentTransformMode === "translate" && lastPointerClient) {
             raycaster.setFromCamera(ndcFromEvent(lastPointerClient), camera);
             const activeList = activeSelectionList();
@@ -687,6 +766,28 @@ function init3D() {
                 const worldNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
                 selected.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), worldNormal);
                 selected.updateMatrixWorld();
+                magneticHit = true;
+            }
+        }
+        // Gizmo ile taşırken akıllı kılavuz + köşe kenetlenmesi. TransformControls konumu her
+        // olayda fare başlangıcına göre BAŞTAN hesaplar (birikimli değil): burada verilen yapışma
+        // ötelemesi bir sonraki olayda otomatik silinir, yani titreme/fırlama olmaz; eşiğin
+        // dışına çıkılınca nesne fareyi bıraktığı yerden serbestçe devam eder. Sadece tutulan
+        // eksen(ler)de yapışır — kırmızı ok tutulduysa Y/Z'ye kayma olmaz. Ctrl = kapalı.
+        // Yapışmış konum mouseUp'ta olduğu gibi kesinleşir (undo kaydı). Manyetik yüzey aktifse
+        // o zaten konumu belirlediği için kılavuz devre dışı.
+        if (currentTransformMode === "translate" && translateDrag && !magneticHit) {
+            if (ctrlHeld) {
+                clearSmartGuides();
+            } else {
+                const axisName = String(transformControls.axis || "").toLowerCase();
+                const axes = ["x", "y", "z"].filter((a) => axisName.includes(a));
+                const off = selected.position.clone().sub(translateDrag.pos0);
+                const delta = snapMovingBox(translateDrag.box0.clone().translate(off), axes);
+                if (delta) {
+                    selected.position.add(delta);
+                    selected.updateMatrixWorld();
+                }
             }
         }
         // Grup/çoklu seçim: birincil parçanın matris değişimini (yeni × başlangıcın tersi)
@@ -711,6 +812,7 @@ function init3D() {
         clearSmartGuides(); // ölçekleme kılavuzları (bkz. snapScaleToGuides)
         dragStaticBoxes = null;
         scaleDrag = null;
+        translateDrag = null;
         if (!selected || !dragStartState) { gizmoGroup = null; recompute(); return; }
 
         const brush = selected;
@@ -882,6 +984,7 @@ function init3D() {
             gizmoGroup = null;
             dragStartState = null;
             scaleDrag = null;
+            translateDrag = null;
             clearSmartGuides();
             dragStaticBoxes = null;
             transformControls.dragging = false;
@@ -1026,7 +1129,7 @@ function init3D() {
         // Akıllı kılavuzlar: yakınlaşınca diğer parçaların kenar/merkezine yapış + çizgi çiz.
         // Ctrl basılıyken yapışma yok.
         if (e.ctrlKey || e.metaKey) clearSmartGuides();
-        else applySmartGuides(dragGroup, dragGroupStart);
+        else applySmartGuides(dragGroup);
         updateSelectionHelper();
         // Tooltip yapışma SONRASI gerçek ötelemeyi göstersin.
         const ref = dragGroupStart[0];
