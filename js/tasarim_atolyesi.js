@@ -596,8 +596,11 @@ function init3D() {
             if (hits.length > 0) toggleSelection(hits[0].object);
             return;
         }
-        if (hits.length > 0) selectNode(hits[0].object);
-        else selectNode(null);
+        if (hits.length > 0) {
+            selectNode(hits[0].object);
+            // Metin nesnesi seçildiyse Inspector'daki "Metin" kutusuna doğrudan odaklan.
+            if (hits[0].object.userData.type === "text") focusInspectorTextInput();
+        } else selectNode(null);
     });
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -1044,6 +1047,8 @@ document.addEventListener("keydown", function (e) {
     if (e.key.toLowerCase() === "h") { e.preventDefault(); window.setTransformMode("pan"); }
     // D: Üstüne Oturt / Zemine Düşür (Drop) — Tinkercad tarzı hızlı yerleştirme.
     if (e.key.toLowerCase() === "d") { e.preventDefault(); window.dropSelectedToSurface(); }
+    // K: Katı ⇄ Delik (Kesici) geçişi.
+    if (e.key.toLowerCase() === "k") { e.preventDefault(); window.toggleHoleSelected(); }
     // L: Kilitle / Kilidi Aç — V: Gizle / Göster (Faz 7, Fusion360 tarzı).
     if (e.key.toLowerCase() === "l") { e.preventDefault(); window.toggleLockSelected(); }
     if (e.key.toLowerCase() === "v") { e.preventDefault(); window.toggleVisibilitySelected(); }
@@ -1116,7 +1121,7 @@ const DEFAULT_PARAMS = {
     box: { width: 30, height: 15, depth: 30 },
     cylinder: { radius: 15, height: 15 },
     sphere: { radius: 15 },
-    text: { value: "OZI", size: 8, depth: 2, font: "helvetiker_bold" },
+    text: { value: "OZI", size: 8, depth: 2, font: "roboto_bold", maxWidth: 0 }, // maxWidth (mm): 0 = sınırsız / otomatik sığdırma kapalı
     cone: { radius: 15, height: 25 },
     pyramid: { radius: 15, height: 25 },
     triprism: { radius: 15, height: 20 },
@@ -1133,19 +1138,29 @@ const DEFAULT_PARAMS = {
 // Bilerek literal içine değil, tek bir döngüyle sonradan ekleniyor — 15
 // girdiyi tek tek "color: DEFAULT_SHAPE_COLOR" ile kirletmemek için.
 Object.values(DEFAULT_PARAMS).forEach((p) => { p.color = DEFAULT_SHAPE_COLOR; });
+// Snapmaker U1 (IDEX) kafa ataması — 1 veya 2. 3MF dışa aktarımında her extruder
+// için ayrı <object> üretilir (bkz. build3MFModelXML). Inspector'da "Boyutlar"
+// listesinde gösterilmez, "Görünüm" alanındaki Kafa seçicisinden düzenlenir.
+Object.values(DEFAULT_PARAMS).forEach((p) => { p.extruder = 1; });
 
 // 3D Metin için Yazı Tipi Kütüphanesi (Faz 5 — canlı font değişimi).
 // Üçünün de three.js'in resmi örnek fontları olduğu (aynı CDN/etiket ile
 // zaten kullanılan helvetiker_bold gibi) doğrulandı — CORS/versiyon riski yok.
 const FONT_LIBRARY = {
+    // Türkçe karakterli (ç ğ ı İ ö ş ü) yerel font — fonts/roboto_bold.typeface.json
+    // dosyası siteye ayrıca yüklenir. Dosya henüz yoksa loadFont() otomatik olarak
+    // helvetiker_bold'a düşer (metin yine oluşur, sadece Türkçe harfler ASCII'ye çevrilir).
+    roboto_bold: { label: "Roboto (Türkçe)", url: "../fonts/roboto_bold.typeface.json" },
     helvetiker_bold: { label: "Helvetiker (Kalın)", url: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r168/examples/fonts/helvetiker_bold.typeface.json" },
     helvetiker_regular: { label: "Helvetiker (İnce)", url: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r168/examples/fonts/helvetiker_regular.typeface.json" },
     optimer_bold: { label: "Optimer (Kalın)", url: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r168/examples/fonts/optimer_bold.typeface.json" },
     gentilis_bold: { label: "Gentilis (Kalın)", url: "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r168/examples/fonts/gentilis_bold.typeface.json" },
 };
 
-// Türkçe karakterler helvetiker fontunda yok — kabartma/oyma metninde
-// en yakın Latin karşılığına çeviriyoruz (sadece görsel metin için).
+// Türkçe karakterler helvetiker/optimer/gentilis fontlarında yok. Türkçe destekli
+// font (roboto_bold) kullanıldığında bu dönüşüm HİÇ uygulanmaz — metin olduğu gibi
+// basılır; sadece seçili fontta o harfin glifi YOKSA (bkz. mapUnsupportedGlyphs)
+// en yakın Latin karşılığına düşülür.
 function turkishToAscii(str) {
     return String(str)
         .replace(/İ/g, "I").replace(/ı/g, "i")
@@ -1166,9 +1181,29 @@ function loadFont(fontKey) {
     if (!fontPromises[key]) {
         fontPromises[key] = new Promise((resolve, reject) => {
             new FontLoader().load(FONT_LIBRARY[key].url, resolve, undefined, reject);
+        }).catch((err) => {
+            // Başarısız yükleme önbelleğe YAPIŞMASIN (dosya sonradan yüklenince
+            // sayfa yenilemeden çalışsın) ve metin oluşturma tamamen çökmesin.
+            delete fontPromises[key];
+            if (key === "helvetiker_bold") throw err;
+            console.warn(`Font yüklenemedi (${FONT_LIBRARY[key].url}) — helvetiker_bold'a düşülüyor:`, err);
+            return loadFont("helvetiker_bold");
         });
     }
     return fontPromises[key];
+}
+
+// Seçili fontta glifi olmayan karakterleri (ör. helvetiker'da Ş/ğ/İ) en yakın Latin
+// karşılığına çevirir; glifi OLAN her karakter (Türkçe destekli fontta tüm Türkçe
+// harfler) olduğu gibi bırakılır. `font.data.glyphs`: karakter → glif tablosu.
+function mapUnsupportedGlyphs(str, font) {
+    const glyphs = font && font.data && font.data.glyphs;
+    if (!glyphs) return str;
+    return Array.from(str).map((ch) => {
+        if (glyphs[ch]) return ch;
+        const ascii = turkishToAscii(ch);
+        return glyphs[ascii] ? ascii : ch;
+    }).join("");
 }
 
 // Klasik 5 köşeli yıldız — kalem-yolu (Path) olarak, sonra extrude edilecek.
@@ -1287,7 +1322,10 @@ async function buildGeometryAsync(type, params) {
     if (type !== "text") return buildGeometry(type, params);
 
     const font = await loadFont(params.font);
-    const text = turkishToAscii(params.value || "OZI").slice(0, 40) || "OZI";
+    // Türkçe karakterler ARTIK ASCII'ye çevrilmiyor — sadece seçili fontta glifi
+    // olmayan harfler (ör. font dosyası henüz yüklenmediği için helvetiker'a düşüldüyse)
+    // en yakın Latin karşılığına iner.
+    const text = mapUnsupportedGlyphs((params.value || "OZI").slice(0, 40), font) || "OZI";
     const geo = new TextGeometry(text, {
         font,
         size: params.size,
@@ -1297,7 +1335,21 @@ async function buildGeometryAsync(type, params) {
     });
     geo.rotateX(-Math.PI / 2); // düz yatay yüzeyde kabartma gibi dursun (derinlik = Y ekseni)
     geo.computeBoundingBox();
-    const bb = geo.boundingBox;
+    let bb = geo.boundingBox;
+
+    // Otomatik Sığdırma ("Maks Genişlik", mm): yazı bu genişliği aşarsa SADECE X
+    // ekseninde orantılı daraltılır (Y/Z sabit — harf yüksekliği/kalınlığı değişmez).
+    // Daraltma brush.scale.x yerine GEOMETRİYE uygulanır: böylece kullanıcının elle
+    // yaptığı ölçek (S aracı) ve aynalama (negatif scale.x) ezilmez, ve metin/font
+    // değişince sığdırma her yeniden üretimde otomatik yeniden hesaplanır.
+    const maxWidth = Number(params.maxWidth) || 0;
+    const naturalWidth = bb.max.x - bb.min.x;
+    if (maxWidth > 0 && naturalWidth > maxWidth) {
+        geo.scale(maxWidth / naturalWidth, 1, 1);
+        geo.computeBoundingBox();
+        bb = geo.boundingBox;
+    }
+
     geo.translate(-(bb.max.x + bb.min.x) / 2, 0, -(bb.max.z + bb.min.z) / 2);
     return geo;
 }
@@ -1310,10 +1362,15 @@ async function createBrush(type, params, name) {
     // bunu (useGroups varsayılanı sayesinde) geometri grupları + materyal
     // dizisi olarak korur (bkz. recompute()).
     const material = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.1 });
+    // Extruder (1/2) materyalin userData'sında da tutulur: CSG sonucundaki materyal
+    // dizisi bu örnekleri koruduğu için 3MF dışa aktarımı hangi üçgenin hangi kafaya
+    // ait olduğunu materyalden okuyabilir (bkz. build3MFModelXML).
+    const extruder = Number(params.extruder) === 2 ? 2 : 1;
+    material.userData.extruder = extruder;
     const brush = new Brush(geo, material);
     brush.name = name || `${labelFor(type)} ${++idCounter}`;
     brush.operation = ADDITION;
-    brush.userData = { id: `node_${idCounter}`, type, params: { ...params, color } };
+    brush.userData = { id: `node_${idCounter}`, type, params: { ...params, color, extruder } };
     const halfHeightTypes = ["box", "cylinder", "cone", "pyramid", "triprism", "hexprism", "tube", "roundedbox"];
     if (halfHeightTypes.includes(type)) brush.position.y = params.height / 2;
     else if (type === "sphere" || type === "icosahedron") brush.position.y = params.radius;
@@ -1344,6 +1401,16 @@ async function regenerateGeometry(brush) {
     brush.geometry = await buildGeometryAsync(brush.userData.type, brush.userData.params);
     oldGeo.dispose();
     brush.updateMatrixWorld();
+}
+
+// Hızlı Yazım: Inspector'daki "Metin" kutusuna odaklanıp içeriği seçer — kullanıcı
+// fareyle tekrar tıklamadan doğrudan yeni yazıyı (ör. ismi) yazmaya başlayabilir.
+// Kutu yoksa (metin olmayan nesne / çoklu seçim) sessizce hiçbir şey yapmaz.
+function focusInspectorTextInput() {
+    const input = document.querySelector('#inspector-body input[data-param="value"]');
+    if (!input) return;
+    input.focus();
+    input.select();
 }
 
 // ── Hızlı Metin Düzenleme (Faz 8) ────────────────────────────────────────
@@ -1444,6 +1511,7 @@ window.addPrimitive = async function (type) {
     recompute();
     renderOutliner();
     document.getElementById("status-msg").innerText = `${brush.name} eklendi.`;
+    if (type === "text") focusInspectorTextInput();
 };
 
 window.deleteSelected = async function () {
@@ -1709,6 +1777,30 @@ window.layFlatSelected = async function () {
         : "Zaten en geniş yüzüne yatıyor.";
 };
 
+// ── Katı ⇄ Delik (Kesici) Hızlı Geçişi (K — Tinkercad "hole" mantığı) ───────
+// Seçili şekil(ler)i tek tuşla Katı (ADDITION) ile Delik (SUBTRACTION) arasında
+// çevirir. Çoklu seçimde TÜMÜ aynı yöne gider: hepsi zaten delikse hepsi katı olur,
+// aksi halde hepsi delik olur (karışık seçimde tutarlı sonuç). INTERSECTION
+// (Kesişim) durumundaki şekil "katı değil" sayılır ve delik yapılır.
+// NOT: 'H' Pan modu olduğu için 'K' (Kesici) kullanılıyor.
+window.toggleHoleSelected = async function () {
+    const list = activeSelectionList();
+    if (list.length === 0) return;
+    const allHoles = list.every((b) => b.operation === SUBTRACTION);
+    const newOp = allHoles ? ADDITION : SUBTRACTION;
+    const before = list.map((brush) => ({ brush, op: brush.operation }));
+
+    await execute({
+        do() { before.forEach(({ brush }) => { brush.operation = newOp; }); },
+        undo() { before.forEach(({ brush, op }) => { brush.operation = op; }); },
+    });
+    recompute();
+    renderOutliner();
+    renderInspector();
+    document.getElementById("status-msg").innerText =
+        `${list.length} parça ${newOp === SUBTRACTION ? "delik (kesici)" : "katı"} yapıldı.`;
+};
+
 // ── Kilitle / Kilidi Aç (L — Faz 7) ──────────────────────────────────────
 // Fusion360 tarzı "sabitle": kilitli bir şekle TransformControls ASLA
 // bağlanmaz ve fareyle serbest sürükleme de engellenir (bkz. selectNode/
@@ -1932,10 +2024,15 @@ function recompute() {
     // fold SIRASI değişiyor): önce TÜM ADDITION'lar kendi aralarında
     // birleştirilip bir "ana gövde" oluşturuluyor, SONRA tüm SUBTRACTION'lar
     // bu gövdeden çıkarılıyor, EN SON tüm INTERSECTION'lar uygulanıyor.
-    const additions     = visibleChildren.filter((c) => c.operation === ADDITION);
+    // "İçine Göm (Inlay)" parçaları (params.inlay) ADDITION olsa da SUBTRACTION'lardan
+    // SONRA eklenir: aksi halde ana gövdeyle birleşip kendi oyuğunu açan orijinal
+    // (delik) tarafından yeniden kesilirdi ve dolgu parça kaybolurdu.
+    const isInlay       = (c) => c.userData && c.userData.params && c.userData.params.inlay === true;
+    const additions     = visibleChildren.filter((c) => c.operation === ADDITION && !isInlay(c));
     const subtractions  = visibleChildren.filter((c) => c.operation === SUBTRACTION);
+    const inlays        = visibleChildren.filter((c) => c.operation === ADDITION && isInlay(c));
     const intersections = visibleChildren.filter((c) => c.operation === INTERSECTION);
-    const orderedGroups  = [additions, subtractions, intersections];
+    const orderedGroups  = [additions, subtractions, inlays, intersections];
 
     // Faz 12 DÜZELTME (CSG Ana İş Parçacığı Kilitlenmesi): eskiden bu katlama
     // TAMAMEN senkron bir forEach idi — TextGeometry gibi yüksek üçgen sayılı
@@ -2242,22 +2339,32 @@ function renderInspector() {
         group.appendChild(title);
 
         Object.entries(brush.userData.params).forEach(([key, val]) => {
-            if (key === "color") return; // ayrı "Görünüm" alanında gösteriliyor, bkz. buildColorField()
+            // color/extruder: ayrı "Görünüm" alanında (bkz. buildColorField); inlay: dahili bayrak.
+            if (key === "color" || key === "extruder" || key === "inlay") return;
             const isText = key === "value";
             const isFont = key === "font";
+            const isMaxWidth = key === "maxWidth"; // 0 = kapalı → 0 GEÇERLİ bir değer
             const row = document.createElement("div");
             row.className = "field-row";
             if (isFont) {
                 row.innerHTML = `<label>${paramLabel(key)}</label><select>${Object.entries(FONT_LIBRARY).map(([k, f]) => `<option value="${k}" ${k === val ? "selected" : ""}>${f.label}</option>`).join("")}</select>`;
+            } else if (isMaxWidth) {
+                row.innerHTML = `<label>${paramLabel(key)}</label><input type="number" min="0" step="1" value="${val || ""}" placeholder="0 = kapalı" title="Yazı bu genişliği aşarsa sadece X ekseninde daraltılır. Boş/0 = sınırsız.">`;
             } else {
                 row.innerHTML = isText
                     ? `<label>${paramLabel(key)}</label><input type="text" maxlength="40" value="${String(val).replace(/"/g, "&quot;")}">`
                     : `<label>${paramLabel(key)}</label><input type="number" min="0.1" step="0.5" value="${val}">`;
             }
             const input = row.querySelector(isFont ? "select" : "input");
+            input.dataset.param = key; // focusInspectorTextInput() "value" alanını bununla bulur
             input.addEventListener("change", async () => {
                 const oldVal = brush.userData.params[key];
-                const newVal = isFont ? input.value : isText ? (input.value.trim() || oldVal) : (parseFloat(input.value) || oldVal);
+                let newVal;
+                if (isFont) newVal = input.value;
+                else if (isText) newVal = input.value.trim() || oldVal;
+                else if (isMaxWidth) { const n = parseFloat(input.value); newVal = Number.isFinite(n) && n > 0 ? Math.min(n, 500) : 0; }
+                else newVal = parseFloat(input.value) || oldVal;
+                if (newVal === oldVal) return;
                 await execute({
                     async do() { brush.userData.params[key] = newVal; await regenerateGeometry(brush); },
                     async undo() { brush.userData.params[key] = oldVal; await regenerateGeometry(brush); },
@@ -2267,6 +2374,25 @@ function renderInspector() {
             });
             group.appendChild(row);
         });
+
+        // Damga / Inlay makroları: 0.4mm'ye incelt + içine göm (çift renk).
+        const stampRow = document.createElement("div");
+        stampRow.style.cssText = "display:flex; gap:6px; margin-top:6px;";
+        const stampBtnStyle = "flex:1; font-size:0.72rem; padding:6px 4px; background:var(--bg-surface); border:1px solid var(--border-color);";
+        const thinBtn = document.createElement("button");
+        thinBtn.className = "btn btn-sm";
+        thinBtn.style.cssText = stampBtnStyle;
+        thinBtn.textContent = "0.4mm'ye İncelt";
+        thinBtn.title = "Kalınlığı (yüksekliği) 0.4 mm yapar — alt yüzey yerinde kalır (damga / yüzey çizimi için).";
+        thinBtn.onclick = () => window.thinSelectedToStamp();
+        const inlayBtn = document.createElement("button");
+        inlayBtn.className = "btn btn-sm";
+        inlayBtn.style.cssText = stampBtnStyle;
+        inlayBtn.textContent = "İçine Göm (Inlay)";
+        inlayBtn.title = "Ana gövdede bu şeklin birebir oyuğunu açar ve oyuğu 2. kafa (Extruder 2) + zıt renkle dolduran bir kopya ekler. Şekli, gövdenin üst yüzeyine 0.4 mm gömülecek şekilde konumlayın.";
+        inlayBtn.onclick = () => window.inlaySelected();
+        stampRow.append(thinBtn, inlayBtn);
+        group.appendChild(stampRow);
         body.appendChild(group);
     } else {
         const note = document.createElement("div");
@@ -2334,8 +2460,111 @@ function paramLabel(key) {
         width: "Genişlik", height: "Yükseklik", depth: "Kalınlık/Derinlik", radius: "Yarıçap",
         value: "Metin", size: "Punto/Boyut", tube: "Tüp Kalınlığı",
         outerRadius: "Dış Yarıçap", innerRadius: "İç Yarıçap", font: "Yazı Tipi", color: "Renk",
+        maxWidth: "Maks Genişlik (mm)",
     }[key] || key;
 }
+
+// ── Damga (0.4 mm) ve Inlay makroları ────────────────────────────────────
+// "Kalınlık" = şeklin DİKEY (Y) ölçüsü: yatay duran damga/yazının baskı kalınlığı.
+// Extrude tabanlı şekillerde (yazı/yıldız/kalp) `depth`, prizma/silindir gibi
+// yükseklik tabanlılarda `height` parametresidir (extrude geometriler Y'ye yatırılmış
+// kuruluyor — bkz. buildGeometryAsync). Kalınlık parametresi olmayan şekillerde
+// (küre, simit, kubbe...) Y ölçeği kullanılır.
+const STAMP_THICKNESS = 0.4; // mm
+const STAMP_THICKNESS_PARAM = {
+    text: "depth", star: "depth", heart: "depth",
+    box: "height", roundedbox: "height", cylinder: "height", cone: "height",
+    pyramid: "height", triprism: "height", hexprism: "height", tube: "height",
+};
+
+window.thinSelectedToStamp = async function () {
+    if (multiSelected.length > 1 || !selected) return;
+    const brush = selected;
+    const type = brush.userData.type;
+    if (isNonParametricType(type)) return;
+    if (brush.userData.locked) { document.getElementById("status-msg").innerText = "Kilitli şekil inceltilemez."; return; }
+
+    const param = STAMP_THICKNESS_PARAM[type];
+    brush.updateMatrixWorld(true);
+    const oldMinY = new THREE.Box3().setFromObject(brush).min.y;
+    const oldPos = brush.position.clone();
+    const oldScaleY = brush.scale.y;
+    const oldParamVal = param ? brush.userData.params[param] : null;
+
+    let newScaleY = oldScaleY;
+    if (!param) {
+        brush.geometry.computeBoundingBox();
+        const geoHeight = brush.geometry.boundingBox.max.y - brush.geometry.boundingBox.min.y;
+        if (geoHeight > 0) newScaleY = (STAMP_THICKNESS / geoHeight) * Math.sign(oldScaleY || 1);
+    }
+
+    await execute({
+        async do() {
+            if (param) { brush.userData.params[param] = STAMP_THICKNESS; await regenerateGeometry(brush); }
+            else brush.scale.y = newScaleY;
+            brush.updateMatrixWorld(true);
+            // Alt yüzey yerinde kalsın (havada asılı/gömülü kalmasın).
+            brush.position.y += oldMinY - new THREE.Box3().setFromObject(brush).min.y;
+            brush.updateMatrixWorld(true);
+        },
+        async undo() {
+            if (param) { brush.userData.params[param] = oldParamVal; await regenerateGeometry(brush); }
+            brush.scale.y = oldScaleY;
+            brush.position.copy(oldPos);
+            brush.updateMatrixWorld(true);
+        },
+    });
+    recompute();
+    renderInspector();
+    document.getElementById("status-msg").innerText = `${brush.name} ${STAMP_THICKNESS} mm kalınlığa inceltildi.`;
+};
+
+// Verilen rengin "dikkat çekici zıt"ı: renkli tonlarda ton +180° (tam zıt renk),
+// gri/siyah/beyaz gibi renksiz tonlarda ton anlamsız olduğundan sabit bir kırmızı.
+function contrastColor(hex) {
+    const c = new THREE.Color(isValidHexColor(hex) ? hex : DEFAULT_SHAPE_COLOR);
+    const hsl = {};
+    c.getHSL(hsl);
+    if (hsl.s < 0.15) return "#e53935";
+    c.setHSL((hsl.h + 0.5) % 1, Math.max(hsl.s, 0.75), 0.5);
+    return "#" + c.getHexString();
+}
+
+// İçine Göm (Inlay): seçili ince şeklin AYNI koordinatlarda bir kopyasını çıkarır;
+// orijinal Delik (SUBTRACTION) olup ana gövdede birebir oyuk açar, kopya Katı
+// (ADDITION) + zıt renk + Extruder 2 olarak o oyuğu doldurur → yüzey düz kalır.
+// Kopyaya `params.inlay = true` işareti konur: recompute() bu tür parçaları
+// SUBTRACTION'lardan SONRA ekler (aksi halde kendi oyuğunu açan orijinal tarafından
+// yeniden kesilir ve dolgu kaybolurdu). Tek execute() = tek undo adımı.
+window.inlaySelected = async function () {
+    if (multiSelected.length > 1 || !selected) return;
+    const brush = selected;
+    if (isNonParametricType(brush.userData.type)) {
+        document.getElementById("status-msg").innerText = "İçe aktarılan modellerde Inlay desteklenmez (parametrik şekil gerekir).";
+        return;
+    }
+
+    const clone = await createBrush(
+        brush.userData.type,
+        { ...brush.userData.params, color: contrastColor(brush.userData.params.color), extruder: 2, inlay: true },
+        `${brush.name} (inlay)`
+    );
+    clone.operation = ADDITION;
+    clone.position.copy(brush.position);
+    clone.quaternion.copy(brush.quaternion);
+    clone.scale.copy(brush.scale);
+    clone.updateMatrixWorld(true);
+
+    const oldOp = brush.operation;
+    await execute({
+        do() { brush.operation = SUBTRACTION; csgRoot.add(clone); },
+        undo() { brush.operation = oldOp; csgRoot.remove(clone); },
+    });
+    selectNode(clone);
+    recompute();
+    renderOutliner();
+    document.getElementById("status-msg").innerText = `İçine gömüldü: "${brush.name}" oyuk açtı, "${clone.name}" (Extruder 2) dolduruyor.`;
+};
 
 // Renk/Materyal alanı (Faz 5) — TÜM şekil tiplerinde (içe aktarılanlar dahil)
 // ortak, "Boyutlar" listesinden ayrı tek bir renk seçici. `input` olayı
@@ -2397,6 +2626,32 @@ function buildColorField(brush) {
     });
     input.addEventListener("change", () => commitColor(input.value));
     group.appendChild(row);
+
+    // Snapmaker U1 (IDEX) kafa ataması: "Kafa (Extruder): (•)1 (•)2". Değer
+    // params.extruder (1|2) + materyal userData'sında tutulur; 3MF dışa aktarımı
+    // her extruder için ayrı <object> üretir (bkz. build3MFModelXML).
+    const extruderRow = document.createElement("div");
+    extruderRow.className = "field-row";
+    extruderRow.style.cssText = "align-items:center; gap:10px;";
+    const currentExtruder = Number(brush.userData.params.extruder) === 2 ? 2 : 1;
+    const radioName = `extruder-${brush.userData.id}`;
+    extruderRow.innerHTML = `<label>Kafa (Extruder)</label>` +
+        [1, 2].map((n) => `<label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:600;">` +
+            `<input type="radio" name="${radioName}" value="${n}" ${n === currentExtruder ? "checked" : ""} style="width:auto; flex:none; margin:0;"> ${n}</label>`).join("");
+    extruderRow.querySelectorAll("input[type=radio]").forEach((radio) => {
+        radio.addEventListener("change", async () => {
+            const newVal = Number(radio.value);
+            const oldVal = Number(brush.userData.params.extruder) === 2 ? 2 : 1;
+            if (newVal === oldVal) return;
+            await execute({
+                do() { brush.userData.params.extruder = newVal; brush.material.userData.extruder = newVal; },
+                undo() { brush.userData.params.extruder = oldVal; brush.material.userData.extruder = oldVal; },
+            });
+            recompute();
+            renderInspector();
+        });
+    });
+    group.appendChild(extruderRow);
     return group;
 }
 
@@ -2791,22 +3046,24 @@ function runSandboxed(code) {
 
 const OP_NAME_TO_CONST = { union: ADDITION, subtract: SUBTRACTION, intersect: INTERSECTION };
 const ALL_SHAPE_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox"];
+// NOT: "height" alt sınırları 1 → 0.2 mm'ye indirildi: "0.4mm'ye İncelt" (damga)
+// makrosu kaydedilip yeniden yüklenince 1 mm'ye geri KIRPILMASIN.
 const NODE_PARAM_LIMITS = {
-    box: { width: [1, 300], height: [1, 300], depth: [1, 300] },
-    cylinder: { radius: [0.5, 200], height: [1, 300] },
+    box: { width: [1, 300], height: [0.2, 300], depth: [1, 300] },
+    cylinder: { radius: [0.5, 200], height: [0.2, 300] },
     sphere: { radius: [0.5, 200] },
-    text: { size: [1, 60], depth: [0.2, 30] },
-    cone: { radius: [0.5, 200], height: [1, 300] },
-    pyramid: { radius: [0.5, 200], height: [1, 300] },
-    triprism: { radius: [0.5, 200], height: [1, 300] },
-    hexprism: { radius: [0.5, 200], height: [1, 300] },
+    text: { size: [1, 60], depth: [0.2, 30], maxWidth: [0, 500] },
+    cone: { radius: [0.5, 200], height: [0.2, 300] },
+    pyramid: { radius: [0.5, 200], height: [0.2, 300] },
+    triprism: { radius: [0.5, 200], height: [0.2, 300] },
+    hexprism: { radius: [0.5, 200], height: [0.2, 300] },
     torus: { radius: [1, 200], tube: [0.3, 100] },
-    tube: { outerRadius: [1, 200], innerRadius: [0.3, 199], height: [1, 300] },
+    tube: { outerRadius: [1, 200], innerRadius: [0.3, 199], height: [0.2, 300] },
     dome: { radius: [0.5, 200] },
     icosahedron: { radius: [0.5, 200] },
     star: { radius: [1, 200], depth: [0.2, 60] },
     heart: { size: [1, 200], depth: [0.2, 60] },
-    roundedbox: { width: [2, 300], height: [2, 300], depth: [2, 300], radius: [0.1, 50] },
+    roundedbox: { width: [2, 300], height: [0.2, 300], depth: [2, 300], radius: [0.1, 50] },
 };
 
 // NOT (Faz 9 — sertleştirme): `n === null` iken `Number(null)` === 0 döner ve
@@ -2857,6 +3114,10 @@ function validateOneNode(raw, i) {
     // doğrulanıyor, aynı "asla güvenme" prensibiyle).
     const rawColor = rawParams.color;
     params.color = isValidHexColor(rawColor) ? rawColor.toLowerCase() : DEFAULT_SHAPE_COLOR;
+    // Extruder (IDEX kafası) yalnızca 1 veya 2; inlay yalnızca gerçek `true` bayrağı.
+    // Böylece kayıtlı tasarım/AI çıktısı yeniden yüklenince Inlay ve kafa ataması korunur.
+    params.extruder = Number(rawParams.extruder) === 2 ? 2 : 1;
+    if (rawParams.inlay === true) params.inlay = true;
 
     const position = Array.isArray(raw.position) ? raw.position : [0, 0, 0];
     const rotation = Array.isArray(raw.rotation) ? raw.rotation : [0, 0, 0];
@@ -3080,7 +3341,14 @@ window.exportSTL = function () {
 // "her nesneye ayrı ekstruder/filament ata" akışında native destekleniyor.
 // Sahnede TEK renk varsa (yaygın/basit durum) doğal olarak TEK bir <object>
 // üretilir — eski (tek nesneli) davranışla aynı sonuç, geriye dönük uyumlu.
-function build3MFModelXML(geometry, material) {
+// IDEX (Snapmaker U1 çift kafa) — Faz 13: parçalar artık SADECE renge değil,
+// (extruder, renk) İKİLİSİNE göre ayrı <object>'lere bölünür. Extruder bilgisi
+// materyalin userData.extruder alanından okunur (bkz. createBrush / buildColorField;
+// CSG sonucu materyal örneklerini koruduğu için birleştirme sonrası da erişilebilir).
+// İsteğe bağlı `outInfo` dizisine her <object> için {objId, extruder, hex, triCount}
+// eklenir — export3MF bununla dilimleyiciye özel `Slic3r_PE_model.config` dosyasını
+// (nesne/parça bazında `extruder` metadata'sı) üretir.
+function build3MFModelXML(geometry, material, outInfo) {
     const materials = Array.isArray(material) ? material : [material];
     const groups = (geometry.groups && geometry.groups.length > 0)
         ? geometry.groups
@@ -3089,13 +3357,15 @@ function build3MFModelXML(geometry, material) {
     const pos = geometry.attributes.position;
     const idx = geometry.index;
 
-    // Aynı hex rengi paylaşan grupları TEK bir "kova"da (bucket) birleştir —
-    // birden fazla orijinal şekil aynı (ör. varsayılan mavi) rengi
-    // paylaşıyorsa dosyada gereksiz yere ayrı ayrı nesneler oluşmasın.
-    const buckets = new Map(); // hex -> { verts:[[x,y,z]], tris:[[a,b,c]], vertMap:Map }
-    function bucketFor(hex) {
-        if (!buckets.has(hex)) buckets.set(hex, { verts: [], tris: [], vertMap: new Map() });
-        return buckets.get(hex);
+    // Aynı (extruder, hex) ikilisini paylaşan grupları TEK bir "kova"da (bucket)
+    // birleştir — birden fazla orijinal şekil aynı kafa+rengi paylaşıyorsa dosyada
+    // gereksiz yere ayrı ayrı nesneler oluşmasın; farklı kafaya atanmış parçalar
+    // (aynı renkte bile olsa) AYRI nesne olur ki dilimleyici 2 ayrı filament görsün.
+    const buckets = new Map(); // "ext|hex" -> { extruder, hex, verts:[[x,y,z]], tris:[[a,b,c]], vertMap:Map }
+    function bucketFor(extruder, hex) {
+        const key = `${extruder}|${hex}`;
+        if (!buckets.has(key)) buckets.set(key, { extruder, hex, verts: [], tris: [], vertMap: new Map() });
+        return buckets.get(key);
     }
     function localIndex(bucket, globalVertIdx) {
         if (!bucket.vertMap.has(globalVertIdx)) {
@@ -3108,7 +3378,8 @@ function build3MFModelXML(geometry, material) {
     groups.forEach((g) => {
         const mat = materials[g.materialIndex] || materials[0];
         const hex = (mat && mat.color) ? mat.color.getHexString() : "2e6cd1";
-        const bucket = bucketFor(hex);
+        const extruder = (mat && mat.userData && Number(mat.userData.extruder) === 2) ? 2 : 1;
+        const bucket = bucketFor(extruder, hex);
         for (let i = g.start; i < g.start + g.count; i += 3) {
             const a = idx ? idx.getX(i) : i;
             const b = idx ? idx.getX(i + 1) : i + 1;
@@ -3117,18 +3388,19 @@ function build3MFModelXML(geometry, material) {
         }
     });
 
-    const hexList = [...buckets.keys()];
-    const baseLines = hexList.map((hex, i) => `<base name="Renk ${i + 1}" displaycolor="#${hex.toUpperCase()}FF"/>`);
+    // Kafa 1'dekiler önce, sonra Kafa 2 (aynı kafada renk ekleniş sırası korunur).
+    const bucketList = [...buckets.values()].sort((a, b) => a.extruder - b.extruder);
+    const baseLines = bucketList.map((b) => `<base name="Kafa ${b.extruder} - #${b.hex.toUpperCase()}" displaycolor="#${b.hex.toUpperCase()}FF"/>`);
 
     let nextId = 2; // id=1: <basematerials>
-    const objectBlocks = hexList.map((hex) => {
-        const bucket = buckets.get(hex);
+    const objectBlocks = bucketList.map((bucket, bucketIdx) => {
         const vertexLines = bucket.verts.map((v) => `<vertex x="${v[0].toFixed(4)}" y="${v[1].toFixed(4)}" z="${v[2].toFixed(4)}"/>`).join("");
         const triangleLines = bucket.tris.map((t) => `<triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}"/>`).join("");
         const objId = nextId++;
+        if (Array.isArray(outInfo)) outInfo.push({ objId, extruder: bucket.extruder, hex: bucket.hex, triCount: bucket.tris.length });
         return {
             objId,
-            xml: `<object id="${objId}" type="model" pid="1" pindex="${hexList.indexOf(hex)}">
+            xml: `<object id="${objId}" type="model" name="Kafa ${bucket.extruder} - #${bucket.hex.toUpperCase()}" pid="1" pindex="${bucketIdx}">
       <mesh>
         <vertices>${vertexLines}</vertices>
         <triangles>${triangleLines}</triangles>
@@ -3153,17 +3425,40 @@ function build3MFModelXML(geometry, material) {
 </model>`;
 }
 
+// Prusa/Orca uyumlu `Metadata/Slic3r_PE_model.config`: her <object> için (ve tek
+// hacmi için) `extruder` metadata'sı — dilimleyici böylece "Kafa 2" parçayı 2.
+// filament/extruder'a atanmış olarak açar (renk eşleştirmeye güvenmek yerine
+// doğrudan atama). Standart 3MF okuyucular bu dosyayı yok sayar.
+function build3MFConfigXML(objectInfos) {
+    const objects = objectInfos.map((o) => {
+        const name = `Kafa ${o.extruder} - #${o.hex.toUpperCase()}`;
+        return ` <object id="${o.objId}" instances_count="1">
+  <metadata type="object" key="name" value="${name}"/>
+  <metadata type="object" key="extruder" value="${o.extruder}"/>
+  <volume firstid="0" lastid="${Math.max(0, o.triCount - 1)}">
+   <metadata type="volume" key="name" value="${name}"/>
+   <metadata type="volume" key="volume_type" value="ModelPart"/>
+   <metadata type="volume" key="extruder" value="${o.extruder}"/>
+  </volume>
+ </object>`;
+    }).join("\n");
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<config>\n${objects}\n</config>`;
+}
+
 window.export3MF = function () {
     if (!resultMesh) return alert("Önce sahneye bir şekil ekleyin.");
 
     const exportGeo = prepareGeometryForExport(resultMesh.geometry);
-    const modelXML = build3MFModelXML(exportGeo, resultMesh.material);
+    const objectInfos = [];
+    const modelXML = build3MFModelXML(exportGeo, resultMesh.material, objectInfos);
     exportGeo.dispose();
+    const configXML = build3MFConfigXML(objectInfos);
 
     const contentTypesXML = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+  <Default Extension="config" ContentType="text/xml"/>
 </Types>`;
 
     const relsXML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -3181,6 +3476,7 @@ window.export3MF = function () {
         "[Content_Types].xml": strToU8(contentTypesXML),
         "_rels/.rels": strToU8(relsXML),
         "3D/3dmodel.model": strToU8(modelXML),
+        "Metadata/Slic3r_PE_model.config": strToU8(configXML),
     });
 
     const blob = new Blob([zipped], { type: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml" });
