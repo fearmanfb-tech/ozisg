@@ -3512,6 +3512,8 @@ function contrastColor(hex) {
     return "#" + c.getHexString();
 }
 
+const INLAY_CLEARANCE = 0.995; // inlay kopyasının X/Z ölçek çarpanı
+
 // İçine Göm (Inlay): seçili ince şeklin AYNI koordinatlarda bir kopyasını çıkarır;
 // orijinal Delik (SUBTRACTION) olup ana gövdede birebir oyuk açar, kopya Katı
 // (ADDITION) + zıt renk + Extruder 2 olarak o oyuğu doldurur → yüzey düz kalır.
@@ -3534,7 +3536,10 @@ window.inlaySelected = async function () {
     clone.operation = ADDITION;
     clone.position.copy(brush.position);
     clone.quaternion.copy(brush.quaternion);
-    clone.scale.copy(brush.scale);
+    // Fiziksel boşluk (clearance): kopya X/Z'de %0.5 küçültülür; oyukla birebir çakışan yüzey
+    // kalmaz, dilimleyici ikisini paylaşılan-yüzeyli tek manifold yerine ayrı parça görür.
+    // Yükseklik (Y) aynı kalır → yüzey düz. brush.scale çarpıldığı için ayna (negatif) işaret korunur.
+    clone.scale.set(brush.scale.x * INLAY_CLEARANCE, brush.scale.y, brush.scale.z * INLAY_CLEARANCE);
     clone.updateMatrixWorld(true);
 
     const oldOp = brush.operation;
@@ -4336,7 +4341,16 @@ window.runAICode = async function () {
 // normaller dışa aktarılır. Orijinal resultMesh.geometry KLONLANIYOR — canlı
 // sahne/undo-redo geçmişi bu işlemden ETKİLENMEZ.
 function prepareGeometryForExport(sourceGeometry) {
-    const geo = mergeVertices(sourceGeometry.clone());
+    // Tolerans 1e-3 mm: varsayılan 1e-4, CSG kesişimlerindeki mikro yırtıkları (birbirine
+    // ~0.0005 mm yakın ama farklı köşeler) birleştirmeye yetmiyor → dilimleyicide açık kenar.
+    // İnce özellikler (≥0.4 mm) bu toleransın çok üstünde olduğundan etkilenmez.
+    // mergeVertices TÜM öznitelikleri (normal, uv) karşılaştırır: CSG çıktısında sert kenardaki
+    // köşelerin normal/uv'si farklı olduğundan hiç birleşmez ve 3MF (köşe indeksiyle yazılır)
+    // dilimleyicide açık kenar olarak görünür. Dışa aktarım yalnız konuma ihtiyaç duyar; bu yüzden
+    // önce diğer öznitelikler atılır, normaller birleştirmeden sonra yeniden hesaplanır.
+    const stripped = sourceGeometry.clone();
+    Object.keys(stripped.attributes).forEach((name) => { if (name !== "position") stripped.deleteAttribute(name); });
+    const geo = mergeVertices(stripped, 1e-3);
     geo.computeVertexNormals();
     // Zemine oturtma payı (DROP_PAD = 0.01 mm) sadece ekran içindir: modelin tabanı yatak
     // seviyesinin hemen üstündeyse (0 < minY ≤ pay) dilimleyicide havada kalmasın diye
