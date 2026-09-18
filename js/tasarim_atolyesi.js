@@ -360,13 +360,13 @@ function applySmartGuides(dragList) {
 
 // ── Ölçeklemede Sabit Kenar (Anchored Scaling) + Akıllı Kılavuzlar ────────
 // TransformControls ölçeği objenin orijininden (pivot) uygular; tutamacın karşısındaki yüz de
-// kayardı. Sürükleme başında (beginScaleDrag) başlangıç dönüşümü + YEREL sınır kutusu saklanır;
-// her karede konum, "yerel sınır kutusunun min köşesi" (tutamacın karşısındaki yüzler) dünyada
-// yerinde kalacak şekilde yeniden hesaplanır:
-//     konum = konum0 + R · ((ölçek0 − ölçek) ∘ yerelMin)
-// Dünya Box3 farkı yerine yerel köşe kullanmak döndürülmüş objelerde de doğrudur (ölçek yerel
-// eksenlerde uygulanır); taban dönmemiş bir objede Y-min, X/Z için min kenarlar sabit kalır.
-let scaleDrag = null; // {pos0, quat, scale0, lbox, box0} — yalnızca gizmo ölçekleme sürerken
+// kayardı. Gizmo'nun her ekseni İKİ tutamaca sahiptir (+ ve − uçlar). Sürükleme başında (beginScaleDrag)
+// başlangıç dönüşümü, YEREL sınır kutusu ve HANGİ UCUN tutulduğu saklanır; her karede konum, "tutulan
+// ucun karşısındaki yüz" dünyada yerinde kalacak şekilde yeniden hesaplanır:
+//     konum = konum0 + R · ((ölçek0 − ölçek) ∘ sabitYerelNokta)
+// Sabit yerel nokta her eksen için kutunun min VEYA max değeridir (bkz. scaleHandleSides). Yerel köşe
+// kullanmak döndürülmüş objelerde de doğrudur (ölçek yerel eksenlerde uygulanır).
+let scaleDrag = null; // {pos0, quat, scale0, lbox, anchor, box0} — yalnızca gizmo ölçekleme sürerken
 let translateDrag = null; // {pos0, box0} — yalnızca gizmo taşıma sürerken (bkz. objectChange)
 
 function localBox(brush) {
@@ -374,20 +374,55 @@ function localBox(brush) {
     return brush.geometry.boundingBox;
 }
 
-function beginScaleDrag(brush) {
+// Kullanıcının tuttuğu tutamacın, objenin YEREL eksenleri üzerindeki tarafı: her eksen için +1 (pozitif
+// uç) / −1 (negatif uç). Tutamaç, gizmo orijininden (obje konumu) o eksen boyunca ±uzanır; imlecin
+// (tıklama anındaki) EKRAN konumu, eksenin ekran izdüşümü boyunca orijinin hangi tarafındaysa o uçtur.
+// Tutulmayan eksenler (+1) kalır; eksen ekrana dik bakıyorsa (izdüşüm ~0) belirsizdir → +1.
+function scaleHandleSides(brush, client, axisName) {
+    const sides = [1, 1, 1];
+    if (!client) return sides;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const toScreen = (v) => {
+        const p = v.clone().project(camera);
+        return new THREE.Vector2(rect.left + (p.x * 0.5 + 0.5) * rect.width, rect.top + (-p.y * 0.5 + 0.5) * rect.height);
+    };
+    const origin = brush.position.clone();
+    const o = new THREE.Vector2(client.clientX, client.clientY).sub(toScreen(origin));
+    const reach = Math.max(1, camera.position.distanceTo(origin) * 0.2); // ekranda ölçülebilir uzunlukta bir adım
+    ["x", "y", "z"].forEach((a, i) => {
+        if (!axisName.includes(a)) return;
+        const dir = new THREE.Vector3().setComponent(i, 1).applyQuaternion(brush.quaternion).multiplyScalar(reach);
+        const v = toScreen(origin.clone().add(dir)).sub(toScreen(origin));
+        if (v.length() < 2) return; // eksen ekrana dik: ayırt edilemez
+        const d = o.dot(v);
+        if (Math.abs(d) > 1e-6) sides[i] = d > 0 ? 1 : -1;
+    });
+    return sides;
+}
+
+function beginScaleDrag(brush, sides = [1, 1, 1]) {
     brush.updateMatrixWorld(true);
+    const lbox = localBox(brush).clone();
+    // Tutulan uç yerel + tarafta ise karşı yüz yerel MIN'dir; ölçek negatifse (ayna) dünya yönü tersine
+    // döndüğü için taraf da tersine çevrilir. Tutulan uç − tarafta ise tersi.
+    const anchor = new THREE.Vector3();
+    ["x", "y", "z"].forEach((a, i) => {
+        const useMin = sides[i] * (Math.sign(brush.scale[a]) || 1) > 0;
+        anchor[a] = useMin ? lbox.min[a] : lbox.max[a];
+    });
     scaleDrag = {
         pos0: brush.position.clone(),
         quat: brush.quaternion.clone(),
         scale0: brush.scale.clone(),
-        lbox: localBox(brush).clone(),
+        lbox,
+        anchor,
         box0: new THREE.Box3().setFromObject(brush),
     };
 }
 
 // Verilen ölçekte sabit kenarı yerinde tutan konum.
 function anchoredPosition(scale) {
-    const p = scaleDrag.lbox.min;
+    const p = scaleDrag.anchor;
     const s0 = scaleDrag.scale0;
     return new THREE.Vector3((s0.x - scale.x) * p.x, (s0.y - scale.y) * p.y, (s0.z - scale.z) * p.z)
         .applyQuaternion(scaleDrag.quat).add(scaleDrag.pos0);
@@ -709,7 +744,7 @@ function init3D() {
         translateDrag = null;
         if (currentTransformMode === "scale" || currentTransformMode === "translate") {
             const active = activeSelectionList();
-            if (currentTransformMode === "scale") beginScaleDrag(selected);
+            if (currentTransformMode === "scale") beginScaleDrag(selected, scaleHandleSides(selected, lastPointerClient, String(transformControls.axis || "").toLowerCase()));
             else translateDrag = { pos0: selected.position.clone(), box0: unionBox(active) };
             dragStaticBoxes = visibleCsgChildren()
                 .filter((c) => !active.includes(c))
@@ -898,6 +933,9 @@ function init3D() {
     // en son bilinen imleç konumunu AYRICA burada takip ediyoruz — aşağıdaki
     // genel pointermove dinleyicisi HER zaman (moddan bağımsız) günceller.
     let lastPointerClient = null;
+    // TransformControls kendi pointerdown'unda "mouseDown"ı senkron tetikler; bu dinleyici YAKALAMA aşamasında
+    // ondan önce çalışıp tıklama konumunu kaydeder (bkz. scaleHandleSides: hangi tutamaç ucu tutuldu).
+    renderer.domElement.addEventListener("pointerdown", (e) => { lastPointerClient = { clientX: e.clientX, clientY: e.clientY }; }, true);
 
     function ndcFromEvent(e) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -1035,11 +1073,20 @@ function init3D() {
         const hits = raycaster.intersectObjects(visibleCsgChildren(), false);
         if (hits.length > 0) {
             dragCandidate = hits[0].object;
-        } else if (currentTransformMode === "select") {
-            // Boş alan + Seç aracı → çerçeveyle çoklu seçim adayı
+        } else if (currentTransformMode !== "measure" && !layFlatMode) {
+            // Boş alan → çerçeveyle (marquee) çoklu seçim adayı. Sadece Seç aracında değil, Taşı/
+            // Döndür/Ölçekle araçlarındayken de çalışır (gizmo tutamacı tıklanmadıysa — yukarıda elenir).
+            // Pointer yakalama: fare tuşu tuval dışında (yan panel vb.) bırakılsa da pointerup
+            // gelir; aksi halde çerçeve takılı kalıp kamerayı kilitliyordu.
             marqueeCandidate = true;
             marqueeStartScreen = { x: e.clientX, y: e.clientY };
+            try { renderer.domElement.setPointerCapture(e.pointerId); } catch (_) { /* sentetik/desteklenmeyen */ }
         }
+    });
+
+    // Sistem işaretçiyi iptal ederse (dokunmatik hareket, pencere değişimi) çerçeve takılı kalmasın.
+    renderer.domElement.addEventListener("pointercancel", () => {
+        if (isMarqueeSelecting || marqueeCandidate) cancelActiveDrag();
     });
 
     // Yüzüstü Yatır hover vurgusu: imlecin altındaki SEÇİLİ objenin düz yüzünü sarı ile boyar.
@@ -1161,9 +1208,13 @@ function init3D() {
                 return p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
             });
             // Çerçeve bir gruptan en az bir parçaya değdiyse grubun TAMAMI seçilir.
-            const picked = expandWithGroups(inside);
-            if (picked.length > 1) selectMultiple(picked);
-            else if (picked.length === 1) selectNode(picked[0]);
+            // Shift/Ctrl/Cmd basılıysa çerçevedekiler MEVCUT seçime eklenir (Tinkercad/Fusion).
+            const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+            const current = additive ? activeSelectionList().slice() : [];
+            const picked = expandWithGroups(inside).filter((b) => !current.includes(b));
+            const next = [...current, ...picked];
+            if (next.length > 1) selectMultiple(next);
+            else if (next.length === 1) selectNode(next[0]);
             else selectNode(null);
             return;
         }
@@ -1277,10 +1328,10 @@ function init3D() {
 
         // ── Normal seçim ──
         const hits = raycaster.intersectObjects(visibleCsgChildren(), false);
-        // Shift+Sol Tık: tıklanan şekli aktif çoklu-seçime EKLER/ondan ÇIKARIR
-        // (Tinkercad/Fusion360 "toggle-select" kuralı). Boş alana shift+tık
-        // hiçbir şeyi değiştirmez (marquee zaten Seç aracında boş alanı yönetiyor).
-        if (e.shiftKey) {
+        // Shift/Ctrl/Cmd+Sol Tık: tıklanan şekli aktif çoklu-seçime EKLER/ondan ÇIKARIR
+        // (Tinkercad/Fusion360 "toggle-select" kuralı). Boş alana bu tuşlarla tık
+        // hiçbir şeyi değiştirmez (seçim korunur; boş alan sürüklemesi marquee açar).
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
             if (hits.length > 0) toggleSelection(hits[0].object);
             return;
         }
@@ -1866,6 +1917,76 @@ window.setTransformMode = function (mode) {
     });
 };
 
+// ── Ok tuşlarıyla hassas kaydırma (Nudge) ─────────────────────────────────
+// Seçili obje(ler) X/Z düzleminde kaydırılır. Yönler EKRANA göredir (Tinkercad gibi): Yukarı = kameradan
+// uzağa, Sağ = ekranda sağa; her biri en yakın dünya eksenine (X veya Z) oturtulur. Adım: Izgaraya
+// Yasla açıkken SNAP_SIZE (5 mm), kapalıyken 1 mm; Shift ile 10 mm. Kilitli parçalar hareket etmez.
+// Her basış tek bir execute() = tek Ctrl+Z adımıdır; ANCAK tuşa basılı tutulunca (otomatik tekrar)
+// birbirini izleyen basışlar (<800 ms, aynı seçim, geçmişin tepesi hâlâ o hamle) TEK adımda birleştirilir.
+// CSG her basışta değil, kaydırma durunca (80 ms) bir kez yeniden hesaplanır.
+const NUDGE_FINE = 1;   // mm — Izgara kapalıyken
+const NUDGE_LARGE = 10; // mm — Shift
+let lastNudge = null;   // {cmd, records, list, time}
+let nudgeRecomputeTimer = null;
+
+function nudgeDirection(key) {
+    const q = camera.quaternion;
+    const flat = (v) => { v.y = 0; return v; };
+    const fwd = flat(camera.getWorldDirection(new THREE.Vector3()));
+    // Tam tepeden bakışta yatay ileri yönü kalmaz: ekranda "yukarı" vektörünü kullan.
+    const up = fwd.lengthSq() < 0.09 ? flat(new THREE.Vector3(0, 1, 0).applyQuaternion(q)) : fwd;
+    const right = flat(new THREE.Vector3(1, 0, 0).applyQuaternion(q));
+    const upAxis = Math.abs(up.x) >= Math.abs(up.z) ? "x" : "z";
+    const rightAxis = upAxis === "x" ? "z" : "x"; // ikisi hep birbirine dik kalsın
+    const upSign = Math.sign(up[upAxis]) || 1;
+    const rightSign = Math.sign(right[rightAxis]) || 1;
+    const v = new THREE.Vector3();
+    if (key === "ArrowUp") v[upAxis] = upSign;
+    else if (key === "ArrowDown") v[upAxis] = -upSign;
+    else if (key === "ArrowRight") v[rightAxis] = rightSign;
+    else v[rightAxis] = -rightSign; // ArrowLeft
+    return v;
+}
+
+window.nudgeSelected = async function (key, large) {
+    if (transformControls && transformControls.dragging) return;
+    const all = activeSelectionList();
+    if (all.length === 0) return;
+    const list = all.filter((b) => !b.userData.locked);
+    if (list.length === 0) {
+        document.getElementById("status-msg").innerText = "Seçili parça kilitli — kaydırılamaz.";
+        return;
+    }
+    const step = large ? NUDGE_LARGE : (snapEnabled ? SNAP_SIZE : NUDGE_FINE);
+    const delta = nudgeDirection(key).multiplyScalar(step);
+
+    const now = performance.now();
+    const canMerge = lastNudge
+        && now - lastNudge.time < 800
+        && history.stack[history.pointer] === lastNudge.cmd
+        && lastNudge.list.length === list.length
+        && lastNudge.list.every((b, i) => b === list[i]);
+    if (canMerge) {
+        lastNudge.records.forEach((r) => r.to.add(delta));
+        lastNudge.cmd.do();
+        lastNudge.time = now;
+    } else {
+        const records = list.map((b) => ({ brush: b, from: b.position.clone(), to: b.position.clone().add(delta) }));
+        const cmd = {
+            do() { records.forEach((r) => { r.brush.position.copy(r.to); r.brush.updateMatrixWorld(); }); },
+            undo() { records.forEach((r) => { r.brush.position.copy(r.from); r.brush.updateMatrixWorld(); }); },
+        };
+        await execute(cmd);
+        lastNudge = { cmd, records, list, time: now };
+    }
+    updateSelectionHelper();
+    renderInspector();
+    clearTimeout(nudgeRecomputeTimer);
+    nudgeRecomputeTimer = setTimeout(() => recompute(), 80);
+    const moved = lastNudge.records[0].to.clone().sub(lastNudge.records[0].from);
+    document.getElementById("status-msg").innerText = `Kaydırıldı: X ${moved.x.toFixed(1)} · Z ${moved.z.toFixed(1)} mm (Shift: ${NUDGE_LARGE} mm)`;
+};
+
 document.addEventListener("keydown", function (e) {
     const tag = document.activeElement ? document.activeElement.tagName : "";
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
@@ -1884,6 +2005,13 @@ document.addEventListener("keydown", function (e) {
     // "sonrakini bul" kısayolunu bilerek eziyoruz.
     if (e.ctrlKey && e.key.toLowerCase() === "g" && !typing) { e.preventDefault(); if (e.shiftKey) window.ungroupSelected(); else window.groupSelected(); return; }
     if (typing) return;
+    // Ok tuşları: seçili obje(ler)i kaydır (Alt+Ok tarayıcıda "geri/ileri" olduğundan hariç).
+    // Seçim yoksa varsayılan davranış (sayfa kaydırma) bozulmaz.
+    if (e.key.startsWith("Arrow") && !e.ctrlKey && !e.metaKey && !e.altKey && activeSelectionList().length > 0) {
+        e.preventDefault();
+        window.nudgeSelected(e.key, e.shiftKey);
+        return;
+    }
     // KRİTİK: Ctrl/Cmd/Alt basılıyken hiçbir tek-tuş kısayolumuz ateşlenmesin —
     // aksi halde Ctrl+R (yenile), Ctrl+Shift+R (sert yenile), Ctrl+F (bul),
     // Ctrl+S (kaydet) gibi TARAYICI kısayollarını "r"/"f"/"s" harfi eşleştiği
@@ -2700,32 +2828,53 @@ window.ungroupSelected = async function () {
     document.getElementById("status-msg").innerText = `${ids.size} grup çözüldü (${members.length} parça).`;
 };
 
-// ── Gelişmiş Hizala (Align 2.0 — Faz 8, Tinkercad stili) ─────────────────
-// ESKİ davranış (tek tuş, "ORTAK ORTALAMA konuma" — position.eksen'lerin
-// aritmetik ortalaması, boyutları hiç hesaba katmadan) TAMAMEN kaldırıldı.
-// YENİ mekanizma: seçili TÜM objelerin BİRLEŞİK Box3'ü (dünya-uzayı AABB)
-// hesaplanır; her eksende bu kutunun Min/Orta/Maks değeri "hedef" olur.
-// Kullanıcı 9 hedeften birini seçtiğinde, HER obje KENDİ Box3'ünün aynı
-// mod'daki (min/center/max) değeri o hedefe denk gelecek şekilde SADECE o
-// eksende ötelenir — yani "sol kenarları hizala", "merkezleri hizala", "sağ
-// kenarları hizala" gibi standart CAD/tasarım araçları davranışı (boyutları
-// hesaba katar, eski "ortalama pozisyon" hack'inden daha doğru).
+// ── Gelişmiş Hizala (Referanslı — "En Büyük Objeyi Sabit Tut") ───────────
+// Seçili objeler arasından sınır kutusu HACMİ en büyük olan "anahtar obje" (Key Object) bulunur ve
+// yerinde TAMAMEN SABİT kalır. Diğer tüm seçili objeler, KENDİ kutularının aynı moddaki (Min/Orta/Maks)
+// değeri anahtar objenin o eksendeki Min/Orta/Maks değerine denk gelecek şekilde SADECE o eksende
+// ötelenir. Böylece küçük bir yazı/delik büyük bir zemine ortalanırken zemin yerinden oynamaz.
+// (Eski davranış: hedef TÜM seçimin birleşik kutusuydu → her şey kayardı, zemin dahil.)
+// Hacimler eşitse (ör. aynı boyda iki küp) seçimdeki İLK obje anahtar olur; kilitli objeler kaymaz.
+// Tüm öteleme tek execute() = tek Ctrl+Z adımı.
+function boxVolume(box) {
+    const s = box.getSize(new THREE.Vector3());
+    return s.x * s.y * s.z;
+}
+
+// Verilen listeden anahtar objeyi (en büyük hacim; eşitlikte ilk) döndürür.
+function findKeyObject(list) {
+    let key = null, keyVol = -1;
+    list.forEach((b) => {
+        const v = boxVolume(new THREE.Box3().setFromObject(b));
+        if (v > keyVol + 1e-9) { key = b; keyVol = v; }
+    });
+    return key;
+}
+
 window.alignSelectedAdvanced = async function (axis, mode) {
     const list = activeSelectionList();
     if (list.length < 2) return;
 
     csgRoot.children.forEach((c) => c.updateMatrixWorld(true));
 
-    const combined = new THREE.Box3();
-    list.forEach((b) => combined.union(new THREE.Box3().setFromObject(b)));
-    const targetValue = mode === "min" ? combined.min[axis] : mode === "max" ? combined.max[axis] : (combined.min[axis] + combined.max[axis]) / 2;
+    const key = findKeyObject(list);
+    const keyBox = new THREE.Box3().setFromObject(key);
+    const pick = (box) => (mode === "min" ? box.min[axis] : mode === "max" ? box.max[axis] : (box.min[axis] + box.max[axis]) / 2);
+    const targetValue = pick(keyBox);
 
+    // Anahtar obje (ve onunla aynı gruptaki parçalar) asla hareket etmez.
+    const fixed = new Set(groupMembers(key));
+    // Grup = tek birim: grubun ortak kutusu hizalanır, üyeler birlikte (göreli düzeni bozulmadan) kayar.
     const moves = [];
+    const seen = new Set();
     list.forEach((brush) => {
-        const box = new THREE.Box3().setFromObject(brush);
-        const ownValue = mode === "min" ? box.min[axis] : mode === "max" ? box.max[axis] : (box.min[axis] + box.max[axis]) / 2;
-        const delta = targetValue - ownValue;
-        if (Math.abs(delta) > 0.001) moves.push({ brush, oldPos: brush.position[axis], newPos: brush.position[axis] + delta });
+        if (fixed.has(brush) || seen.has(brush)) return;
+        const unit = brush.userData.groupId ? list.filter((b) => b.userData.groupId === brush.userData.groupId) : [brush];
+        unit.forEach((u) => seen.add(u));
+        const movable = unit.filter((u) => !u.userData.locked);
+        if (movable.length === 0) return;
+        const delta = targetValue - pick(unionBox(unit));
+        if (Math.abs(delta) > 0.001) movable.forEach((b) => moves.push({ brush: b, oldPos: b.position[axis], newPos: b.position[axis] + delta }));
     });
     if (moves.length === 0) return; // zaten hizalı, gereksiz undo adımı yok
 
@@ -2736,7 +2885,7 @@ window.alignSelectedAdvanced = async function (axis, mode) {
     recompute();
     renderInspector();
     const modeLabel = { min: "Min", center: "Orta", max: "Maks" }[mode];
-    document.getElementById("status-msg").innerText = `${moves.length} parça ${axis.toUpperCase()} ekseninde ${modeLabel}'a hizalandı.`;
+    document.getElementById("status-msg").innerText = `${moves.length} parça ${axis.toUpperCase()} ekseninde "${key.name}" (sabit, en büyük) objesinin ${modeLabel} değerine hizalandı.`;
 };
 
 // ── Üstüne Oturt / Zemine Düşür (Drop/Stack — Faz 6) ────────────────────
@@ -3500,7 +3649,7 @@ function renderInspector() {
         // erişilebilir, aynı Box3 min/center/max mekanizmasını kullanıyor.
         const alignGroup = document.createElement("div");
         alignGroup.className = "field-group";
-        alignGroup.innerHTML = `<div class="field-group-title"><span class="icon-btn-row" style="justify-content:flex-start;"><i data-lucide="align-center"></i> Gelişmiş Hizala</span></div>`;
+        alignGroup.innerHTML = `<div class="field-group-title"><span class="icon-btn-row" style="justify-content:flex-start;"><i data-lucide="align-center"></i> Gelişmiş Hizala</span></div><div style="font-size:0.7rem; color:var(--text-muted); margin:-2px 0 6px;">En büyük obje sabit kalır; diğerleri ona hizalanır.</div>`;
         const alignGrid = document.createElement("div");
         alignGrid.style.cssText = "display:grid; grid-template-columns: auto repeat(3, 1fr); gap:4px; align-items:center; font-size:0.72rem;";
         const modeLabels = [["min", "Min"], ["center", "Orta"], ["max", "Maks"]];
