@@ -9,6 +9,7 @@
   <!-- Html5Qrcode lazy yüklenir (qrEkipmanBaslat çağrılınca) -->
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
   <script defer src="../js/layout.js"></script>
+  <script src="../js/ekipman-bakim.js"></script>
   <style>
     [x-cloak]       { display: none !important; }
     .step-line      { flex:1; height:2px; min-width:16px; transition:background .3s; }
@@ -108,6 +109,7 @@
   <nav class="ekp-tabs" aria-label="Ekipman Sistemi Navigasyonu">
     <a href="ekipman-takip.html" class="ekp-tab ekp-tab-active">📋 Takip</a>
     <a href="ekipman-analiz.html" class="ekp-tab">📊 Analiz</a>
+    <a href="ekipman-detay.html" class="ekp-tab">🔎 Ekipmanlar</a>
     <a href="ekipman-qr-basim.html" class="ekp-tab">🏷️ QR Basım</a>
     <a href="ekipman-ayarlar.html" class="ekp-tab">⚙️ Ayarlar</a>
   </nav>
@@ -321,6 +323,13 @@
               <div>ID: <span class="font-mono" x-text="ekipman?.id"></span></div>
               <div>Durum: <span class="font-semibold" x-text="ekipman?.durum || '—'"></span></div>
             </div>
+            <template x-for="b in bakimUyarilari()" :key="b.tip">
+              <div class="mt-2 rounded-lg px-2 py-1 font-semibold"
+                   :style="`background:${b.r.bg};color:${b.r.fg};border:1px solid ${b.r.border}`"
+                   x-text="(b.durum === 'gecikti' ? '⚠️ ' : '⏰ ') + b.metin"></div>
+            </template>
+            <a x-show="ekipman?.id" :href="'ekipman-detay.html?id=' + encodeURIComponent(ekipman?.id || '')"
+               class="inline-block mt-2 text-indigo-700 hover:underline font-semibold">🔎 Ekipman geçmişi</a>
             <button @click="ekipman = null; manuelId = ''"
                     class="mt-2 text-xs text-gray-500 hover:text-gray-700">Kaldır ✕</button>
           </div>
@@ -1171,6 +1180,16 @@ function EkipmanApp() {
         console.warn('[ekipman] QR stop:', e.message);
       }
       try { inst.clear(); } catch (_) {}
+    },
+
+    // Seçili ekipmanın gecikmiş/yaklaşan bakım-kalibrasyon uyarıları
+    bakimUyarilari() {
+      const EB = window.EkipmanBakim;
+      if (!EB || !this.ekipman) return [];
+      const o = EB.ozet(this.ekipman);
+      return [o.bakim, o.kalibrasyon]
+        .filter(x => x.durum === 'gecikti' || x.durum === 'yaklasiyor')
+        .map(x => ({ tip: x.tip, durum: x.durum, metin: EB.etiket(x), r: EB.RENK[x.durum] }));
     },
 
     async ekipmanGetir(id) {

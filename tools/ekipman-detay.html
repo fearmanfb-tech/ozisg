@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ekipmanlar & Geçmiş | ozisg.com</title>
+  <link rel="stylesheet" href="../css/master.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script defer src="../js/layout.js"></script>
+  <script src="../js/ekipman-bakim.js"></script>
+  <style>[x-cloak]{display:none !important;}</style>
+</head>
+<body class="bg-gray-50">
+
+<div id="nav-placeholder"></div>
+
+<div id="page-loading" class="flex items-center justify-center min-h-screen">
+  <div class="text-center text-gray-400">
+    <div class="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm">Yükleniyor…</p>
+  </div>
+</div>
+
+<div id="auth-gate" style="display:none;" class="flex items-center justify-center min-h-screen">
+  <div class="text-center bg-white rounded-2xl shadow p-10 max-w-sm mx-4">
+    <div class="text-5xl mb-4">🔒</div>
+    <h2 class="text-lg font-bold text-gray-800 mb-2">Erişim Kısıtlı</h2>
+    <p class="text-sm text-gray-500">Bu sayfayı görüntülemek için giriş yapmanız ve yetkili olmanız gerekiyor.</p>
+    <a href="../login.html" class="mt-5 inline-block bg-indigo-600 text-white rounded-xl px-6 py-2.5 font-semibold text-sm">Giriş Yap</a>
+  </div>
+</div>
+
+<main id="main-content" style="display:none;"
+      x-data="DetayApp()" x-init="baslat()" x-cloak
+      class="max-w-7xl mx-auto px-4 pt-24 pb-16 min-h-screen">
+
+  <nav class="ekp-tabs" aria-label="Ekipman Sistemi Navigasyonu">
+    <a href="ekipman-takip.html" class="ekp-tab">📋 Takip</a>
+    <a href="ekipman-analiz.html" class="ekp-tab">📊 Analiz</a>
+    <a href="ekipman-detay.html" class="ekp-tab ekp-tab-active">🔎 Ekipmanlar</a>
+    <a href="ekipman-qr-basim.html" class="ekp-tab">🏷️ QR Basım</a>
+    <a href="ekipman-ayarlar.html" class="ekp-tab">⚙️ Ayarlar</a>
+  </nav>
+
+  <div x-show="hata" class="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3" x-text="hata"></div>
+
+  <!-- ═════════════ LİSTE GÖRÜNÜMÜ ═════════════ -->
+  <section x-show="!id">
+    <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900">🔎 Ekipmanlar</h1>
+        <p class="text-sm text-slate-500">Envanterdeki tüm ekipmanlar, bakım/kalibrasyon durumu ve son kontrol. Bir satıra tıklayınca tüm geçmişi açılır.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs">
+        <template x-for="f in filtreler" :key="f.id">
+          <button @click="filtre = f.id"
+                  class="px-3 py-1.5 rounded-full font-semibold border transition"
+                  :class="filtre === f.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'">
+            <span x-text="f.label"></span> <span class="opacity-70" x-text="sayi(f.id)"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <input type="search" x-model="arama" placeholder="🔍 ID, ad veya tür ara…"
+           class="w-full md:w-80 mb-4 border border-slate-200 rounded-xl px-4 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-400">
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-gray-50 border-b border-gray-100 text-gray-500">
+          <tr>
+            <th class="p-3 text-xs font-semibold uppercase">ID / Plaka</th>
+            <th class="p-3 text-xs font-semibold uppercase">Ad / Tür</th>
+            <th class="p-3 text-xs font-semibold uppercase">Durum</th>
+            <th class="p-3 text-xs font-semibold uppercase">Bakım / Kalibrasyon</th>
+            <th class="p-3 text-xs font-semibold uppercase">Son Kontrol</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="c in listeFiltreli()" :key="c.id">
+            <tr class="border-b border-gray-50 hover:bg-indigo-50/40 cursor-pointer" @click="ac(c.id)">
+              <td class="p-3 font-mono font-bold text-indigo-700" x-text="c.id"></td>
+              <td class="p-3">
+                <div class="font-semibold text-gray-800" x-text="c.adi"></div>
+                <div class="text-xs text-gray-400" x-text="c.turAd"></div>
+              </td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold" :style="durumStil(c.durum)" x-text="c.durum"></span></td>
+              <td class="p-3 text-xs">
+                <span class="px-2 py-1 rounded-full font-semibold whitespace-nowrap" :style="bakimStil(c)" x-text="bakimEtiket(c)"></span>
+              </td>
+              <td class="p-3 text-xs text-gray-500" x-text="c.sonKontrolMetin"></td>
+            </tr>
+          </template>
+          <tr x-show="!yukleniyor && listeFiltreli().length === 0">
+            <td colspan="5" class="p-8 text-center text-gray-400 text-sm">Bu filtreyle eşleşen ekipman yok.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═════════════ DETAY GÖRÜNÜMÜ ═════════════ -->
+  <section x-show="id">
+    <a href="ekipman-detay.html" class="text-sm text-indigo-700 hover:underline font-semibold">← Tüm ekipmanlar</a>
+
+    <div x-show="bulunamadi" class="mt-4 bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-400">
+      <div class="text-4xl mb-2">🔍</div>
+      <p class="text-sm">"<span x-text="id"></span>" kodlu ekipman envanterde bulunamadı.</p>
+    </div>
+
+    <div x-show="secili">
+      <div class="flex flex-wrap items-start justify-between gap-3 mt-3 mb-5">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900" x-text="secili?.adi"></h1>
+          <p class="text-sm text-slate-500"><span class="font-mono font-bold" x-text="secili?.id"></span> · <span x-text="secili?.turAd"></span></p>
+        </div>
+        <span class="px-3 py-1 rounded-full text-sm font-bold" :style="durumStil(secili?.durum)" x-text="secili?.durum"></span>
+      </div>
+
+      <!-- Bakım / kalibrasyon kartları -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div class="text-xs font-bold text-gray-400 uppercase mb-1">🔧 Periyodik Bakım</div>
+          <div class="text-sm text-gray-700">Periyot: <b x-text="secili?.bakimPeriyoduGun ? secili.bakimPeriyoduGun + ' gün' : 'tanımsız'"></b></div>
+          <div class="text-sm text-gray-700">Son bakım: <b x-text="trTarih(secili?.sonBakimTarihi)"></b></div>
+          <div class="mt-2 inline-block px-2 py-1 rounded-full text-xs font-semibold" :style="stilDurum(bakimO().durum)" x-text="EB.etiket(bakimO())"></div>
+          <button x-show="secili?.bakimPeriyoduGun" @click="bakimYapildi()" :disabled="kaydediliyor"
+                  class="block mt-3 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg px-3 py-1.5 transition">
+            ✔ Bakım Yapıldı (bugün)
+          </button>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div class="text-xs font-bold text-gray-400 uppercase mb-1">📏 Kalibrasyon / Muayene</div>
+          <div class="text-sm text-gray-700">Geçerlilik sonu: <b x-text="trTarih(secili?.kalibrasyonBitis)"></b></div>
+          <div class="mt-2 inline-block px-2 py-1 rounded-full text-xs font-semibold" :style="stilDurum(kalO().durum)" x-text="EB.etiket(kalO())"></div>
+          <p class="text-[11px] text-gray-400 mt-3">Tarihler Ayarlar › Ekipman Envanteri sekmesinden düzenlenir.</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div class="text-xs font-bold text-gray-400 uppercase mb-1">📊 Özet</div>
+          <div class="text-sm text-gray-700">Kontrol sayısı: <b x-text="loglar.length"></b></div>
+          <div class="text-sm text-gray-700">Arızalı kontrol: <b x-text="arizaSayisi()"></b></div>
+          <div class="text-sm text-gray-700">Toplam bakım maliyeti: <b x-text="toplamMaliyet().toLocaleString('tr-TR') + ' TL'"></b></div>
+          <div class="text-sm text-gray-700">Kırmızı etiket: <b x-text="loglar.filter(l => l.kirmiziEtiket).length"></b></div>
+        </div>
+      </div>
+
+      <!-- Geçmiş -->
+      <h2 class="text-lg font-bold text-slate-800 mb-1">🕘 Kontrol & Arıza Geçmişi</h2>
+      <p x-show="kismiGecmis" class="text-xs text-amber-600 mb-2">Yetkiniz nedeniyle yalnızca kendi kayıtlarınız listeleniyor.</p>
+      <div class="space-y-3">
+        <template x-for="l in loglar" :key="l.id">
+          <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <span class="font-bold text-gray-800" x-text="l.tarihMetin"></span>
+              <span class="text-gray-400" x-text="l.vardiya"></span>
+              <span class="px-2 py-0.5 rounded-full font-semibold" :style="durumStil(l.durum)" x-text="l.durum"></span>
+              <span x-show="l.oncelik && l.oncelik !== 'Normal'" class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold" x-text="l.oncelik"></span>
+              <span x-show="l.kirmiziEtiket" class="px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold">🏷️ Kırmızı etiket</span>
+              <span class="ml-auto text-gray-400" x-text="l.operatorAdi"></span>
+            </div>
+            <p x-show="l.aciklama" class="text-sm text-gray-700 mt-2" x-text="l.aciklama"></p>
+            <p x-show="l.basarisizSayisi > 0" class="text-xs text-red-600 mt-1" x-text="l.basarisizSayisi + ' başarısız kontrol maddesi'"></p>
+            <div x-show="l.dofAksiyon" class="mt-2 text-xs bg-emerald-50 border border-emerald-100 rounded-lg p-2 text-emerald-800">
+              <b>DÖF:</b> <span x-text="l.dofAksiyon"></span>
+              <span x-show="l.dofSorumlu"> · Sorumlu: <b x-text="l.dofSorumlu"></b></span>
+              <span x-show="l.yedekParca"> · Parça: <b x-text="l.yedekParca"></b></span>
+              <span x-show="l.bakimMaliyeti"> · <b x-text="Number(l.bakimMaliyeti).toLocaleString('tr-TR') + ' TL'"></b></span>
+              <span x-show="l.dofKapanmaTarihi"> · Kapanış: <span x-text="trTarih(l.dofKapanmaTarihi)"></span></span>
+            </div>
+            <a x-show="l.gorselUrl" :href="l.gorselUrl" target="_blank" rel="noopener" class="inline-block mt-2 text-xs text-indigo-700 hover:underline font-semibold">📷 Fotoğrafı aç</a>
+          </div>
+        </template>
+        <div x-show="!yukleniyor && loglar.length === 0" class="bg-white rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-400 text-sm">
+          Bu ekipman için henüz kontrol kaydı yok.
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="footer-placeholder"></div>
+
+<script>window._dtReady = new Promise(r => { window.__dtResolve = r; });</script>
+
+<script type="module">
+  import { requireToolAccess, db, showToast } from '../js/app.js';
+  import {
+    doc, getDoc, updateDoc, collection, getDocs, query, where
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  (async () => {
+    try {
+      const user = await requireToolAccess('tool_ekipman', {
+        loadingEl: 'page-loading', authGateEl: 'auth-gate', mainEl: 'main-content'
+      });
+      if (!user) { window.__dtResolve(null); return; }
+
+      const cfgSnap = await getDoc(doc(db, 'settings_ekipman', 'config')).catch(() => null);
+      const cfg = (cfgSnap && cfgSnap.exists()) ? cfgSnap.data() : {};
+
+      window._dt = {
+        user, cfg, showToast,
+        async ekipmanlar() {
+          const snap = await getDocs(collection(db, 'ekipmanlar'));
+          return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        },
+        async ekipman(id) {
+          const snap = await getDoc(doc(db, 'ekipmanlar', id));
+          return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+        },
+        // Admin/Şef tüm logları görür; diğerleri yalnız kendi kayıtlarını (Firestore kuralı).
+        // Tam sorgu reddedilirse kendi UID'sine daraltılmış sorguya düşer.
+        async loglar(id) {
+          try {
+            const s = await getDocs(query(collection(db, 'ekipman_loglari'), where('ekipmanId', '==', id)));
+            return { liste: s.docs.map(d => ({ id: d.id, ...d.data() })), kismi: false };
+          } catch (e) {
+            if (e && e.code !== 'permission-denied') throw e;
+            const s = await getDocs(query(collection(db, 'ekipman_loglari'),
+              where('ekipmanId', '==', id), where('operatorUid', '==', user.uid)));
+            return { liste: s.docs.map(d => ({ id: d.id, ...d.data() })), kismi: true };
+          }
+        },
+        async guncelle(id, patch) { await updateDoc(doc(db, 'ekipmanlar', id), patch); }
+      };
+      window.__dtResolve({ user });
+    } catch (e) {
+      console.error('[detay] init hatası:', e);
+      window.__dtResolve(null);
+    }
+  })();
+</script>
+
+<script>
+function DetayApp() {
+  const EB = window.EkipmanBakim;
+  const DURUM_RENK = {
+    'Çalışıyor': { bg: '#f0fdf4', fg: '#15803d' },
+    'Arıza':     { bg: '#fffbeb', fg: '#b45309' },
+    'Kilitli':   { bg: '#fef2f2', fg: '#b91c1c' },
+  };
+  return {
+    EB,
+    yukleniyor: true, hata: '', id: '', secili: null, bulunamadi: false,
+    liste: [], loglar: [], kismiGecmis: false, kaydediliyor: false,
+    arama: '', filtre: 'hepsi',
+    filtreler: [
+      { id: 'hepsi', label: 'Tümü' },
+      { id: 'gecikti', label: 'Gecikmiş' },
+      { id: 'yaklasiyor', label: 'Yaklaşan' },
+      { id: 'ariza', label: 'Arızalı/Kilitli' },
+    ],
+
+    async baslat() {
+      const ctx = await window._dtReady;
+      if (!ctx) { this.yukleniyor = false; return; }
+      this.id = (new URLSearchParams(location.search).get('id') || '').trim();
+      const turAd = (turId) => {
+        const t = (window._dt.cfg.ekipmanTurleri || []).find(x => x.id === turId);
+        return t ? ((t.ikon || '') + ' ' + t.ad).trim() : '';
+      };
+      const zengin = (c) => ({
+        ...c,
+        adi: c.adi || c.id,
+        turAd: turAd(c.turId),
+        durum: c.durum || 'Çalışıyor',
+        sonKontrolMetin: c.sonKontrol?.toDate ? c.sonKontrol.toDate().toLocaleString('tr-TR') : '—',
+      });
+      try {
+        if (!this.id) {
+          this.liste = (await window._dt.ekipmanlar()).map(zengin)
+            .sort((a, b) => a.id.localeCompare(b.id, 'tr'));
+        } else {
+          const c = await window._dt.ekipman(this.id);
+          if (!c) { this.bulunamadi = true; }
+          else {
+            this.secili = zengin(c);
+            const r = await window._dt.loglar(this.id);
+            this.kismiGecmis = r.kismi;
+            this.loglar = r.liste
+              .map(l => {
+                const d = l.ts?.toDate ? l.ts.toDate() : null;
+                return { ...l, _t: d ? d.getTime() : 0, tarihMetin: d ? d.toLocaleString('tr-TR') : '—' };
+              })
+              .sort((a, b) => b._t - a._t);
+          }
+        }
+      } catch (e) {
+        console.error('[detay] yükleme hatası:', e);
+        this.hata = 'Veriler yüklenemedi: ' + (e.message || e);
+      } finally {
+        this.yukleniyor = false;
+      }
+    },
+
+    // ── Liste ──
+    ac(id) { location.href = 'ekipman-detay.html?id=' + encodeURIComponent(id); },
+    arizaliMi(c) { return c.durum === 'Arıza' || c.durum === 'Kilitli'; },
+    sayi(f) { return this.liste.filter(c => this.filtreUyar(c, f)).length; },
+    filtreUyar(c, f) {
+      if (f === 'hepsi') return true;
+      if (f === 'ariza') return this.arizaliMi(c);
+      return EB.ozet(c).enKotu === f;
+    },
+    listeFiltreli() {
+      const q = this.arama.trim().toLocaleLowerCase('tr');
+      return this.liste.filter(c => this.filtreUyar(c, this.filtre) &&
+        (!q || (c.id + ' ' + c.adi + ' ' + c.turAd).toLocaleLowerCase('tr').includes(q)));
+    },
+
+    // ── Stil / etiket yardımcıları ──
+    durumStil(d) { const r = DURUM_RENK[d] || { bg: '#f1f5f9', fg: '#475569' }; return `background:${r.bg};color:${r.fg}`; },
+    stilDurum(d) { const r = EB.RENK[d] || EB.RENK.yok; return `background:${r.bg};color:${r.fg};border:1px solid ${r.border}`; },
+    bakimStil(c) { return this.stilDurum(EB.ozet(c).enKotu); },
+    bakimEtiket(c) {
+      const o = EB.ozet(c);
+      if (o.enKotu === 'yok') return '—';
+      if (o.enKotu === 'ok') return 'Güncel';
+      return EB.etiket(o.bakim.durum === o.enKotu ? o.bakim : o.kalibrasyon);
+    },
+    trTarih(s) { return EB.trTarih(s); },
+
+    // ── Detay ──
+    bakimO() { return EB.bakim(this.secili || {}); },
+    kalO()   { return EB.kalibrasyon(this.secili || {}); },
+    arizaSayisi() { return this.loglar.filter(l => (l.basarisizSayisi || 0) > 0).length; },
+    toplamMaliyet() { return this.loglar.reduce((t, l) => t + (Number(l.bakimMaliyeti) || 0), 0); },
+
+    async bakimYapildi() {
+      if (!this.secili || this.kaydediliyor) return;
+      this.kaydediliyor = true;
+      try {
+        const bugun = EB.bugunYmd();
+        await window._dt.guncelle(this.secili.id, { sonBakimTarihi: bugun });
+        this.secili = { ...this.secili, sonBakimTarihi: bugun };
+        window._dt.showToast('Bakım tarihi bugün olarak işlendi.', 'success');
+      } catch (e) {
+        console.error('[detay] bakım kaydı hatası:', e);
+        window._dt.showToast('Kaydedilemedi: ' + (e.message || e), 'error');
+      } finally {
+        this.kaydediliyor = false;
+      }
+    }
+  };
+}
+</script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof renderLayout === 'function') renderLayout('../');
+  });
+</script>
+</body>
+</html>

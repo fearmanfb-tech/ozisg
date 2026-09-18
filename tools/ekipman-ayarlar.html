@@ -9,6 +9,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
   <!-- SheetJS lazy yüklenir (Excel import/export çağrılınca window.loadScript ile) -->
   <script defer src="../js/layout.js"></script>
+  <script src="../js/ekipman-bakim.js"></script>
   <style>
     [x-cloak] { display: none !important; }
     .tab-btn        { transition: all .15s; }
@@ -55,6 +56,7 @@
     <nav class="ekp-tabs" aria-label="Ekipman Sistemi Navigasyonu">
       <a href="ekipman-takip.html" class="ekp-tab">📋 Takip</a>
       <a href="ekipman-analiz.html" class="ekp-tab">📊 Analiz</a>
+      <a href="ekipman-detay.html" class="ekp-tab">🔎 Ekipmanlar</a>
       <a href="ekipman-qr-basim.html" class="ekp-tab">🏷️ QR Basım</a>
       <a href="ekipman-ayarlar.html" class="ekp-tab ekp-tab-active">⚙️ Ayarlar</a>
     </nav>
@@ -443,23 +445,51 @@
         </div>
 
         <!-- Envanter tablosu -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
           <table class="w-full text-left text-sm">
             <thead class="bg-gray-50 border-b border-gray-100 text-gray-500">
               <tr>
                 <th class="p-3 text-xs font-semibold uppercase tracking-wide">ID / Plaka</th>
-                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Adı</th>
-                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Türü</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Adı / Türü</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Bakım Periyodu (gün)</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Son Bakım</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Kalibrasyon Bitiş</th>
+                <th class="p-3 text-xs font-semibold uppercase tracking-wide">Durum</th>
                 <th class="p-3 text-xs font-semibold uppercase tracking-wide text-right">İşlem</th>
               </tr>
             </thead>
             <tbody>
               <template x-for="c in envanterListesi" :key="c.id">
                 <tr class="border-b border-gray-50 hover:bg-gray-50">
-                  <td class="p-3 font-mono font-bold text-gray-800" x-text="c.id"></td>
-                  <td class="p-3 text-gray-700" x-text="c.adi"></td>
-                  <td class="p-3 text-gray-500" x-text="c.turAd || '—'"></td>
-                  <td class="p-3 text-right">
+                  <td class="p-3 font-mono font-bold text-gray-800">
+                    <a :href="'ekipman-detay.html?id=' + encodeURIComponent(c.id)" class="hover:underline text-blue-700" x-text="c.id"></a>
+                  </td>
+                  <td class="p-3 text-gray-700">
+                    <div x-text="c.adi"></div>
+                    <div class="text-xs text-gray-400" x-text="c.turAd || '—'"></div>
+                  </td>
+                  <td class="p-3">
+                    <input type="number" min="0" step="1" x-model.number="c.bakimPeriyoduGun" @change="cihazBakimKaydet(c)"
+                           class="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="0">
+                  </td>
+                  <td class="p-3">
+                    <input type="date" x-model="c.sonBakimTarihi" @change="cihazBakimKaydet(c)"
+                           class="border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                  </td>
+                  <td class="p-3">
+                    <input type="date" x-model="c.kalibrasyonBitis" @change="cihazBakimKaydet(c)"
+                           class="border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                  </td>
+                  <td class="p-3 text-xs">
+                    <span class="px-2 py-1 rounded-full font-semibold whitespace-nowrap"
+                          :style="bakimStil(c)" x-text="bakimEtiket(c)"></span>
+                  </td>
+                  <td class="p-3 text-right whitespace-nowrap">
+                    <button @click="bakimYapildi(c)"
+                            title="Son bakım tarihini bugün olarak işle"
+                            class="text-emerald-700 hover:bg-emerald-50 px-2 py-1 rounded text-xs font-semibold transition">
+                      ✔ Bakım Yapıldı
+                    </button>
                     <button @click="cihazSil(c.id)"
                             class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs font-semibold transition">
                       🗑️ Sil
@@ -468,13 +498,50 @@
                 </tr>
               </template>
               <tr x-show="envanterListesi.length === 0 && !envanterYukleniyor">
-                <td colspan="4" class="p-6 text-center text-gray-400 text-sm">
+                <td colspan="7" class="p-6 text-center text-gray-400 text-sm">
                   🪪 Kayıtlı cihaz yok. Yukarıdan manuel ekleyin veya Excel ile toplu yükleyin.
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           SEKME — BAKIM BİLDİRİMİ & ATAMA LİSTELERİ
+           Fields (settings_ekipman/config): mailAlicilari[], sorumlular[], yedekParcalar[]
+      ═══════════════════════════════════════════ -->
+      <div x-show="aktifSekme === 'bakim'" x-cloak class="space-y-4">
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <label class="block text-sm font-bold text-gray-800 mb-1">📧 Bakım / Kalibrasyon Hatırlatma Alıcıları</label>
+          <p class="text-xs text-gray-400 mb-3">
+            Her satıra bir e-posta. Bakım ya da kalibrasyon tarihine 7 gün veya daha az kalan (ya da geçmiş) ekipmanlar için
+            <code class="bg-gray-100 px-1 rounded">cron_equipment_reminders.php</code> bu adreslere otomatik mail gönderir.
+          </p>
+          <textarea x-model="listeMetin.mail" rows="4" placeholder="isg@firma.com&#10;bakim@firma.com"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <label class="block text-sm font-bold text-gray-800 mb-1">👷 Aksiyon Sorumluları</label>
+          <p class="text-xs text-gray-400 mb-3">
+            Her satıra bir kişi/departman. Analiz panelindeki DÖF formunda "Aksiyon Sorumlusu" alanında öneri olarak çıkar (yine de serbest yazılabilir).
+          </p>
+          <textarea x-model="listeMetin.sorumlu" rows="4" placeholder="Ahmet Yılmaz — Bakım&#10;Teknik Servis"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <label class="block text-sm font-bold text-gray-800 mb-1">🧰 Yedek Parça Kataloğu</label>
+          <p class="text-xs text-gray-400 mb-3">
+            Her satıra bir parça. DÖF formunda "Gerekli Yedek Parça" alanında öneri olarak çıkar; böylece aynı parça farklı yazımlarla kaydedilmez.
+          </p>
+          <textarea x-model="listeMetin.parca" rows="5" placeholder="Hidrolik hortum&#10;M12 cıvata&#10;Akü 48V"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+
+        <p class="text-xs text-gray-400">Değişiklikler sağ üstteki <b>💾 Kaydet</b> ile kaydedilir.</p>
       </div>
 
       <!-- ══════════════════════════════════════════
@@ -561,13 +628,13 @@
 <script type="module">
   import { requireToolAccess, db, showToast } from '../js/app.js';
   import {
-    doc, getDoc, setDoc, deleteDoc,
+    doc, getDoc, setDoc, updateDoc, deleteDoc,
     collection, getDocs, serverTimestamp
   } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
   window._ayBridge = {
     db, showToast,
-    doc, getDoc, setDoc, deleteDoc,
+    doc, getDoc, setDoc, updateDoc, deleteDoc,
     collection, getDocs, serverTimestamp
   };
 
@@ -646,10 +713,14 @@ function AyarlarApp() {
       { id: 'turler',      label: '🏭 Ekipman Türleri' },
       { id: 'checklist',   label: '📋 Checklist Editörü' },
       { id: 'envanter',    label: '🪪 Ekipman Envanteri' },
+      { id: 'bakim',       label: '🔔 Bakım & Atama' },
       { id: 'sistem',      label: '⚙️ Sistem Ayarları' },
     ],
 
     cfg: { ...VARSAYILAN_CFG, lokasyonlar: [], ekipmanTurleri: [] },
+
+    // Bakım bildirimi / atama listeleri (textarea: satır başına bir kayıt)
+    listeMetin: { mail: '', sorumlu: '', parca: '' },
 
     // Lokasyon
     yeniBlokAdi:       '',
@@ -733,6 +804,11 @@ function AyarlarApp() {
                 }))
               : [],
           };
+          this.listeMetin = {
+            mail:    (Array.isArray(d.mailAlicilari) ? d.mailAlicilari : []).join('\n'),
+            sorumlu: (Array.isArray(d.sorumlular)    ? d.sorumlular    : []).join('\n'),
+            parca:   (Array.isArray(d.yedekParcalar) ? d.yedekParcalar : []).join('\n'),
+          };
           if (d.updatedAt?.toDate) {
             this.sonGuncelleme = d.updatedAt.toDate().toLocaleString('tr-TR');
           }
@@ -806,7 +882,10 @@ function AyarlarApp() {
             adi:   data.adi   || '',
             turId: data.turId || '',
             turAd: this._turAd(data.turId),
-            durum: data.durum || 'Çalışıyor'
+            durum: data.durum || 'Çalışıyor',
+            bakimPeriyoduGun: Number(data.bakimPeriyoduGun) || '',
+            sonBakimTarihi:   data.sonBakimTarihi   || '',
+            kalibrasyonBitis: data.kalibrasyonBitis || ''
           });
         });
         // Alfabetik (Türkçe)
@@ -818,6 +897,39 @@ function AyarlarApp() {
       } finally {
         this.envanterYukleniyor = false;
       }
+    },
+
+    // ── Bakım / kalibrasyon (Firestore /ekipmanlar alanları) ────────────
+    bakimEtiket(c) {
+      const o = window.EkipmanBakim.ozet(c);
+      if (o.enKotu === 'yok') return '—';
+      if (o.enKotu === 'ok')  return 'Güncel';
+      const kotu = o.bakim.durum === o.enKotu ? o.bakim : o.kalibrasyon;
+      return window.EkipmanBakim.etiket(kotu);
+    },
+    bakimStil(c) {
+      const r = window.EkipmanBakim.RENK[window.EkipmanBakim.ozet(c).enKotu] || window.EkipmanBakim.RENK.yok;
+      return `background:${r.bg};color:${r.fg};border:1px solid ${r.border}`;
+    },
+    async cihazBakimKaydet(c) {
+      const { db, doc, updateDoc } = window._ayBridge;
+      const periyot = Math.max(0, Math.floor(Number(c.bakimPeriyoduGun) || 0));
+      try {
+        await updateDoc(doc(db, 'ekipmanlar', c.id), {
+          bakimPeriyoduGun: periyot,
+          sonBakimTarihi:   c.sonBakimTarihi   || '',
+          kalibrasyonBitis: c.kalibrasyonBitis || ''
+        });
+        c.bakimPeriyoduGun = periyot || '';
+        this._toast(`"${c.id}" bakım bilgisi kaydedildi.`, 'success');
+      } catch (e) {
+        console.error('[ayarlar] bakım kaydetme hatası:', e);
+        this._toast('Bakım bilgisi kaydedilemedi: ' + e.message, 'error');
+      }
+    },
+    async bakimYapildi(c) {
+      c.sonBakimTarihi = window.EkipmanBakim.bugunYmd();
+      await this.cihazBakimKaydet(c);
     },
 
     async cihazEkleManuel() {
@@ -846,7 +958,7 @@ function AyarlarApp() {
 
         // Yerel listeye ekle / güncelle
         const idx = this.envanterListesi.findIndex(c => c.id === id);
-        const yeni = { id, adi, turId, turAd: this._turAd(turId), durum: 'Çalışıyor' };
+        const yeni = { ...(idx >= 0 ? this.envanterListesi[idx] : {}), id, adi, turId, turAd: this._turAd(turId), durum: 'Çalışıyor' };
         if (idx >= 0) this.envanterListesi[idx] = yeni;
         else          this.envanterListesi.unshift(yeni);
 
@@ -1118,6 +1230,17 @@ function AyarlarApp() {
         alert('Kaydetmeden önce düzeltilmesi gerekenler:\n\n• ' + hatalar.join('\n• '));
         return;
       }
+      const satirlar = (m) => [...new Set((m || '').split(/[\n,;]+/).map(s => s.trim()).filter(Boolean))];
+      const mailAlicilari = satirlar(this.listeMetin.mail);
+      const gecersizMail = mailAlicilari.filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+      if (gecersizMail.length) {
+        this._toast('Geçersiz e-posta: ' + gecersizMail.join(', '), 'error');
+        this.aktifSekme = 'bakim';
+        return;
+      }
+      // Sorumlu/parça adlarında virgül olabilir ("Ahmet, Bakım") — sadece satır sonuyla ayır.
+      const satirSonu = (m) => [...new Set((m || '').split('\n').map(s => s.trim()).filter(Boolean))];
+
       this.kaydediliyor = true;
       const { db, doc, setDoc, serverTimestamp } = window._ayBridge;
       try {
@@ -1126,6 +1249,9 @@ function AyarlarApp() {
           systemPrompt:    (this.cfg.systemPrompt || '').substring(0, 4000),
           lokasyonlar:     this.cfg.lokasyonlar,
           ekipmanTurleri:  this.cfg.ekipmanTurleri,
+          mailAlicilari,
+          sorumlular:      satirSonu(this.listeMetin.sorumlu),
+          yedekParcalar:   satirSonu(this.listeMetin.parca),
           updatedAt:       serverTimestamp(),
           updatedBy:       this.user.email
         }, { merge: true });

@@ -137,6 +137,7 @@
   <nav class="ekp-tabs" aria-label="Ekipman Sistemi Navigasyonu">
     <a href="ekipman-takip.html" class="ekp-tab">📋 Takip</a>
     <a href="ekipman-analiz.html" class="ekp-tab ekp-tab-active">📊 Analiz</a>
+    <a href="ekipman-detay.html" class="ekp-tab">🔎 Ekipmanlar</a>
     <a href="ekipman-qr-basim.html" class="ekp-tab">🏷️ QR Basım</a>
     <a href="ekipman-ayarlar.html" class="ekp-tab">⚙️ Ayarlar</a>
   </nav>
@@ -388,7 +389,12 @@
               <td>
                 <span x-text="(l.blokAd || '—') + ' / ' + (l.bolgeAd || '—')"></span>
               </td>
-              <td x-text="l.ekipmanAdi || l.ekipmanTuruAdi || '—'"></td>
+              <td>
+                <a x-show="l.ekipmanId" :href="'ekipman-detay.html?id=' + encodeURIComponent(l.ekipmanId || '')"
+                   class="text-indigo-700 hover:underline" title="Ekipman geçmişini aç"
+                   x-text="l.ekipmanAdi || l.ekipmanId"></a>
+                <span x-show="!l.ekipmanId" x-text="l.ekipmanAdi || l.ekipmanTuruAdi || '—'"></span>
+              </td>
               <td>
                 <span class="badge"
                       :class="l.basarisizSayisi > 0 ? 'badge-red' : 'badge-green'"
@@ -486,17 +492,23 @@
 
       <!-- Sorumlu -->
       <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Aksiyon Sorumlusu *</label>
-      <input type="text" x-model="dofModal.sorumlu" maxlength="100"
-             placeholder="Ad Soyad / Departman"
+      <input type="text" x-model="dofModal.sorumlu" maxlength="100" list="dof-sorumlu-list"
+             placeholder="Ad Soyad / Departman (listeden seçin veya yazın)"
              class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+      <datalist id="dof-sorumlu-list">
+        <template x-for="s in cfg.sorumlular" :key="s"><option :value="s"></option></template>
+      </datalist>
 
       <!-- Yedek Parça + Maliyet -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         <div>
           <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">🧰 Gerekli Yedek Parça</label>
-          <input type="text" x-model="dofModal.yedekParca" maxlength="200"
-                 placeholder="Ör: Hidrolik hortum, M12 cıvata"
+          <input type="text" x-model="dofModal.yedekParca" maxlength="200" list="dof-parca-list"
+                 placeholder="Ör: Hidrolik hortum (katalogdan seçin veya yazın)"
                  class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          <datalist id="dof-parca-list">
+            <template x-for="p in cfg.yedekParcalar" :key="p"><option :value="p"></option></template>
+          </datalist>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">💰 Tahmini Maliyet (TL)</label>
@@ -670,7 +682,9 @@ function AnalizApp() {
       this.user = ctx.user;
       this.cfg = {
         lokasyonlar:    Array.isArray(ctx.cfg?.lokasyonlar)    ? ctx.cfg.lokasyonlar    : [],
-        ekipmanTurleri: Array.isArray(ctx.cfg?.ekipmanTurleri) ? ctx.cfg.ekipmanTurleri : []
+        ekipmanTurleri: Array.isArray(ctx.cfg?.ekipmanTurleri) ? ctx.cfg.ekipmanTurleri : [],
+        sorumlular:     Array.isArray(ctx.cfg?.sorumlular)     ? ctx.cfg.sorumlular     : [],
+        yedekParcalar:  Array.isArray(ctx.cfg?.yedekParcalar)  ? ctx.cfg.yedekParcalar  : []
       };
       this.logHepsi = Array.isArray(ctx.loglar) ? ctx.loglar : [];
 
