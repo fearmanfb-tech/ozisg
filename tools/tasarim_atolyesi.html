@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <script>
+    (function(){var t=localStorage.getItem('ozisg_theme'),p=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t||p);})();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Tasarım Atölyesi — ozisg.com</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  <link rel="stylesheet" href="../css/master.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* Faz 6: 100vh yerine 100dvh — mobil tarayıcılarda adres çubuğu açılıp
+       kapandıkça `vh` sabit kalıp içeriğin altını kesiyor/zıplatıyordu; `dvh`
+       (dynamic viewport height) gerçek görünür alanı takip eder. ÖNCE `vh` ile
+       yazıp SONRA `dvh` ile EZİYORUZ (aynı property iki kez) — `dvh`'yi
+       tanımayan eski bir tarayıcı ikinci satırı geçersiz sayıp sessizce `vh`
+       değerinde kalır, `dvh` destekleyen tarayıcı ise onu kullanır. Böylece
+       hem eski hem yeni tarayıcıda güvenli. */
+    body { font-family: 'Inter', sans-serif; background: var(--bg-page); margin: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+
+    /* NOT: #main-content (auth-gate sarmalayıcısı) body'nin flex-column akışını
+       bölüyor, bu yüzden flex-grow'a güvenmek yerine yüksekliği açıkça
+       hesaplıyoruz: 65px navbar payı + 30px status-bar = 95px. */
+    #main-content { display: block; }
+    .studio-layout { display: flex; height: calc(100vh - 65px - 30px); height: calc(100dvh - 65px - 30px); overflow: hidden; margin-top: 65px; position: relative; }
+
+    /* Faz 7 — İKON SİSTEMİ: Lucide (CDN, tam UMD paketi — window.lucide +
+       lucide.createIcons()). Emoji yerine <i data-lucide="isim"> yazıp bu
+       fonksiyonu çağırınca inline SVG'ye dönüşüyor; stroke="currentColor"
+       sayesinde renk otomatik olarak buton/metin rengini miras alıyor (ayrı
+       bir renk yönetimi gerekmiyor). Boyut TAMAMEN font-size ile kontrol
+       ediliyor (1em kural) — böylece mevcut buton boyutu sistemine (rem
+       tabanlı) hiç dokunmadan entegre oluyor. Her dinamik render fonksiyonu
+       (renderShapeGrid/renderOutliner/renderInspector/loadDesignsList) kendi
+       innerHTML'ini yazdıktan SONRA refreshIcons()'ı (bkz. JS) çağırıyor. */
+    .lucide { width: 1em; height: 1em; stroke-width: 2; flex-shrink: 0; display: block; }
+
+    /* ═══ FAZ 7 — ŞERİT (RIBBON) ARAÇ ÇUBUĞU ════════════════════════════
+       Eskiden ortada yüzen bir "hap" (pill) idi; artık viewport-panel'in en
+       üstüne TAM GENİŞLİKTE, kenarlıksız/boşluksuz, ince bir başlık çubuğu
+       (header bar) olarak sabitlendi. 3 bölüm: sol (Dosya+Düzen), orta
+       (Araçlar), sağ (Görünüm+Yardım) — CSS Grid (1fr auto 1fr) ile ORTA
+       bölüm sol/sağ içerik genişliğinden BAĞIMSIZ olarak gerçekten ortalanır. */
+    .viewport-toolbar {
+        position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+        height: 46px; box-sizing: border-box; padding: 0 10px;
+        background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle);
+        display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px;
+    }
+    .tb-section { display: flex; align-items: center; gap: 2px; min-width: 0; }
+    .tb-section-left { justify-self: start; }
+    .tb-section-center { justify-self: center; }
+    .tb-section-right { justify-self: end; }
+    .tb-group { display: flex; align-items: center; gap: 2px; }
+
+    /* Butonlar küçültüldü: 38px → 32px — daha sıkı/profesyonel bir CAD hissi. */
+    .tool-icon-btn {
+        background: transparent; border: none; width: 32px; height: 32px; border-radius: 7px;
+        display: flex; align-items: center; justify-content: center; font-size: 1.05rem;
+        cursor: pointer; transition: background 0.15s ease, color 0.15s ease; flex-shrink: 0;
+        color: var(--text-secondary);
+    }
+    .tool-icon-btn:hover { background: var(--bg-surface-2); color: var(--accent-primary); }
+    .tool-icon-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+    .tool-icon-btn:disabled:hover { background: transparent; color: var(--text-secondary); }
+    .tool-icon-btn.active { background: var(--accent-primary); color: #fff; }
+    .tool-icon-btn.active:hover { background: var(--accent-primary); color: #fff; }
+    .toolbar-sep { width: 1px; height: 22px; background: var(--border-color); margin: 0 4px; align-self: center; flex-shrink: 0; }
+    .toolbar-dropdown { position: relative; }
+    .toolbar-dropdown .dropdown-menu { min-width: 210px; }
+    .toolbar-dropdown .dropdown-item { white-space: nowrap; font-size: 0.82rem; display: flex; align-items: center; gap: 8px; }
+
+    /* Sağ Panel (Faz 6'da yer değiştirdi — kullanıcı talebiyle SOLA
+       geçen Şekil Kütüphanesi'yle yerini takas etti): AI Kodu, Kayıtlı
+       Tasarımlar, Model Ağacı, Inspector. ARTIK SAĞDA duruyor — aşağıdaki
+       kenarlık/gölge/toggle-tab yönleri buna göre AYNALANDI (border-left,
+       gölge sola düşer, tab `right` ekseninde konumlanır). */
+    .sidebar-panel { width: 320px; background: var(--bg-surface); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; z-index: 10; flex-shrink: 0; box-shadow: -2px 0 10px rgba(0,0,0,0.02); overflow-y: auto; overflow-x: hidden; transition: width 0.2s ease, min-width 0.2s ease, opacity 0.15s ease; }
+    .sidebar-panel.collapsed { width: 0; min-width: 0; border-left: none; opacity: 0; pointer-events: none; }
+    .sidebar-panel > * { width: 320px; flex-shrink: 0; } /* daralırken içerik sıkışmasın, olduğu gibi kaysın */
+    .sidebar-toggle-tab { position: absolute; top: 12px; right: 320px; z-index: 15; width: 22px; height: 40px; border: 1px solid var(--border-color); border-right: none; background: var(--bg-surface); color: var(--text-secondary); border-radius: 8px 0 0 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; box-shadow: -2px 0 6px rgba(0,0,0,0.06); transition: right 0.2s ease; }
+    .sidebar-toggle-tab:hover { background: var(--bg-surface-2); color: var(--accent-primary); }
+    .studio-layout.sidebar-collapsed .sidebar-toggle-tab { right: 0; }
+    .viewport-panel { flex-grow: 1; position: relative; background: #e2e8f0; min-width: 0; }
+
+    /* Sol Panel (Faz 6'da yer değiştirdi): Şekil Kütüphanesi — ARTIK SOLDA.
+       Faz 7'de 230px → 180px daraltıldı (ortadaki 3D alana yer açmak için). */
+    .shape-panel { width: 180px; background: var(--bg-surface); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; z-index: 10; flex-shrink: 0; overflow-y: auto; overflow-x: hidden; transition: width 0.2s ease, opacity 0.15s ease; }
+    .shape-panel.collapsed { width: 0; opacity: 0; pointer-events: none; }
+    .shape-panel > * { width: 180px; flex-shrink: 0; }
+    .shape-panel-toggle-tab { position: absolute; top: 12px; left: 180px; z-index: 15; width: 22px; height: 40px; border: 1px solid var(--border-color); border-left: none; background: var(--bg-surface); color: var(--text-secondary); border-radius: 0 8px 8px 0; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; box-shadow: 2px 0 6px rgba(0,0,0,0.06); transition: left 0.2s ease; }
+    .shape-panel-toggle-tab:hover { background: var(--bg-surface-2); color: var(--accent-primary); }
+    .studio-layout.shape-panel-collapsed .shape-panel-toggle-tab { left: 0; }
+
+    .shape-op-toggle { display: flex; gap: 5px; padding: 10px; border-bottom: 1px solid var(--border-subtle); }
+    .shape-op-btn { flex: 1; padding: 7px 4px; border-radius: 999px; border: 2px solid var(--border-color); background: var(--bg-surface); font-size: 0.7rem; font-weight: 700; cursor: pointer; color: var(--text-secondary); transition: all 0.15s ease; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .shape-op-btn:hover { border-color: var(--text-muted); }
+    .shape-op-btn.active[data-new-shape-op="solid"] { border-color: var(--accent-primary); color: var(--accent-primary); background: rgba(46,108,209,0.08); }
+    .shape-op-btn.active[data-new-shape-op="hole"] { border-color: var(--accent-danger); color: var(--accent-danger); background: repeating-linear-gradient(45deg, rgba(239,68,68,0.08), rgba(239,68,68,0.08) 4px, rgba(239,68,68,0.15) 4px, rgba(239,68,68,0.15) 8px); }
+
+    .shape-search { padding: 0 10px 10px; }
+    .shape-search input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.78rem; background: var(--bg-surface); color: var(--text-primary); box-sizing: border-box; }
+
+    .shape-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 8px 12px; }
+    .shape-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-surface-2); cursor: pointer; transition: 0.15s; }
+    .shape-btn:hover { border-color: var(--accent-primary); background: var(--accent-primary-subtle, rgba(46,108,209,0.08)); }
+    .shape-btn .shape-icon { font-size: 1.3rem; line-height: 1; color: var(--text-secondary); }
+    .shape-btn:hover .shape-icon { color: var(--accent-primary); }
+    .shape-btn .shape-label { font-size: 0.6rem; font-weight: 600; color: var(--text-secondary); text-align: center; line-height: 1.15; }
+    .shape-grid-empty { grid-column: 1 / -1; text-align: center; color: var(--text-muted); font-size: 0.78rem; padding: 12px; }
+
+    @media (prefers-color-scheme: dark) { .viewport-panel { background: #0f172a; } }
+
+    .prompt-box { padding: 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-2); }
+    .prompt-input { width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 0.9rem; resize: vertical; min-height: 70px; box-sizing: border-box; outline: none; transition: border-color 0.2s; }
+    .prompt-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(46, 108, 209, 0.1); }
+    .prompt-input:disabled { opacity: 0.6; cursor: not-allowed; }
+    .phase-badge { font-size: 0.65rem; font-weight: 700; color: var(--accent-warning); background: rgba(245, 158, 11, 0.12); padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+    .sandbox-badge { font-size: 0.65rem; font-weight: 700; color: var(--accent-success); background: rgba(16, 185, 129, 0.12); padding: 2px 6px; border-radius: 4px; margin-left: 6px; display: inline-flex; align-items: center; gap: 3px; }
+    #btn-generate { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+    /* AI Kodu (düzenlenebilir, sandbox'ta çalıştırılır) */
+    #ai-code-panel { display: none; border-bottom: 1px solid var(--border-subtle); }
+    #ai-code { width: 100%; min-height: 130px; border: none; background: #1e1e1e; color: #d4d4d4; font-family: 'Fira Code', monospace; font-size: 12px; padding: 12px 16px; box-sizing: border-box; resize: vertical; outline: none; line-height: 1.5; display: block; }
+    .ai-code-actions { display: flex; gap: 8px; padding: 10px 16px; background: var(--bg-surface-2); }
+    .ai-code-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .ai-status-line { padding: 0 16px 10px; font-size: 0.75rem; color: var(--text-muted); }
+
+    .panel-section { border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface); }
+    .panel-header { padding: 10px 16px; background: var(--bg-surface-2); font-size: 0.8rem; font-weight: 700; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; text-transform: uppercase; letter-spacing: 0.03em; gap: 6px; }
+    .panel-header .panel-header-title { display: flex; align-items: center; gap: 8px; }
+    .panel-header-action { cursor: pointer; display: flex; align-items: center; text-transform: none; font-weight: 400; color: var(--text-secondary); }
+    .panel-header-action:hover { color: var(--accent-primary); }
+
+    /* Kayıtlı Tasarımlar (Firestore ERP geçmişi) */
+    #save-box { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface); display: flex; gap: 8px; }
+    #design-name { flex: 1; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.82rem; background: var(--bg-surface); color: var(--text-primary); }
+    #save-box button { display: flex; align-items: center; gap: 6px; }
+    #designs-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+    #designs-list .empty-hint { padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
+    .design-row { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; border: 1px solid var(--border-subtle); }
+    .design-row .d-info { flex-grow: 1; overflow: hidden; }
+    .design-row .d-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .design-row .d-meta { font-size: 0.7rem; color: var(--text-muted); }
+    .design-row button { background: none; border: none; cursor: pointer; font-size: 0.95rem; padding: 4px 6px; border-radius: 4px; display: flex; }
+    .design-row button:hover { background: var(--bg-surface-2); }
+    .design-row .d-del:hover { color: var(--accent-danger); }
+
+    /* Model Ağacı (Outliner) */
+    #outliner-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+    #outliner-list .empty-hint { padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
+    .outliner-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+    .outliner-row:hover { background: var(--bg-surface-2); }
+    .outliner-row.selected { background: rgba(46, 108, 209, 0.1); border-color: var(--accent-primary); }
+    .outliner-row.row-hidden { opacity: 0.5; }
+    .outliner-row .row-name { flex-grow: 1; font-size: 0.8rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .outliner-row select { font-size: 0.7rem; padding: 3px 4px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-secondary); }
+    .outliner-row button { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 3px; color: var(--text-muted); border-radius: 4px; display: flex; flex-shrink: 0; }
+    .outliner-row button:hover { background: var(--border-color); color: var(--accent-danger); }
+    .outliner-row button[data-lock].is-on,
+    .outliner-row button[data-hide].is-on { color: var(--accent-warning); }
+    .outliner-row button[data-lock]:hover, .outliner-row button[data-hide]:hover { color: var(--accent-primary); }
+
+    /* Inspector */
+    #inspector-body { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+    #inspector-empty { padding: 24px 16px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+    .field-row { display: flex; align-items: center; gap: 8px; }
+    .field-row label { width: 70px; flex-shrink: 0; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+    .field-row input[type="number"] { flex: 1; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.82rem; background: var(--bg-surface); color: var(--text-primary); }
+    .field-group { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg-surface-2); border-radius: 8px; }
+    .field-group-title { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+    .vec3-row { display: flex; gap: 6px; }
+    .vec3-row input { width: 33%; padding: 6px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.78rem; text-align: center; }
+    .icon-btn-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+    /* CSG "meşgul" uyarı afişi (Faz 5) — recompute()'un çağıranların kendi
+       status-msg yazımlarınca ANINDA ezilmemesi için status-bar'dan TAMAMEN
+       bağımsız, kendi görünürlüğünü kendi yöneten bir viewport overlay'i. */
+    .csg-busy-banner { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(245,158,11,0.95); color: #1e293b; padding: 10px 18px; border-radius: 10px; font-size: 0.82rem; font-weight: 700; z-index: 25; box-shadow: 0 6px 18px rgba(0,0,0,0.2); display: none; text-align: center; max-width: 90%; }
+    .hud-info { position: absolute; bottom: 16px; right: 16px; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; font-family: 'Fira Code', monospace; pointer-events: none; z-index: 20; line-height: 1.5; }
+
+    /* Alt Çubuk (Faz 5): Hızlı görünüm değiştirme + mm/cm birim + durum mesajı.
+       3 bölüm: sol (görünüm/birim), orta (durum mesajı), sağ (versiyon). */
+    .status-bar { height: 30px; background: var(--accent-primary); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px; font-size: 0.75rem; font-weight: 600; flex-shrink: 0; z-index: 30; }
+    .status-bar-left { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+    .qv-btn { background: rgba(255,255,255,0.16); border: none; color: #fff; border-radius: 4px; padding: 3px 7px; font-size: 0.72rem; font-weight: 700; cursor: pointer; line-height: 1.4; display: flex; align-items: center; gap: 4px; }
+    .qv-btn:hover { background: rgba(255,255,255,0.3); }
+    #btn-unit-toggle { min-width: 30px; }
+    .status-sep { width: 1px; height: 14px; background: rgba(255,255,255,0.35); margin: 0 3px; flex-shrink: 0; }
+    #status-msg { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .status-bar > .status-version { flex-shrink: 0; }
+
+    /* ViewCube (Faz 5) — tıklanabilir, kameranın anlık yönüne senkron dönen
+       hafif bir CSS 3D küp. İkinci bir WebGL sahnesi AÇMIYORUZ (performans) —
+       her animate() karesinde kameranın quaternion'ından türetilen bir CSS
+       transform ile senkronize ediliyor. Faz 7: `top` değeri yeni sabit
+       46px'lik şerit araç çubuğuna göre yeniden hesaplandı (eskiden 68px). */
+    /* top: 56px'te köşegen (izometrik) açılarda küpün 3D perspektifle öne
+       (translateZ) taşınan köşeleri, üstteki 46px'lik araç çubuğunun altına
+       ~13px kadar taşıyordu (bizzat ölçülüp doğrulandı). 72px, en kötü
+       senaryoda bile (tüm orbit açıları tarandı) çakışmayı ortadan kaldırıyor. */
+    .viewcube-wrap { position: absolute; top: 72px; right: 16px; width: 64px; height: 64px; perspective: 340px; z-index: 21; }
+    .viewcube { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+    .vc-face { position: absolute; width: 64px; height: 64px; background: rgba(46,108,209,0.85); border: 1px solid rgba(255,255,255,0.5); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; user-select: none; backface-visibility: hidden; }
+    .vc-face:hover { background: rgba(46,108,209,1); }
+    .vc-front  { transform: translateZ(32px); }
+    .vc-back   { transform: rotateY(180deg) translateZ(32px); }
+    .vc-right  { transform: rotateY(90deg) translateZ(32px); }
+    .vc-left   { transform: rotateY(-90deg) translateZ(32px); }
+    .vc-top    { transform: rotateX(90deg) translateZ(32px); }
+    .vc-bottom { transform: rotateX(-90deg) translateZ(32px); }
+
+    .toolbar-hamburger { display: none; }
+
+    /* ═══ FAZ 7 — YARDIM MODALI ═══════════════════════════════════════ */
+    .help-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(2px); z-index: 200; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
+    .help-modal-overlay.open { display: flex; }
+    .help-modal { background: var(--bg-surface); border-radius: 14px; width: min(560px, 100%); max-height: 82vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.3); }
+    .help-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; background: var(--bg-surface); }
+    .help-modal-header h3 { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 8px; color: var(--text-primary); }
+    .help-modal-close { background: none; border: none; cursor: pointer; color: var(--text-secondary); width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .help-modal-close:hover { background: var(--bg-surface-2); color: var(--accent-danger); }
+    .help-modal-body { padding: 8px 20px 20px; }
+    .help-modal-body section { margin-top: 16px; }
+    .help-modal-body h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 0 0 8px; }
+    .help-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .help-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--border-subtle); font-size: 0.82rem; color: var(--text-secondary); }
+    .help-list li:last-child { border-bottom: none; }
+    .help-key { font-family: 'Fira Code', monospace; font-size: 0.72rem; font-weight: 700; color: var(--text-primary); background: var(--bg-surface-2); border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0; }
+
+    /* ═══ FAZ 8 — HIZLI METİN DÜZENLEME (viewport içi çift-tık popover) ═══ */
+    .quick-text-edit { position: absolute; z-index: 30; transform: translate(-50%, -50%); background: var(--bg-surface); border: 2px solid var(--accent-primary); border-radius: 8px; padding: 6px 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+    .quick-text-edit input { border: none; outline: none; background: transparent; font: 600 1rem 'Inter', sans-serif; color: var(--text-primary); min-width: 160px; text-align: center; }
+
+    /* ═══ FAZ 8 — Sık Kullanılanlar (Şekil Kütüphanesi altında) ═══════════ */
+    .panel-header-mini { padding: 8px 10px; background: var(--bg-surface-2); font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+    #favorites-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto; }
+    #favorites-list .empty-hint { padding: 10px; text-align: center; color: var(--text-muted); font-size: 0.66rem; line-height: 1.4; }
+    .favorite-row { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border-subtle); cursor: pointer; background: var(--bg-surface-2); }
+    .favorite-row:hover { border-color: var(--accent-primary); }
+    .fav-name { flex: 1; font-size: 0.7rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fav-del { background: none; border: none; cursor: pointer; padding: 2px; color: var(--text-muted); display: flex; flex-shrink: 0; }
+    .fav-del:hover { color: var(--accent-danger); }
+
+    /* ═══ RESPONSIVE / DOKUNMATİK (Faz 5, Faz 7'de ribbon'a göre güncellendi) ═
+       ≤860px: yan paneller kaydırılabilir "çekmece" (drawer) olur, araç
+       çubuğu gruplara ayrılıp hamburger menüye toplanır, dokunma hedefleri
+       büyütülür. ViewCube'ü mobilde saklıyoruz (dokunmatik zaten tek parmak
+       orbit veriyor, küçük ekranda yer de kaplıyor). */
+    @media (max-width: 860px) {
+        .sidebar-panel, .shape-panel { position: absolute; top: 0; bottom: 0; height: 100%; z-index: 40; box-shadow: 0 0 28px rgba(0,0,0,0.28); }
+        .sidebar-panel { right: 0; }
+        .shape-panel { left: 0; }
+        .sidebar-toggle-tab, .shape-panel-toggle-tab { z-index: 41; }
+
+        .viewport-toolbar { display: flex; height: 46px; padding: 0 8px; justify-content: flex-start; }
+        .tb-section-left, .tb-section-center, .tb-section-right { display: contents; }
+        .toolbar-hamburger { display: flex; }
+        .tb-group, .tb-sep { display: none; }
+        .viewport-toolbar.mobile-open { height: auto; flex-wrap: wrap; padding-bottom: 6px; }
+        .viewport-toolbar.mobile-open .tb-group { display: flex; width: 100%; justify-content: center; flex-wrap: wrap; border-top: 1px solid var(--border-subtle); padding-top: 6px; margin-top: 4px; }
+        .viewport-toolbar.mobile-open .tb-sep { display: none; }
+
+        /* Dokunmatik hedef büyütme — Apple/Google'ın önerdiği ~44px asgari */
+        .tool-icon-btn { width: 42px; height: 42px; font-size: 1.2rem; }
+        .shape-btn { padding: 12px 4px; }
+
+        .viewcube-wrap { display: none; }
+        .status-bar > .status-version { display: none; } /* dar ekranda yer kalmıyor */
+    }
+  </style>
+</head>
+<body>
+
+  <div id="nav-placeholder"></div>
+
+  <div id="auth-gate" style="display:none;">
+    <div style="min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;padding:var(--space-8);">
+        <h2 style="margin-bottom:var(--space-4); font-size: 1.5rem; font-weight: 700;">Giriş Gerekli</h2>
+        <a href="../login.html" class="btn btn-primary btn-lg">Giriş Yap</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-loading" style="min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="main-content" style="display:none;">
+
+  <div class="studio-layout">
+      <!-- Sol Panel (Faz 6): Şekil Kütüphanesi — kullanıcı talebiyle sağdaki
+           AI/Model Ağacı/Inspector panelinden yer değiştirdi. -->
+      <aside class="shape-panel" id="shape-panel">
+          <div class="shape-op-toggle">
+              <button class="shape-op-btn active" data-new-shape-op="solid" onclick="window.setNewShapeOperation('solid')"><i data-lucide="circle-dot"></i> Katı</button>
+              <button class="shape-op-btn" data-new-shape-op="hole" onclick="window.setNewShapeOperation('hole')"><i data-lucide="circle-slash-2"></i> Delik</button>
+          </div>
+          <div class="shape-search">
+              <input type="text" id="shape-search-input" placeholder="Şekil ara...">
+          </div>
+          <div class="shape-grid" id="shape-grid"></div>
+
+          <!-- Sık Kullanılanlar (Faz 8) — localStorage tabanlı kişisel şablon
+               kütüphanesi. Sahneye eklerken AI-CAD/kayıtlı-tasarım ile AYNI
+               güvenli doğrulama hattından (validateAndConvertNodes) geçer. -->
+          <div class="panel-header-mini"><i data-lucide="star"></i> Favorilerim</div>
+          <ul id="favorites-list"><li class="empty-hint">Henüz favori yok.</li></ul>
+      </aside>
+
+      <button class="shape-panel-toggle-tab" id="shape-panel-toggle" title="Şekil Kütüphanesini Gizle/Göster">◀</button>
+
+      <!-- Orta: 3D Sahne -->
+      <main class="viewport-panel" id="canvas-container">
+          <!-- Üst Şerit (Ribbon) Araç Çubuğu — Faz 7'de yüzen "hap" yapısından
+               tam genişlikte sabit bir başlık çubuğuna dönüştürüldü. Sol:
+               Dosya/Düzen, Orta: Araçlar, Sağ: Görünüm+Yardım (CSS Grid ile
+               orta bölüm gerçekten ortalanıyor). ≤860px'te gruplar gizlenip
+               hamburger menüsüyle açılıyor (bkz. window.toggleToolbarMobile). -->
+          <div class="viewport-toolbar" id="viewport-toolbar">
+              <button class="tool-icon-btn toolbar-hamburger" title="Menü" onclick="window.toggleToolbarMobile()"><i data-lucide="menu"></i></button>
+
+              <div class="tb-section tb-section-left">
+                  <!-- DOSYA: İçe/Dışa Aktar + Kaydet -->
+                  <div class="tb-group" data-tb-group="file">
+                      <div class="dropdown toolbar-dropdown">
+                          <button class="tool-icon-btn" title="İçe Aktar" onclick="window.toggleToolbarMenu(this)"><i data-lucide="upload"></i></button>
+                          <div class="dropdown-menu" style="display:none;">
+                              <button class="dropdown-item" onclick="document.getElementById('import-stl').click()"><i data-lucide="box"></i> STL Yükle</button>
+                              <button class="dropdown-item" onclick="document.getElementById('import-svg').click()"><i data-lucide="spline"></i> SVG Kabart (Extrude)</button>
+                              <button class="dropdown-item" onclick="document.getElementById('import-photo').click()"><i data-lucide="image"></i> Fotoğraf Kabart (Lityofan)</button>
+                          </div>
+                      </div>
+                      <div class="dropdown toolbar-dropdown">
+                          <button class="tool-icon-btn" style="color:var(--accent-primary);" title="Dışa Aktar" onclick="window.toggleToolbarMenu(this)"><i data-lucide="download"></i></button>
+                          <div class="dropdown-menu" style="display:none;">
+                              <button class="dropdown-item" onclick="window.exportSTL()"><i data-lucide="download"></i> STL Dışa Aktar</button>
+                              <button class="dropdown-item" onclick="window.export3MF()"><i data-lucide="package"></i> 3MF Dışa Aktar (Snapmaker Orca)</button>
+                          </div>
+                      </div>
+                      <button class="tool-icon-btn" style="color:var(--accent-success);" title="ERP'ye Kaydet" onclick="window.saveDesign()"><i data-lucide="save"></i></button>
+                  </div>
+                  <div class="toolbar-sep tb-sep"></div>
+
+                  <!-- DÜZEN: Geri/İleri Al, Kopyala/Yapıştır/Çoğalt, Sil -->
+                  <div class="tb-group" data-tb-group="edit">
+                      <button class="tool-icon-btn" id="btn-undo" title="Geri Al (Ctrl+Z)" onclick="window.undo()" disabled><i data-lucide="undo-2"></i></button>
+                      <button class="tool-icon-btn" id="btn-redo" title="İleri Al (Ctrl+Y)" onclick="window.redo()" disabled><i data-lucide="redo-2"></i></button>
+                      <div class="dropdown toolbar-dropdown">
+                          <button class="tool-icon-btn" title="Düzen (Kopyala/Yapıştır/Çoğalt)" onclick="window.toggleToolbarMenu(this)"><i data-lucide="scissors"></i></button>
+                          <div class="dropdown-menu" style="display:none;">
+                              <button class="dropdown-item" onclick="window.copySelected()"><i data-lucide="copy"></i> Kopyala (Ctrl+C)</button>
+                              <button class="dropdown-item" onclick="window.pasteClipboard()"><i data-lucide="clipboard-paste"></i> Yapıştır (Ctrl+V)</button>
+                              <button class="dropdown-item" onclick="window.duplicateSelected()"><i data-lucide="copy-plus"></i> Çoğalt (Ctrl+D)</button>
+                          </div>
+                      </div>
+                      <button class="tool-icon-btn" title="Seçileni Sil (Delete)" onclick="window.deleteSelected()"><i data-lucide="trash-2"></i></button>
+                  </div>
+              </div>
+
+              <div class="tb-section tb-section-center">
+                  <!-- ANA ARAÇLAR: Seç/Taşı/Döndür/Ölçekle/Oturt/Ölçüm + Izgara/Kilit/Gizle -->
+                  <div class="tb-group" data-tb-group="tools">
+                      <button class="tool-icon-btn active" data-transform-mode="select" title="Seç (Q) — tıkla veya boş alandan çerçeve çiz" onclick="window.setTransformMode('select')"><i data-lucide="mouse-pointer-2"></i></button>
+                      <button class="tool-icon-btn" data-transform-mode="translate" title="Taşı (G)" onclick="window.setTransformMode('translate')"><i data-lucide="move"></i></button>
+                      <button class="tool-icon-btn" data-transform-mode="rotate" title="Döndür — nesneyi döndür" onclick="window.setTransformMode('rotate')"><i data-lucide="rotate-cw"></i></button>
+                      <button class="tool-icon-btn" data-transform-mode="scale" title="Ölçekle (S) — Shift ile orantılı kilit" onclick="window.setTransformMode('scale')"><i data-lucide="scaling"></i></button>
+                      <button class="tool-icon-btn" title="Aşağı Oturt (D) — altındaki yüzeye veya zemine indir" onclick="window.dropSelectedToSurface()"><i data-lucide="arrow-down-to-line"></i></button>
+                      <button class="tool-icon-btn" data-transform-mode="measure" title="Ölçüm — iki nokta tıkla" onclick="window.setTransformMode('measure')"><i data-lucide="ruler"></i></button>
+                      <button class="tool-icon-btn" id="btn-snap" title="Izgaraya Yasla (5mm)" onclick="window.toggleSnap()"><i data-lucide="grid-3x3"></i></button>
+                      <button class="tool-icon-btn" id="btn-magnetic-snap" title="Manyetik Yüzey Kenetlenmesi (M) — Taşırken altındaki yüzeye otursun" onclick="window.toggleMagneticSnap()"><i data-lucide="magnet"></i></button>
+                      <div class="toolbar-sep tb-sep"></div>
+                      <button class="tool-icon-btn" title="Kilitle / Kilidi Aç (L)" onclick="window.toggleLockSelected()"><i data-lucide="lock"></i></button>
+                      <button class="tool-icon-btn" title="Gizle / Göster (V)" onclick="window.toggleVisibilitySelected()"><i data-lucide="eye"></i></button>
+                  </div>
+              </div>
+
+              <div class="tb-section tb-section-right">
+                  <!-- GÖRÜNÜM/HESAPLAMA: Orbit/Pan modları + Home/Odaklan + Yardım -->
+                  <div class="tb-group" data-tb-group="view">
+                      <button class="tool-icon-btn" data-transform-mode="orbit" title="Orbit Modu (R veya O) — sol tıkla döndür" onclick="window.setTransformMode('orbit')"><i data-lucide="compass"></i></button>
+                      <button class="tool-icon-btn" data-transform-mode="pan" title="Pan Modu (H) — sol tıkla kaydır" onclick="window.setTransformMode('pan')"><i data-lucide="hand"></i></button>
+                      <button class="tool-icon-btn" title="Ana Ekran Görüntüsü (Home)" onclick="window.resetCamera()"><i data-lucide="home"></i></button>
+                      <button class="tool-icon-btn" title="Seçiliye Odaklan (Shift+F)" onclick="window.focusSelected()"><i data-lucide="target"></i></button>
+                      <button class="tool-icon-btn" title="Yüzüstü Yatır (F)" onclick="window.layFlatSelected()"><i data-lucide="layers"></i></button>
+                  </div>
+                  <div class="toolbar-sep tb-sep"></div>
+                  <button class="tool-icon-btn" title="Yardım ve Kısayollar" onclick="window.toggleHelpModal()"><i data-lucide="circle-help"></i></button>
+              </div>
+          </div>
+
+          <!-- ViewCube — bir yüze tıklayarak o açıdan bak, kamerayla senkron döner -->
+          <div class="viewcube-wrap" title="ViewCube — bir yüze tıklayın">
+              <div class="viewcube" id="view-cube-inner">
+                  <div class="vc-face vc-front" onclick="window.snapViewCube('front')">ÖN</div>
+                  <div class="vc-face vc-back" onclick="window.snapViewCube('back')">ARKA</div>
+                  <div class="vc-face vc-right" onclick="window.snapViewCube('right')">SAĞ</div>
+                  <div class="vc-face vc-left" onclick="window.snapViewCube('left')">SOL</div>
+                  <div class="vc-face vc-top" onclick="window.snapViewCube('top')">ÜST</div>
+                  <div class="vc-face vc-bottom" onclick="window.snapViewCube('bottom')">ALT</div>
+              </div>
+          </div>
+
+          <!-- Gizli Dosya Girişleri -->
+          <input type="file" id="import-stl" accept=".stl" style="display:none" onchange="window.handleSTLImport(event)">
+          <input type="file" id="import-svg" accept=".svg" style="display:none" onchange="window.handleSVGImport(event)">
+          <input type="file" id="import-photo" accept="image/*" style="display:none" onchange="window.handlePhotoImport(event)">
+
+          <div class="hud-info" id="hud-stats">
+              Model: Yüklenmedi<br>Üçgen: 0
+          </div>
+
+          <div class="csg-busy-banner" id="csg-busy-banner"><i data-lucide="hourglass"></i> Karmaşık model hesaplanıyor, lütfen bekleyin...</div>
+      </main>
+
+      <button class="sidebar-toggle-tab" id="sidebar-toggle" title="Paneli Gizle/Göster (\\)">▶</button>
+
+      <!-- Sağ Panel (Faz 6): AI Tasarım Asistanı, Kayıtlı Tasarımlar, AI Kodu,
+           Model Ağacı, Inspector — kullanıcı talebiyle Şekil Kütüphanesi'yle
+           (artık solda) yer değiştirdi. -->
+      <aside class="sidebar-panel">
+          <div class="prompt-box">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <label style="font-weight:700; font-size:0.9rem; color:var(--text-primary); display:flex; align-items:center; gap:6px;"><i data-lucide="sparkles"></i> AI Tasarım Asistanı <span class="sandbox-badge"><i data-lucide="shield-check"></i> Sandbox'ta çalışır</span></label>
+              </div>
+              <textarea id="ai-prompt" class="prompt-input" placeholder="Ne üretmek istersiniz? Örn: Kenarında asma deliği olan, üzerinde 'İznik' yazılı bir anahtarlık tasarla..."></textarea>
+              <div style="display:flex; gap:8px; margin-top:12px;">
+                  <button onclick="window.generateWithAI()" id="btn-generate" class="btn btn-primary" style="flex:1; padding:10px;"><i data-lucide="wand-2"></i> Üret</button>
+              </div>
+          </div>
+
+          <!-- Kayıtlı Tasarımlar (Faz 4: Firestore ERP geçmişi/versiyonlama) -->
+          <div id="save-box">
+              <input type="text" id="design-name" placeholder="Tasarım adı (boş bırakılırsa otomatik)">
+              <button class="btn btn-sm btn-primary" style="padding:8px 14px;" onclick="window.saveDesign()"><i data-lucide="save"></i> Kaydet</button>
+          </div>
+          <div class="panel-section">
+              <div class="panel-header"><span class="panel-header-title"><i data-lucide="folder-open"></i> Kayıtlı Tasarımlar</span> <span id="designs-refresh" class="panel-header-action" onclick="window.loadDesignsList()" title="Yenile"><i data-lucide="refresh-cw"></i></span></div>
+              <ul id="designs-list"><li class="empty-hint">Henüz kayıtlı tasarım yok.</li></ul>
+          </div>
+
+          <!-- AI Kodu: üretilen/düzenlenen JS-CAD DSL kodu, HER ZAMAN izole sandbox'ta çalıştırılır -->
+          <div id="ai-code-panel">
+              <div class="panel-header"><span class="panel-header-title"><i data-lucide="file-code-2"></i> AI Kodu (düzenlenebilir)</span></div>
+              <textarea id="ai-code" spellcheck="false"></textarea>
+              <div class="ai-code-actions">
+                  <button class="btn btn-sm" style="background:var(--bg-surface); border:1px solid var(--border-color); flex:1;" onclick="window.runAICode()"><i data-lucide="play"></i> Kodu Çalıştır</button>
+              </div>
+              <div class="ai-status-line" id="ai-status-line"></div>
+          </div>
+
+          <!-- Model Ağacı (Outliner) -->
+          <div class="panel-section">
+              <div class="panel-header"><span class="panel-header-title"><i data-lucide="list-tree"></i> Model Ağacı</span></div>
+              <ul id="outliner-list"><li class="empty-hint">Henüz şekil eklenmedi. Üstteki araç çubuğundan bir şekil ekleyin.</li></ul>
+          </div>
+
+          <!-- Inspector: Seçili Nesne Özellikleri -->
+          <div class="panel-section" style="flex-grow:1; display:flex; flex-direction:column; overflow-y:auto;">
+              <div class="panel-header"><span class="panel-header-title"><i data-lucide="sliders-horizontal"></i> Nesne Özellikleri</span></div>
+              <div id="inspector-empty">Bir nesne seçmediniz.<br>Model ağacından veya sahneden bir parça seçin.</div>
+              <div id="inspector-body"></div>
+          </div>
+      </aside>
+  </div>
+
+  <div class="status-bar">
+      <div class="status-bar-left">
+          <button class="qv-btn" title="Üstten Gör" onclick="window.setQuickView('top')"><i data-lucide="arrow-up"></i> Üst</button>
+          <button class="qv-btn" title="Önden Gör" onclick="window.setQuickView('front')"><i data-lucide="arrow-right"></i> Ön</button>
+          <button class="qv-btn" title="İzometrik Gör" onclick="window.setQuickView('iso')"><i data-lucide="box"></i> İzo</button>
+          <span class="status-sep"></span>
+          <button class="qv-btn" id="btn-unit-toggle" title="Izgara/HUD birimi (mm↔cm) — düzenleme alanları her zaman mm kalır" onclick="window.toggleUnit()">mm</button>
+      </div>
+      <div id="status-msg">Hazır. Araç çubuğundan bir şekil ekleyin veya AI'ya tarif edin.</div>
+      <div class="status-version">ozisg.com AR-GE v6.0 (Ribbon UI + Lucide İkonlar + Kilit/Gizle)</div>
+  </div>
+
+  </div><!-- /#main-content -->
+
+  <!-- Faz 7 — Yardım / Kısayollar Modalı -->
+  <div class="help-modal-overlay" id="help-modal-overlay" onclick="if(event.target===this) window.toggleHelpModal(false)">
+    <div class="help-modal">
+      <div class="help-modal-header">
+        <h3><i data-lucide="circle-help"></i> Yardım ve Kısayollar</h3>
+        <button class="help-modal-close" onclick="window.toggleHelpModal(false)" title="Kapat"><i data-lucide="x"></i></button>
+      </div>
+      <div class="help-modal-body">
+        <section>
+          <h4>Fare Hareketleri</h4>
+          <ul class="help-list">
+            <li><span>Seç / çerçeveyle çoklu seç</span><span class="help-key">Sol Tık</span></li>
+            <li><span>Orbit — sahneyi döndür</span><span class="help-key">Sağ Tık (sürükle)</span></li>
+            <li><span>Pan — sahneyi kaydır</span><span class="help-key">Orta Tık (sürükle)</span></li>
+            <li><span>Yakınlaştır / Uzaklaştır</span><span class="help-key">Tekerlek</span></li>
+            <li><span>Çoklu seçime ekle/çıkar</span><span class="help-key">Shift + Sol Tık</span></li>
+          </ul>
+        </section>
+        <section>
+          <h4>Araç Kısayolları</h4>
+          <ul class="help-list">
+            <li><span>Seç aracı</span><span class="help-key">Q</span></li>
+            <li><span>Taşı</span><span class="help-key">G</span></li>
+            <li><span>Ölçekle (orantılı kilit: Shift+sürükle)</span><span class="help-key">S</span></li>
+            <li><span>Aşağı Oturt (yüzeye/zemine indir)</span><span class="help-key">D</span></li>
+            <li><span>Orbit modu</span><span class="help-key">R / O</span></li>
+            <li><span>Pan modu</span><span class="help-key">H</span></li>
+            <li><span>Kilitle / Kilidi Aç</span><span class="help-key">L</span></li>
+            <li><span>Gizle / Göster</span><span class="help-key">V</span></li>
+            <li><span>Yüzüstü Yatır (en geniş yüzü zemine)</span><span class="help-key">F</span></li>
+            <li><span>Seçiliye Odaklan</span><span class="help-key">Shift+F</span></li>
+            <li><span>Döndürürken 45° adımlarla atla</span><span class="help-key">Shift+sürükle</span></li>
+          </ul>
+        </section>
+        <section>
+          <h4>Düzenleme</h4>
+          <ul class="help-list">
+            <li><span>Geri Al / İleri Al</span><span class="help-key">Ctrl+Z / Ctrl+Y</span></li>
+            <li><span>Kopyala / Yapıştır</span><span class="help-key">Ctrl+C / Ctrl+V</span></li>
+            <li><span>Çoğalt</span><span class="help-key">Ctrl+D</span></li>
+            <li><span>Seçileni Sil</span><span class="help-key">Delete</span></li>
+            <li><span>Sürüklemeyi İptal Et / Seçimi Temizle / Modalı Kapat</span><span class="help-key">Esc</span></li>
+            <li><span>Sağ Paneli Gizle/Göster</span><span class="help-key">\</span></li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <!-- Modern Three.js (ESM) + Gerçek CSG Motoru — importmap ile bare-specifier çözümlemesi.
+       NOT: three-mesh-bvh bilerek 0.9.10'a sabitlendi (0.9.15 değil) — 0.9.11+
+       "maxLeafSize" seçeneğini "targetLeafSize" lehine deprecate edip konsola
+       uyarı basıyor (three-bvh-csg@0.0.18 hâlâ eski adı kullanıyor); 0.9.10
+       three-bvh-csg'nin peer-dependency alt sınırını (>=0.9.7) karşılıyor ve
+       aynı sonucu üretiyor (node'da bizzat doğrulandı), sadece konsolu
+       kirletmiyor. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/",
+      "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.10/build/index.module.js",
+      "three-bvh-csg": "https://cdn.jsdelivr.net/npm/three-bvh-csg@0.0.18/build/index.module.js"
+    }
+  }
+  </script>
+
+  <!-- Faz 7 — Lucide İkonları: tam UMD paketi (window.lucide + createIcons()).
+       Sürüm 1.46.0'da CANLI olarak doğrulandı (data-lucide="box" vb. tüm
+       kullanılan isimler gerçek SVG üretti) — bkz. proje notları. Klasik
+       (module olmayan) script, ES module'lerden ÖNCE senkron çalışır, bu
+       yüzden aşağıdaki tasarim_atolyesi.js her zaman window.lucide'ı hazır bulur. -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@1.46.0/dist/umd/lucide.min.js"></script>
+
+  <script src="../js/layout.js"></script>
+  <script>renderLayout("../");</script>
+  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/tasarim_atolyesi.js"></script>
+</body>
+</html>

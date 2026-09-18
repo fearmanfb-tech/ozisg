@@ -71,8 +71,23 @@ let dragStartState = null; // {position, rotation, scale} — sürükleme başı
 // (sadece "bir şey değişti" der) shift'in o an basılı olup olmadığını ayrıca
 // izlememiz gerekiyor.
 let shiftHeldForScale = false;
-document.addEventListener("keydown", (e) => { if (e.key === "Shift") shiftHeldForScale = true; });
-document.addEventListener("keyup", (e) => { if (e.key === "Shift") shiftHeldForScale = false; });
+
+// Döndür aracında Shift basılıyken 45°'lik adımlarla atlama (rotation snap);
+// Shift bırakılınca / başka araca geçilince snap kapanır (null).
+function applyRotationSnap() {
+    if (!transformControls) return;
+    const snap = shiftHeldForScale && currentTransformMode === "rotate";
+    transformControls.setRotationSnap(snap ? THREE.MathUtils.degToRad(45) : null);
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Shift") { shiftHeldForScale = true; applyRotationSnap(); } });
+document.addEventListener("keyup", (e) => { if (e.key === "Shift") { shiftHeldForScale = false; applyRotationSnap(); } });
+// Pencere odağı kaybolursa (Alt+Tab vb.) keyup hiç gelmez — Shift takılı kalmasın.
+window.addEventListener("blur", () => { shiftHeldForScale = false; applyRotationSnap(); });
+
+// init3D() içinde atanır (sürükleme durumu o closure'da yaşıyor): devam eden
+// gizmo/serbest gövde/çerçeve sürüklemesini İPTAL edip sahneyi temizler.
+// İptal edilecek bir şey varsa true döner.
+let cancelActiveDrag = () => false;
 
 const evaluator = new Evaluator();
 // NOT: csgRoot sadece bir THREE.Group — düzenleme sahnesindeki şekilleri (Brush)
@@ -313,6 +328,61 @@ function init3D() {
         }
         return el;
     }
+
+    // Sürükleme İPTALİ (ESC veya araç değiştirme kısayolu). TransformControls.detach()
+    // eksen bilgisini sıfırladığı için sürükleme ortasında çağrılırsa "mouseUp"
+    // olayı HİÇ tetiklenmez → csgRoot görünür kalır, resultMesh gizli kalır,
+    // OrbitControls kapalı kalır ("hayalet obje"). Burada mouseUp'ın yaptığı
+    // temizliği elle yapıp objeyi sürükleme öncesi konumuna geri alıyoruz
+    // (undo geçmişine bir şey yazılmaz — iptal edilen hareket hiç olmamış sayılır).
+    cancelActiveDrag = function () {
+        let cancelled = false;
+
+        // 1) Serbest gövde sürükleme (Taşı aracında şekle basıp sürükleme)
+        if (isBodyDragging) {
+            if (dragGroupStart) {
+                dragGroupStart.forEach(({ brush, position }) => { brush.position.fromArray(position); brush.updateMatrixWorld(); });
+            }
+            isBodyDragging = false;
+            dragGroup = null;
+            dragGroupStart = null;
+            hideDragTooltip();
+            cancelled = true;
+        }
+        dragCandidate = null;
+
+        // 2) Gizmo (ok/halka/küp tutamacı) sürüklemesi
+        if (transformControls.dragging) {
+            if (selected && dragStartState) {
+                selected.position.fromArray(dragStartState.position);
+                selected.rotation.set(...dragStartState.rotation);
+                selected.scale.fromArray(dragStartState.scale);
+                selected.updateMatrixWorld();
+            }
+            dragStartState = null;
+            transformControls.dragging = false;
+            transformControls.axis = null;
+            cancelled = true;
+        }
+
+        // 3) Çerçeve (marquee) seçimi
+        if (isMarqueeSelecting || marqueeCandidate) {
+            isMarqueeSelecting = false;
+            marqueeCandidate = false;
+            getMarqueeEl().style.display = "none";
+            cancelled = true;
+        }
+
+        if (cancelled) {
+            controls.enabled = true;
+            csgRoot.visible = false;
+            if (resultMesh) resultMesh.visible = true;
+            pointerDownPos = null; // bırakılınca "tıklama" seçimi tetiklenmesin
+            updateSelectionHelper();
+            renderInspector();
+        }
+        return cancelled;
+    };
 
     renderer.domElement.addEventListener("pointerdown", (e) => {
         // KRİTİK: sadece SOL tık bizim seçim/sürükleme mantığımızı tetiklesin.
@@ -897,6 +967,9 @@ window.focusSelected = function () {
 // gösterilmez, tek iş seçim yapmaktır (Fusion360 tarzı: önce seç, sonra
 // açıkça bir aracı etkinleştir).
 window.setTransformMode = function (mode) {
+    // Devam eden bir sürükleme varken araç değişirse (Q/G/S/R/H... kısayolu),
+    // detach() "mouseUp"ı yutacağı için önce sürüklemeyi iptal edip sahneyi temizle.
+    cancelActiveDrag();
     if (currentTransformMode === "measure" && mode !== "measure") clearMeasurement();
     // Orbit/Pan modu BIRAKILIYORSA: SOL tık'ı bizim seçim mantığımıza iade et
     // (mouseButtons.LEFT'i geçici ROTATE/PAN atamasından null'a geri çevir).
@@ -917,6 +990,7 @@ window.setTransformMode = function (mode) {
         if (selected && !selected.userData.locked) transformControls.attach(selected);
         else transformControls.detach();
     }
+    applyRotationSnap();
     document.querySelectorAll("[data-transform-mode]").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.transformMode === mode);
     });
@@ -944,14 +1018,17 @@ document.addEventListener("keydown", function (e) {
     // kullanıcı sayfayı yenileyemiyordu).
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-    if (e.key.toLowerCase() === "f") { e.preventDefault(); window.focusSelected(); }
+    // F: Yüzüstü Yatır (Orca tarzı) — Shift+F: Seçiliye Odaklan (eski F davranışı).
+    if (e.key.toLowerCase() === "f") { e.preventDefault(); if (e.shiftKey) window.focusSelected(); else window.layFlatSelected(); }
     if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); window.deleteSelected(); }
-    // Esc: ÖNCE Yardım modalı açıksa onu kapat; değilse seçimi temizle (AI
-    // üretiminden sonra otomatik seçilen son parçayı hızlıca "bırakmak" için).
+    // Esc: ÖNCE Yardım modalı açıksa onu kapat; sonra devam eden sürükleme
+    // varsa SADECE onu iptal et (seçim korunur); hiçbiri yoksa seçimi temizle
+    // (AI üretiminden sonra otomatik seçilen son parçayı hızlıca "bırakmak" için).
     if (e.key === "Escape") {
         e.preventDefault();
         const helpOverlay = document.getElementById("help-modal-overlay");
         if (helpOverlay && helpOverlay.classList.contains("open")) { window.toggleHelpModal(false); return; }
+        if (cancelActiveDrag()) return;
         selectNode(null);
     }
     // Q/G/S: Fusion360/Blender kuralı — Seç / Taşı / Ölçekle.
@@ -1580,6 +1657,58 @@ window.dropSelectedToSurface = async function () {
     document.getElementById("status-msg").innerText = `${moves.length} parça yüzeye/zemine oturtuldu.`;
 };
 
+// ── Yüzüstü Yatır / Lay on Face (F — Orca Slicer tarzı) ─────────────────
+// Her seçili şeklin dünya-uzayı sınır kutusuna (Box3) bakar; EN KISA kenar
+// hangi eksendeyse onu Y (yukarı) eksenine çevirecek 90°'lik bir dünya
+// dönüşü uygular — yani şekil en geniş yüzü zemine gelecek şekilde yatar
+// (baskı için en kararlı duruş). Dönüş şeklin KENDİ kutu merkezi etrafında
+// yapılır (obje olduğu yerde kalır), ardından mevcut dropSelectedToSurface()
+// ile zemine/altındaki yüzeye oturtulur. NOT: kutu dünya-uzayı AABB olduğu
+// için rastgele açıyla dönmüş bir şekilde "en kısa kenar" yaklaşık bir tahmindir;
+// eksen-hizalı şekillerde ve 90° katlarında tam sonuç verir.
+const LAY_FLAT_EPS = 0.001; // mm — "boyutlar eşit" sayılacak tolerans
+window.layFlatSelected = async function () {
+    const list = activeSelectionList().filter((b) => !b.userData.locked);
+    if (list.length === 0) return;
+
+    csgRoot.children.forEach((c) => c.updateMatrixWorld(true));
+
+    const before = [];
+    const after = [];
+    list.forEach((brush) => {
+        const box = new THREE.Box3().setFromObject(brush);
+        if (box.isEmpty()) return;
+        const size = box.getSize(new THREE.Vector3());
+        // Y zaten en kısa (veya eşit) ise dönmeye gerek yok.
+        const minDim = Math.min(size.x, size.y, size.z);
+        if (size.y <= minDim + LAY_FLAT_EPS) return;
+
+        // En kısa kenar X ise Z ekseninde, Z ise X ekseninde 90° çevir → Y'ye gelir.
+        const q = new THREE.Quaternion();
+        if (size.x <= size.z) q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+        else q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+
+        const center = box.getCenter(new THREE.Vector3());
+        const newQuat = brush.quaternion.clone().premultiply(q);
+        const newPos = brush.position.clone().sub(center).applyQuaternion(q).add(center);
+        before.push({ brush, pos: brush.position.clone(), quat: brush.quaternion.clone() });
+        after.push({ brush, pos: newPos, quat: newQuat });
+    });
+
+    if (after.length > 0) {
+        await execute({
+            do() { after.forEach(({ brush, pos, quat }) => { brush.position.copy(pos); brush.quaternion.copy(quat); brush.updateMatrixWorld(); }); },
+            undo() { before.forEach(({ brush, pos, quat }) => { brush.position.copy(pos); brush.quaternion.copy(quat); brush.updateMatrixWorld(); }); },
+        });
+        recompute();
+        renderInspector();
+    }
+    await window.dropSelectedToSurface();
+    document.getElementById("status-msg").innerText = after.length > 0
+        ? `${after.length} parça en geniş yüzüne yatırıldı ve zemine oturtuldu.`
+        : "Zaten en geniş yüzüne yatıyor.";
+};
+
 // ── Kilitle / Kilidi Aç (L — Faz 7) ──────────────────────────────────────
 // Fusion360 tarzı "sabitle": kilitli bir şekle TransformControls ASLA
 // bağlanmaz ve fareyle serbest sürükleme de engellenir (bkz. selectNode/
@@ -2029,21 +2158,37 @@ function renderInspector() {
         `;
         group.appendChild(row1);
 
-        const row2 = document.createElement("div");
-        row2.style.cssText = "display:flex; gap:6px;";
-        row2.innerHTML = `
-            <button class="btn btn-sm icon-btn-row" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-color);" title="X Ekseninde Aynala" onclick="window.mirrorSelected('x')"><i data-lucide="flip-horizontal"></i> X</button>
-            <button class="btn btn-sm icon-btn-row" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-color);" title="Y Ekseninde Aynala" onclick="window.mirrorSelected('y')"><i data-lucide="flip-vertical"></i> Y</button>
-            <button class="btn btn-sm icon-btn-row" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-color);" title="Z Ekseninde Aynala" onclick="window.mirrorSelected('z')"><i data-lucide="flip-horizontal-2"></i> Z</button>
-        `;
-        group.appendChild(row2);
-
         const row3 = document.createElement("div");
         row3.style.cssText = "display:flex; gap:6px;";
         row3.innerHTML = `
             <button class="btn btn-sm icon-btn-row" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-color);" title="Sık Kullanılanlara Ekle" onclick="window.addSelectionToFavorites()"><i data-lucide="star"></i> Favorilere Ekle</button>
         `;
         group.appendChild(row3);
+        return group;
+    }
+
+    // Aynala — "İşlemler"den ayrı, kendi başlığı altında büyük/belirgin butonlar.
+    function buildMirrorGroup() {
+        const group = document.createElement("div");
+        group.className = "field-group";
+        const title = document.createElement("div");
+        title.className = "field-group-title";
+        title.textContent = "Aynala";
+        group.appendChild(title);
+
+        const grid = document.createElement("div");
+        grid.style.cssText = "display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;";
+        const btnStyle = "display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:12px 4px; font-weight:700; font-size:0.85rem; background:var(--bg-surface); border:2px solid var(--accent-primary); color:var(--accent-primary); border-radius:8px; cursor:pointer;";
+        [["x", "flip-horizontal", "X Ekseni"], ["y", "flip-vertical", "Y Ekseni"], ["z", "flip-horizontal-2", "Z Ekseni"]].forEach(([axis, icon, label]) => {
+            const b = document.createElement("button");
+            b.className = "btn";
+            b.style.cssText = btnStyle;
+            b.title = `${label}nda aynala (ters çevir)`;
+            b.innerHTML = `<i data-lucide="${icon}" style="width:22px; height:22px;"></i><span>${label}</span>`;
+            b.onclick = () => window.mirrorSelected(axis);
+            grid.appendChild(b);
+        });
+        group.appendChild(grid);
         return group;
     }
 
@@ -2074,6 +2219,7 @@ function renderInspector() {
         body.appendChild(alignGroup);
 
         body.appendChild(buildActionsRow());
+        body.appendChild(buildMirrorGroup());
         const delBtn = document.createElement("button");
         delBtn.className = "btn btn-sm icon-btn-row";
         delBtn.style.cssText = "background:var(--accent-danger); color:#fff; width:100%;";
@@ -2140,16 +2286,46 @@ function renderInspector() {
         recompute();
     }));
 
-    body.appendChild(buildVec3Field("Döndürme (°)", { x: THREE.MathUtils.radToDeg(brush.rotation.x), y: THREE.MathUtils.radToDeg(brush.rotation.y), z: THREE.MathUtils.radToDeg(brush.rotation.z) }, (axis, val) => {
+    const rotationGroup = buildVec3Field("Döndürme (°)", { x: THREE.MathUtils.radToDeg(brush.rotation.x), y: THREE.MathUtils.radToDeg(brush.rotation.y), z: THREE.MathUtils.radToDeg(brush.rotation.z) }, (axis, val) => {
         const oldVal = THREE.MathUtils.radToDeg(brush.rotation[axis]);
         execute({
             do() { brush.rotation[axis] = THREE.MathUtils.degToRad(val); brush.updateMatrixWorld(); },
             undo() { brush.rotation[axis] = THREE.MathUtils.degToRad(oldVal); brush.updateMatrixWorld(); },
         });
         recompute();
-    }));
+    });
+    // Hızlı çevirme: her eksen için -90° / +90° (alandaki değere eklenir).
+    const quickRow = document.createElement("div");
+    quickRow.className = "vec3-row";
+    quickRow.style.marginTop = "4px";
+    ["x", "y", "z"].forEach((axis) => {
+        const cell = document.createElement("div");
+        cell.style.cssText = "display:flex; gap:2px;";
+        [-90, 90].forEach((deg) => {
+            const b = document.createElement("button");
+            b.className = "btn btn-sm";
+            b.style.cssText = "flex:1; padding:4px 0; font-size:0.72rem; background:var(--bg-surface); border:1px solid var(--border-color);";
+            b.title = `${axis.toUpperCase()} ekseninde ${deg > 0 ? "+" : ""}${deg}° döndür`;
+            b.textContent = `${deg > 0 ? "+" : "−"}90°`;
+            b.onclick = async () => {
+                const oldRad = brush.rotation[axis];
+                const newRad = oldRad + THREE.MathUtils.degToRad(deg);
+                await execute({
+                    do() { brush.rotation[axis] = newRad; brush.updateMatrixWorld(); },
+                    undo() { brush.rotation[axis] = oldRad; brush.updateMatrixWorld(); },
+                });
+                recompute();
+                renderInspector();
+            };
+            cell.appendChild(b);
+        });
+        quickRow.appendChild(cell);
+    });
+    rotationGroup.appendChild(quickRow);
+    body.appendChild(rotationGroup);
 
     body.appendChild(buildActionsRow());
+    body.appendChild(buildMirrorGroup());
     refreshIcons();
 }
 
@@ -2180,20 +2356,46 @@ function buildColorField(brush) {
     row.innerHTML = `<label>Renk</label><input type="color" value="${startColor}">`;
     const input = row.querySelector("input");
 
-    input.addEventListener("input", () => {
-        updateBrushColor(brush, input.value);
-        recompute();
-    });
-    input.addEventListener("change", async () => {
-        const oldVal = startColor;
-        const newVal = input.value;
+    // Son KALICI (undo'ya işlenmiş) renk — palet tıklamaları ve seçici art arda
+    // kullanıldığında her adımın doğru "eski" değeri olsun diye izlenir.
+    let committedColor = startColor.toLowerCase();
+
+    async function commitColor(newVal) {
+        newVal = newVal.toLowerCase();
+        const oldVal = committedColor;
         if (oldVal === newVal) return;
+        committedColor = newVal;
+        input.value = newVal;
         await execute({
             do() { brush.userData.params.color = newVal; updateBrushColor(brush, newVal); },
             undo() { brush.userData.params.color = oldVal; updateBrushColor(brush, oldVal); },
         });
         recompute();
+    }
+
+    // Hızlı renk paleti — native renk seçicinin hemen ÜSTÜNDE.
+    const QUICK_COLORS = [
+        ["Kırmızı", "#e53935"], ["Turuncu", "#fb8c00"], ["Sarı", "#fdd835"], ["Yeşil", "#43a047"],
+        ["Mavi", "#1e88e5"], ["Mor", "#8e24aa"], ["Siyah", "#212121"], ["Gri", "#9e9e9e"], ["Beyaz", "#fafafa"],
+    ];
+    const swatches = document.createElement("div");
+    swatches.style.cssText = "display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;";
+    QUICK_COLORS.forEach(([name, hex]) => {
+        const s = document.createElement("button");
+        s.type = "button";
+        s.title = name;
+        s.setAttribute("aria-label", name);
+        s.style.cssText = `width:22px; height:22px; border-radius:50%; border:2px solid var(--border-color); background:${hex}; cursor:pointer; padding:0; flex:none;`;
+        s.addEventListener("click", () => commitColor(hex));
+        swatches.appendChild(s);
     });
+    group.appendChild(swatches);
+
+    input.addEventListener("input", () => {
+        updateBrushColor(brush, input.value);
+        recompute();
+    });
+    input.addEventListener("change", () => commitColor(input.value));
     group.appendChild(row);
     return group;
 }
