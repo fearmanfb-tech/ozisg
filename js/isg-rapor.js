@@ -634,9 +634,9 @@ function renderPreview() {
       ${preheaderText}
     </div>
     <!--[if mso]>
-    <table role="presentation" width="800" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td>
+    <table role="presentation" width="800" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td>
     <![endif]-->
-    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#1e293b;max-width:800px;margin:0 auto;">
+    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#1e293b;max-width:800px;margin:0;text-align:left;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0;padding:0;width:100%;">
         <tbody>
           <tr>
