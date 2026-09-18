@@ -1916,11 +1916,12 @@ async function createBrush(type, params, name) {
     brush.name = name || `${labelFor(type)} ${++idCounter}`;
     brush.operation = ADDITION;
     brush.userData = { id: `node_${idCounter}`, type, params: { ...params, color, extruder } };
-    const halfHeightTypes = ["box", "cylinder", "cone", "pyramid", "triprism", "hexprism", "tube", "roundedbox"];
-    if (halfHeightTypes.includes(type)) brush.position.y = params.height / 2;
-    else if (type === "sphere" || type === "icosahedron") brush.position.y = params.radius;
-    else if (type === "torus") brush.position.y = params.tube;
-    // dome/star/heart/text: geometrileri zaten y=0 tabanlı kuruluyor, ofset gerekmez.
+    // Zemine oturtma: şeklin GERÇEK sınır kutusunun tabanı Y=0'a gelir. (Eskiden şekil tipine göre
+    // el ile ofsetleniyordu — ikosahedron gibi orijine göre simetrik olmayan şekiller 2 mm kadar
+    // havada kalıyordu.) Merkezli şekillerde eski değerle birebir aynı: küp = height/2, küre = radius…
+    // Taban Y=0 olan şekillerde (yazı, yıldız, kalp, kubbe) ofset 0'dır.
+    geo.computeBoundingBox();
+    brush.position.y = -geo.boundingBox.min.y;
     brush.updateMatrixWorld();
     return brush;
 }
@@ -1946,6 +1947,35 @@ async function regenerateGeometry(brush) {
     brush.geometry = await buildGeometryAsync(brush.userData.type, brush.userData.params);
     oldGeo.dispose();
     brush.updateMatrixWorld();
+}
+
+// Parametre değişimi (Inspector/hızlı metin) için undo'lu komut: geometri yeniden üretilirken
+// şeklin TABANI (dünya Y-min) yerinde kalır, üst kısım büyür/küçülür (Tinkercad davranışı).
+// Eskiden konum güncellenmediği için merkezli şekiller (küp, silindir, koni, küre…) yükseklik
+// artınca zemine GÖMÜLÜYOR, taban Y=0 olanlar (yazı, yıldız, kalp, kubbe) yerinde kalıyordu —
+// yani AYNI yükseklik değeri farklı şekillerde farklı taban/tepe konumları üretiyordu.
+// Yatay konum (X/Z) zaten merkezli geometriler sayesinde değişmez.
+function makeParamChangeCommand(brush, updates) {
+    brush.updateMatrixWorld(true);
+    const oldMinY = new THREE.Box3().setFromObject(brush).min.y;
+    const oldPos = brush.position.clone();
+    const oldVals = {};
+    Object.keys(updates).forEach((k) => { oldVals[k] = brush.userData.params[k]; });
+    return {
+        async do() {
+            Object.assign(brush.userData.params, updates);
+            await regenerateGeometry(brush);
+            brush.updateMatrixWorld(true);
+            brush.position.y += oldMinY - new THREE.Box3().setFromObject(brush).min.y;
+            brush.updateMatrixWorld(true);
+        },
+        async undo() {
+            Object.assign(brush.userData.params, oldVals);
+            await regenerateGeometry(brush);
+            brush.position.copy(oldPos);
+            brush.updateMatrixWorld(true);
+        },
+    };
 }
 
 // Hızlı Yazım: Inspector'daki "Metin" kutusuna odaklanıp içeriği seçer — kullanıcı
@@ -1991,10 +2021,7 @@ function openQuickTextEdit(brush, e) {
         const newVal = input.value.trim();
         closeQuickTextEdit();
         if (!newVal || newVal === oldVal) return;
-        await execute({
-            async do() { brush.userData.params.value = newVal; await regenerateGeometry(brush); },
-            async undo() { brush.userData.params.value = oldVal; await regenerateGeometry(brush); },
-        });
+        await execute(makeParamChangeCommand(brush, { value: newVal }));
         recompute();
         renderInspector();
         document.getElementById("status-msg").innerText = "Metin güncellendi.";
@@ -3050,7 +3077,7 @@ function renderInspector() {
             } else {
                 row.innerHTML = isText
                     ? `<label>${paramLabel(key)}</label><input type="text" maxlength="40" value="${String(val).replace(/"/g, "&quot;")}">`
-                    : `<label>${paramLabel(key)}</label><input type="number" min="0.1" step="0.5" value="${val}">`;
+                    : `<label>${paramLabel(key, brush.userData.type)}</label><input type="number" min="0.1" step="0.5" value="${val}">`;
             }
             const input = row.querySelector(isFont ? "select" : "input");
             input.dataset.param = key; // focusInspectorTextInput() "value" alanını bununla bulur
@@ -3075,10 +3102,7 @@ function renderInspector() {
                     }
                 }
                 if (newVal === oldVal) { renderInspector(); return; } // girilen geçersiz değeri alandan sil
-                await execute({
-                    async do() { brush.userData.params[key] = newVal; await regenerateGeometry(brush); },
-                    async undo() { brush.userData.params[key] = oldVal; await regenerateGeometry(brush); },
-                });
+                await execute(makeParamChangeCommand(brush, { [key]: newVal }));
                 recompute();
                 renderInspector();
             });
@@ -3104,11 +3128,13 @@ function renderInspector() {
         stampRow.append(thinBtn, inlayBtn);
         group.appendChild(stampRow);
         body.appendChild(group);
+        body.appendChild(buildSizeInfo(brush, true));
     } else {
         const note = document.createElement("div");
         note.style.cssText = "font-size:0.78rem; color:var(--text-muted); background:var(--bg-surface-2); padding:8px; border-radius:6px;";
         note.textContent = "İçe aktarılan modeller sadece taşıma/döndürme/ölçekleme (ve renk) ile düzenlenebilir.";
         body.appendChild(note);
+        body.appendChild(buildSizeInfo(brush, false));
     }
 
     body.appendChild(buildColorField(brush));
@@ -3165,7 +3191,62 @@ function renderInspector() {
     refreshIcons();
 }
 
-function paramLabel(key) {
+// Gerçek (dünya-uzayı) boyut göstergesi + uygulanmış ölçek uyarısı. Inspector'daki değerler
+// PARAMETREDİR; S aracıyla/gizmo ile ölçeklenmiş bir şeklin gerçek boyutu bunun ölçekle
+// çarpılmışıdır — "aynı değeri girdim ama boyut farklı" şikayetinin ikinci kaynağı buydu.
+// Dönmüş şekillerde değerler dünya eksenli sınır kutusudur.
+function buildSizeInfo(brush, allowScaleReset) {
+    brush.updateMatrixWorld(true);
+    const size = new THREE.Box3().setFromObject(brush).getSize(new THREE.Vector3());
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "font-size:0.75rem; color:var(--text-secondary); background:var(--bg-surface-2); padding:8px 10px; border-radius:6px; line-height:1.5;";
+    wrap.innerHTML = `<b>Gerçek boyut:</b> ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} mm <span style="color:var(--text-muted);">(G × Y × D)</span>`;
+    const s = brush.scale;
+    const scaled = [s.x, s.y, s.z].some((v) => Math.abs(Math.abs(v) - 1) > 0.001);
+    if (scaled) {
+        const warn = document.createElement("div");
+        warn.style.cssText = "margin-top:6px; padding:6px 8px; border-radius:6px; background:#fff7e0; color:#8a5a00; border:1px solid #f0c36d;";
+        warn.innerHTML = `⚠ <b>Ölçek uygulanmış</b> (X ${s.x.toFixed(2)} · Y ${s.y.toFixed(2)} · Z ${s.z.toFixed(2)}): yukarıdaki değerler bu ölçekle çarpılır.`;
+        if (allowScaleReset) {
+            const btn = document.createElement("button");
+            btn.className = "btn btn-sm";
+            btn.style.cssText = "display:block; margin-top:6px; font-size:0.72rem; padding:4px 8px; background:var(--bg-surface); border:1px solid var(--border-color);";
+            btn.textContent = "Ölçeği Sıfırla (1×)";
+            btn.title = "Ölçeği 1'e getirir (aynalama korunur); gerçek boyut yukarıdaki değerlere eşitlenir. Taban yerinde kalır.";
+            btn.onclick = () => window.resetScaleSelected();
+            warn.appendChild(btn);
+        }
+        wrap.appendChild(warn);
+    }
+    return wrap;
+}
+
+window.resetScaleSelected = async function () {
+    if (multiSelected.length > 1 || !selected) return;
+    const brush = selected;
+    if (brush.userData.locked) return;
+    brush.updateMatrixWorld(true);
+    const oldMinY = new THREE.Box3().setFromObject(brush).min.y;
+    const oldPos = brush.position.clone();
+    const oldScale = brush.scale.clone();
+    await execute({
+        do() {
+            brush.scale.set(Math.sign(oldScale.x) || 1, Math.sign(oldScale.y) || 1, Math.sign(oldScale.z) || 1); // aynalama (−) korunur
+            brush.updateMatrixWorld(true);
+            brush.position.y += oldMinY - new THREE.Box3().setFromObject(brush).min.y; // taban yerinde
+            brush.updateMatrixWorld(true);
+        },
+        undo() { brush.scale.copy(oldScale); brush.position.copy(oldPos); brush.updateMatrixWorld(true); },
+    });
+    recompute();
+    renderInspector();
+    document.getElementById("status-msg").innerText = `${brush.name}: ölçek sıfırlandı (1×).`;
+};
+
+function paramLabel(key, type) {
+    // Prizma/piramit/ikosahedron "yarıçapı" KÖŞE mesafesidir (çevrel çember) — düz kenar
+    // genişliği bundan küçüktür (altıgen: 2r yerine ≈1.73r).
+    if (key === "radius" && ["triprism", "hexprism", "pyramid", "icosahedron"].includes(type)) return "Yarıçap (köşeye)";
     return {
         width: "Genişlik", height: "Yükseklik", depth: "Kalınlık/Derinlik", radius: "Yarıçap",
         value: "Metin", size: "Punto/Boyut", tube: "Tüp Kalınlığı",
@@ -3173,6 +3254,7 @@ function paramLabel(key) {
         maxWidth: "Maks Genişlik (mm)",
     }[key] || key;
 }
+
 
 // ── Damga (0.4 mm) ve Inlay makroları ────────────────────────────────────
 // "Kalınlık" = şeklin DİKEY (Y) ölçüsü: yatay duran damga/yazının baskı kalınlığı.
