@@ -83,16 +83,21 @@ function applyRotationSnap() {
 // "mouseDown" olayı ham DOM olayını taşımadığından (bkz. yukarıdaki Shift notu)
 // burada ayrıca izleniyor.
 let altHeld = false;
+// Ctrl/Cmd basılı mı — ölçeklerken akıllı kılavuz yapışmasını geçici kapatmak için
+// (gizmo'nun "objectChange" olayı ham DOM olayını taşımadığından burada izlenir).
+let ctrlHeld = false;
 document.addEventListener("keydown", (e) => {
     if (e.key === "Shift") { shiftHeldForScale = true; applyRotationSnap(); }
     if (e.key === "Alt") altHeld = true;
+    if (e.key === "Control" || e.key === "Meta") ctrlHeld = true;
 });
 document.addEventListener("keyup", (e) => {
     if (e.key === "Shift") { shiftHeldForScale = false; applyRotationSnap(); }
     if (e.key === "Alt") altHeld = false;
+    if (e.key === "Control" || e.key === "Meta") ctrlHeld = false;
 });
-// Pencere odağı kaybolursa (Alt+Tab vb.) keyup hiç gelmez — Shift/Alt takılı kalmasın.
-window.addEventListener("blur", () => { shiftHeldForScale = false; altHeld = false; applyRotationSnap(); });
+// Pencere odağı kaybolursa (Alt+Tab vb.) keyup hiç gelmez — Shift/Alt/Ctrl takılı kalmasın.
+window.addEventListener("blur", () => { shiftHeldForScale = false; altHeld = false; ctrlHeld = false; applyRotationSnap(); });
 
 // Etkileşimli Yüzüstü Yatır (Orca tarzı) modu: F ile girilir, seçili objenin bir
 // yüzeyine tıklanınca o yüzey zemine bakacak şekilde yatırılır (bkz. layFlatSelected).
@@ -210,6 +215,14 @@ function unionBox(list) {
     return box;
 }
 
+// Yapışma eşiği (dünya birimi): ekranda ≈SMART_GUIDE_PX piksele denk gelen mesafe.
+function smartGuideThreshold(box) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const dist = camera.position.distanceTo(box.getCenter(new THREE.Vector3()));
+    const worldPerPx = (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / Math.max(1, rect.height);
+    return THREE.MathUtils.clamp(SMART_GUIDE_PX * worldPerPx, 0.3, 8);
+}
+
 // Hareketli kutunun min/orta/maks değerlerinden sabit kutularınkine en yakın eşleşmeyi
 // (eşik içindeyse) döndürür: {delta, target, other}. Eksen: "x" | "z".
 function findAxisSnap(moving, statics, axis, threshold) {
@@ -233,10 +246,7 @@ function applySmartGuides(dragList, startPositions) {
     const moving = unionBox(dragList);
     if (moving.isEmpty()) return;
 
-    const rect = renderer.domElement.getBoundingClientRect();
-    const dist = camera.position.distanceTo(moving.getCenter(new THREE.Vector3()));
-    const worldPerPx = (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / Math.max(1, rect.height);
-    const threshold = THREE.MathUtils.clamp(SMART_GUIDE_PX * worldPerPx, 0.3, 8);
+    const threshold = smartGuideThreshold(moving);
 
     const sx = findAxisSnap(moving, dragStaticBoxes, "x", threshold);
     const sz = findAxisSnap(moving, dragStaticBoxes, "z", threshold);
@@ -257,6 +267,121 @@ function applySmartGuides(dragList, startPositions) {
     if (sz) {
         const x0 = Math.min(moving.min.x, sz.other.min.x) - 4, x1 = Math.max(moving.max.x, sz.other.max.x) + 4;
         addGuideLine(new THREE.Vector3(x0, y, sz.target), new THREE.Vector3(x1, y, sz.target), 0x00b8ff);
+    }
+}
+
+// ── Ölçeklemede Sabit Kenar (Anchored Scaling) + Akıllı Kılavuzlar ────────
+// TransformControls ölçeği objenin orijininden (pivot) uygular; tutamacın karşısındaki yüz de
+// kayardı. Sürükleme başında (beginScaleDrag) başlangıç dönüşümü + YEREL sınır kutusu saklanır;
+// her karede konum, "yerel sınır kutusunun min köşesi" (tutamacın karşısındaki yüzler) dünyada
+// yerinde kalacak şekilde yeniden hesaplanır:
+//     konum = konum0 + R · ((ölçek0 − ölçek) ∘ yerelMin)
+// Dünya Box3 farkı yerine yerel köşe kullanmak döndürülmüş objelerde de doğrudur (ölçek yerel
+// eksenlerde uygulanır); taban dönmemiş bir objede Y-min, X/Z için min kenarlar sabit kalır.
+let scaleDrag = null; // {pos0, quat, scale0, lbox, box0} — yalnızca gizmo ölçekleme sürerken
+
+function localBox(brush) {
+    if (!brush.geometry.boundingBox) brush.geometry.computeBoundingBox();
+    return brush.geometry.boundingBox;
+}
+
+function beginScaleDrag(brush) {
+    brush.updateMatrixWorld(true);
+    scaleDrag = {
+        pos0: brush.position.clone(),
+        quat: brush.quaternion.clone(),
+        scale0: brush.scale.clone(),
+        lbox: localBox(brush).clone(),
+        box0: new THREE.Box3().setFromObject(brush),
+    };
+}
+
+// Verilen ölçekte sabit kenarı yerinde tutan konum.
+function anchoredPosition(scale) {
+    const p = scaleDrag.lbox.min;
+    const s0 = scaleDrag.scale0;
+    return new THREE.Vector3((s0.x - scale.x) * p.x, (s0.y - scale.y) * p.y, (s0.z - scale.z) * p.z)
+        .applyQuaternion(scaleDrag.quat).add(scaleDrag.pos0);
+}
+
+function scaledWorldBox(scale) {
+    const m = new THREE.Matrix4().compose(anchoredPosition(scale), scaleDrag.quat, scale);
+    return scaleDrag.lbox.clone().applyMatrix4(m);
+}
+
+// Ölçeklerken kenar yapışması: sürüklenen (hareket eden) sınır kutusu kenarı, sabit bir
+// parçanın min/orta/maks değerine eşik içinde yaklaşırsa OBJE KAYDIRILMAZ — ölçek, kenar tam
+// hedefe otursun diye yeniden hesaplanır (sabit kenar yerinde kalır) ve kılavuz çizilir.
+// Tek eksenli ölçekte sürücü yerel eksen dünya eksenine 90°'lik katlarla hizalıysa; orantılı
+// (uniform) ölçekte herhangi bir dönüşte çalışır (orantılı ölçekte kenar, oranın doğrusal
+// fonksiyonudur). Ctrl basılıyken kapalı.
+function snapScaleToGuides(brush) {
+    clearSmartGuides();
+    if (ctrlHeld || !scaleDrag || !dragStaticBoxes || dragStaticBoxes.length === 0) return;
+    const AX = ["x", "y", "z"];
+    const S0 = scaleDrag.scale0, S = brush.scale;
+    const ratios = AX.map((a) => S[a] / (S0[a] || 1));
+    const cIdx = [0, 1, 2].filter((i) => Math.abs(ratios[i] - 1) > 1e-6);
+    if (cIdx.length === 0) return;
+    const r0 = ratios[cIdx[0]];
+    const uniform = cIdx.length > 1 && cIdx.every((i) => Math.abs(ratios[i] - r0) <= 1e-4 * Math.abs(r0));
+    const cur = scaledWorldBox(S);
+    const threshold = smartGuideThreshold(cur);
+    const rot = new THREE.Matrix4().makeRotationFromQuaternion(scaleDrag.quat);
+    const dir = new THREE.Vector3();
+
+    let best = null;
+    AX.forEach((wa, a) => {
+        const minMoved = Math.abs(cur.min[wa] - scaleDrag.box0.min[wa]) > 1e-6;
+        const maxMoved = Math.abs(cur.max[wa] - scaleDrag.box0.max[wa]) > 1e-6;
+        if (minMoved === maxMoved) return; // hiç kımıldamadı ya da iki kenar birden (belirsiz)
+        const side = maxMoved ? "max" : "min";
+        // Bu dünya eksenini sürükleyen yerel eksen (uniform'da hepsi ortak bir oranla sürülür).
+        let driver = -1;
+        if (!uniform) {
+            for (const i of cIdx) {
+                dir.set(0, 0, 0).setComponent(i, 1).applyMatrix4(rot);
+                if (Math.abs(dir.getComponent(a)) > 0.999) { driver = i; break; }
+            }
+            if (driver < 0) return;
+        }
+        const scaleFor = (t) => {
+            const s = S.clone();
+            (uniform ? cIdx : [driver]).forEach((i) => s.setComponent(i, S0.getComponent(i) * t));
+            return s;
+        };
+        const edgeAt = (t) => scaledWorldBox(scaleFor(t))[side][wa];
+        const t0 = uniform ? r0 : ratios[driver];
+        const e0 = cur[side][wa];
+        const snap = findAxisSnap({ min: { [wa]: e0 }, max: { [wa]: e0 } }, dragStaticBoxes, wa, threshold);
+        if (!snap || (best && Math.abs(snap.delta) >= Math.abs(best.snap.delta))) return;
+        const h = 0.01 * Math.max(Math.abs(t0), 0.1);
+        const slope = (edgeAt(t0 + h) - e0) / h;
+        if (Math.abs(slope) < 1e-6) return;
+        const t1 = t0 + snap.delta / slope;
+        if (Math.sign(t1) !== Math.sign(t0) || Math.abs(t1) < 1e-3) return; // ters dönme/sıfırlanma yok
+        if (Math.abs(edgeAt(t1) - snap.target) > 1e-3) return; // doğrusal değilse (eğik dönüş) güvenme
+        best = { snap, wa, scale: scaleFor(t1) };
+    });
+    if (!best) return;
+
+    brush.scale.copy(best.scale);
+    brush.position.copy(anchoredPosition(best.scale));
+    brush.updateMatrixWorld();
+
+    const box = scaledWorldBox(best.scale);
+    const { snap, wa } = best;
+    const y = box.min.y + 0.2;
+    if (wa === "x") {
+        const z0 = Math.min(box.min.z, snap.other.min.z) - 4, z1 = Math.max(box.max.z, snap.other.max.z) + 4;
+        addGuideLine(new THREE.Vector3(snap.target, y, z0), new THREE.Vector3(snap.target, y, z1), 0xff2d95);
+    } else if (wa === "z") {
+        const x0 = Math.min(box.min.x, snap.other.min.x) - 4, x1 = Math.max(box.max.x, snap.other.max.x) + 4;
+        addGuideLine(new THREE.Vector3(x0, y, snap.target), new THREE.Vector3(x1, y, snap.target), 0x00b8ff);
+    } else {
+        const zc = (box.min.z + box.max.z) / 2;
+        const x0 = Math.min(box.min.x, snap.other.min.x) - 4, x1 = Math.max(box.max.x, snap.other.max.x) + 4;
+        addGuideLine(new THREE.Vector3(x0, snap.target, zc), new THREE.Vector3(x1, snap.target, zc), 0x00c853);
     }
 }
 
@@ -503,6 +628,15 @@ function init3D() {
                 }),
             };
         }
+        // Ölçekleme: karşı yüzü sabit tut + akıllı kılavuzlar için sabit parçaların kutuları.
+        scaleDrag = null;
+        if (currentTransformMode === "scale") {
+            beginScaleDrag(selected);
+            const active = activeSelectionList();
+            dragStaticBoxes = visibleCsgChildren()
+                .filter((c) => !active.includes(c))
+                .map((c) => { c.updateMatrixWorld(true); return new THREE.Box3().setFromObject(c); });
+        }
         resultMesh.visible = false;
         csgRoot.visible = true; // sürüklerken ham parçaları göster (ucuz, CSG yok)
     });
@@ -523,6 +657,15 @@ function init3D() {
             const ratio = ratios[dominant];
             selected.scale.set(orig[0] * ratio, orig[1] * ratio, orig[2] * ratio);
             selected.updateMatrixWorld();
+        }
+        // Ölçekleme: tutamacın karşısındaki yüz yerinde kalsın (konum kaydırılır), ardından
+        // kenar başka bir parçanın kenarına/merkezine yaklaştıysa ölçeği ona oturt.
+        if (currentTransformMode === "scale" && dragStartState && scaleDrag) {
+            selected.position.copy(anchoredPosition(selected.scale));
+            selected.updateMatrixWorld();
+            snapScaleToGuides(selected);
+            const size = new THREE.Box3().setFromObject(selected).getSize(new THREE.Vector3());
+            document.getElementById("status-msg").innerText = `Ölçek: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} mm (Ctrl: yapışmayı kapat)`;
         }
         // Manyetik Yüzey Kenetlenmesi (Faz 8) — SADECE Taşı modunda. En son
         // bilinen imleç konumundan (lastPointerClient — bkz. pointermove)
@@ -565,6 +708,9 @@ function init3D() {
     transformControls.addEventListener("mouseUp", async () => {
         controls.enabled = true;
         csgRoot.visible = false;
+        clearSmartGuides(); // ölçekleme kılavuzları (bkz. snapScaleToGuides)
+        dragStaticBoxes = null;
+        scaleDrag = null;
         if (!selected || !dragStartState) { gizmoGroup = null; recompute(); return; }
 
         const brush = selected;
@@ -735,6 +881,9 @@ function init3D() {
             }
             gizmoGroup = null;
             dragStartState = null;
+            scaleDrag = null;
+            clearSmartGuides();
+            dragStaticBoxes = null;
             transformControls.dragging = false;
             transformControls.axis = null;
             cancelled = true;
@@ -2162,6 +2311,36 @@ function makeParamChangeCommand(brush, updates) {
     };
 }
 
+// İçe aktarılan modeller için boyut (mm) girişi: ölçek = mm / baseSize (baseSize = scale (1,1,1)
+// iken YEREL sınır kutusu boyutu). Parametrik şekillerdeki gibi taban (dünya Y-min) yerinde
+// kalır. Ölçek çarpanı makul aralıkta tutulur (sıfır/aşırı büyük ölçek CSG'yi bozar).
+const IMPORT_SCALE_MIN = 0.001;
+const IMPORT_SCALE_MAX = 1000;
+
+function importBaseSize(brush) {
+    return localBox(brush).getSize(new THREE.Vector3());
+}
+
+function makeScaleChangeCommand(brush, newScale) {
+    brush.updateMatrixWorld(true);
+    const oldMinY = new THREE.Box3().setFromObject(brush).min.y;
+    const oldPos = brush.position.clone();
+    const oldScale = brush.scale.clone();
+    return {
+        do() {
+            brush.scale.copy(newScale);
+            brush.updateMatrixWorld(true);
+            brush.position.y += oldMinY - new THREE.Box3().setFromObject(brush).min.y;
+            brush.updateMatrixWorld(true);
+        },
+        undo() {
+            brush.scale.copy(oldScale);
+            brush.position.copy(oldPos);
+            brush.updateMatrixWorld(true);
+        },
+    };
+}
+
 // Hızlı Yazım: Inspector'daki "Metin" kutusuna odaklanıp içeriği seçer — kullanıcı
 // fareyle tekrar tıklamadan doğrudan yeni yazıyı (ör. ismi) yazmaya başlayabilir.
 // Kutu yoksa (metin olmayan nesne / çoklu seçim) sessizce hiçbir şey yapmaz.
@@ -3320,10 +3499,49 @@ function renderInspector() {
         body.appendChild(group);
         body.appendChild(buildSizeInfo(brush, true));
     } else {
-        const note = document.createElement("div");
-        note.style.cssText = "font-size:0.78rem; color:var(--text-muted); background:var(--bg-surface-2); padding:8px; border-radius:6px;";
-        note.textContent = "İçe aktarılan modeller sadece taşıma/döndürme/ölçekleme (ve renk) ile düzenlenebilir.";
-        body.appendChild(note);
+        // İçe aktarılan (STL/SVG/fotoğraf) modellerin parametresi yok; boyut = yerel sınır
+        // kutusu (baseSize) × ölçek. Girilen mm değeri baseSize'a bölünüp ölçeğe çevrilir.
+        const group = document.createElement("div");
+        group.className = "field-group";
+        const title = document.createElement("div");
+        title.className = "field-group-title";
+        title.textContent = "Boyutlar (mm)";
+        group.appendChild(title);
+
+        const baseSize = importBaseSize(brush);
+        [["x", "Genişlik (X)"], ["y", "Yükseklik (Y)"], ["z", "Derinlik (Z)"]].forEach(([axis, label]) => {
+            const row = document.createElement("div");
+            row.className = "field-row";
+            const base = baseSize[axis];
+            const flat = base < 1e-6; // bu eksende kalınlığı olmayan model: ölçeklenemez
+            const shown = +(base * Math.abs(brush.scale[axis])).toFixed(3);
+            row.innerHTML = `<label>${label}</label><input type="number" min="0.01" step="0.5" value="${shown}" ${flat ? "disabled" : ""}>`;
+            const input = row.querySelector("input");
+            input.dataset.param = `size-${axis}`;
+            input.addEventListener("change", async () => {
+                const mm = parseFloat(input.value);
+                if (!Number.isFinite(mm) || mm <= 0 || flat) { renderInspector(); return; } // geçersiz girişi alandan sil
+                const ratio = THREE.MathUtils.clamp(mm / base, IMPORT_SCALE_MIN, IMPORT_SCALE_MAX);
+                const sign = brush.scale[axis] < 0 ? -1 : 1; // aynalama (−) korunur
+                if (Math.abs(sign * ratio - brush.scale[axis]) < 1e-9) { renderInspector(); return; }
+                const next = brush.scale.clone();
+                next[axis] = sign * ratio;
+                await execute(makeScaleChangeCommand(brush, next));
+                recompute();
+                renderInspector();
+                if (Math.abs(ratio * base - mm) > 1e-6) {
+                    const msg = `Ölçek sınırına çekildi: ${(ratio * base).toFixed(2)} mm.`;
+                    document.getElementById("status-msg").innerText = msg;
+                    showToast(msg, "warning");
+                }
+            });
+            group.appendChild(row);
+        });
+        const hint = document.createElement("div");
+        hint.style.cssText = "font-size:0.72rem; color:var(--text-muted); margin-top:4px;";
+        hint.textContent = "Değerler modelin kendi eksenlerindedir (döndürülse de). Taban yerinde kalır.";
+        group.appendChild(hint);
+        body.appendChild(group);
         body.appendChild(buildSizeInfo(brush, false));
     }
 
