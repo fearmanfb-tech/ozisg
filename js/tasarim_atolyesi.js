@@ -459,6 +459,10 @@ function init3D() {
     //      için sahnede olmaları lazım.
     scene.add(csgRoot);
     csgRoot.visible = false;
+    // Delik hayaletleri (bkz. syncHoleGhosts): csgRoot GİZLİYKEN bile görünen ayrı bir grup.
+    holeGhostGroup = new THREE.Group();
+    holeGhostGroup.name = "HoleGhosts";
+    scene.add(holeGhostGroup);
 
     transformControls = new TransformControls(camera, renderer.domElement);
     transformControls.setMode("translate"); // ilk seçilen araca geçildiğinde kullanılacak; "select" modunda zaten detach
@@ -620,6 +624,9 @@ function init3D() {
     // şeklin gövdesine basıp SERBEST zemin-düzlemi taşıması yapılabilir —
     // çoklu seçim varsa hepsi birlikte kayar.
     const raycaster = new THREE.Raycaster();
+    // Delik parçaları kamera katmanından çıkarıldığı için (bkz. syncHoleGhosts) ışın testine
+    // de bu katmanı açıyoruz — delikler hâlâ tıklanıp seçilebilsin.
+    raycaster.layers.enable(HOLE_LAYER);
     const groundPlane = new THREE.Plane();
     const planeHit = new THREE.Vector3();
     let pointerDownPos = null;
@@ -1041,10 +1048,14 @@ function init3D() {
     dirLight2.position.set(-100, 100, -50);
     scene.add(dirLight2);
 
-    const gridHelper = new THREE.GridHelper(200, 20, 0x000000, 0x000000);
-    gridHelper.material.opacity = 0.1;
-    gridHelper.material.transparent = true;
-    scene.add(gridHelper);
+    // Sonsuz GridHelper yerine gerçek yazıcı tablası (bkz. buildPrintBed).
+    printBed = buildPrintBed(printBedKey);
+    scene.add(printBed.group);
+    const bedSelect = document.getElementById("bed-size-select");
+    if (bedSelect) {
+        bedSelect.innerHTML = Object.entries(PRINT_BEDS).map(([k, b]) => `<option value="${k}">${b.label}</option>`).join("");
+        bedSelect.value = printBedKey;
+    }
     scene.add(new THREE.AxesHelper(50));
 
     window.addEventListener("resize", onWindowResize, false);
@@ -1055,9 +1066,182 @@ function init3D() {
     animate();
 }
 
+// ── Delik (Kesici) Hayalet Görünümü (Tinkercad "hole") ───────────────────
+// 'Delik' (SUBTRACTION) parçalar ham (CSG'lenmemiş) görünümde de, dinlenme görünümünde de
+// YARI SAYDAM soluk mavi-gri hayalet olarak çizilir; böylece hiçbir katıyla kesişmeyen bir delik bile
+// görünür ve katıdan ayırt edilir. TASARIM KARARI: parçanın GERÇEK materyali (renk/opaklık) DEĞİŞTİRİLMEZ —
+// CSG çıkarmada oyuğun iç duvarları kesici parçanın materyalini alır ve 3MF renk/extruder kovaları
+// materyalden okunur; materyali saydam/gri yapmak sonuç meshini ve dışa aktarımı bozardı. Bunun yerine
+// delik brush'ı kamera katmanından çıkarılır (layer 1: çizilmez, ama ışın testine dahil kalır —
+// bkz. raycaster.layers.enable) ve aynı geometriyi paylaşan bir hayalet Mesh her karede brush'ın
+// dönüşümünü izler. K ile Katı⇄Delik geçişi sonraki karede anında yansır; gerçek renk hiç kaybolmaz.
+const HOLE_LAYER = 1;
+const holeGhosts = new Map(); // Brush → hayalet Mesh
+let holeGhostGroup = null;
+let holeGhostMaterial = null;
+
+function syncHoleGhosts() {
+    if (!holeGhostGroup) return;
+    if (!holeGhostMaterial) {
+        holeGhostMaterial = new THREE.MeshStandardMaterial({
+            color: 0x9db7d5, transparent: true, opacity: 0.3, roughness: 0.6, metalness: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+        });
+    }
+    const seen = new Set();
+    csgRoot.children.forEach((brush) => {
+        const isHole = brush.operation === SUBTRACTION;
+        const wantMask = isHole ? (1 << HOLE_LAYER) : 1;
+        if (brush.layers.mask !== wantMask) brush.layers.mask = wantMask;
+        if (!isHole || brush.visible === false) return;
+        seen.add(brush);
+        let ghost = holeGhosts.get(brush);
+        if (!ghost) {
+            ghost = new THREE.Mesh(brush.geometry, holeGhostMaterial);
+            ghost.matrixAutoUpdate = false;
+            ghost.renderOrder = 5;
+            ghost.userData.isHelper = true;
+            holeGhostGroup.add(ghost);
+            holeGhosts.set(brush, ghost);
+        }
+        if (ghost.geometry !== brush.geometry) ghost.geometry = brush.geometry; // parametre değişince yeni geometri
+        brush.updateMatrixWorld(true);
+        ghost.matrix.copy(brush.matrixWorld);
+        ghost.matrixWorldNeedsUpdate = true;
+    });
+    holeGhosts.forEach((ghost, brush) => {
+        if (!seen.has(brush)) { holeGhostGroup.remove(ghost); holeGhosts.delete(brush); }
+    });
+}
+
+// ── Yazıcı Tablası (Print Bed) ───────────────────────────────────────────
+// Sonsuz GridHelper yerine gerçek yazdırma alanı: merkezden dışa net bir kare, ince ızgara her 10 mm,
+// ana ızgara her 50 mm, kalın koyu dış çerçeve + boyut etiketi. Model tabla dışına taşarsa (XZ) ya da
+// yazdırma yüksekliğini aşarsa çerçeve kırmızıya döner ve HUD uyarır (bkz. updatePrintBedStatus).
+// NOT: Snapmaker U1'in yazdırma hacmi 270×270×270 mm'dir (üretici wiki/inceleme kaynakları);
+// bu yüzden varsayılan U1 = 270. Diğer ölçüler durum çubuğundaki seçiciden seçilir.
+const PRINT_BEDS = {
+    u1:      { label: "Snapmaker U1 — 270×270", size: 270, height: 270 },
+    b350:    { label: "Özel — 350×350",         size: 350, height: 350 },
+    artisan: { label: "Snapmaker Artisan — 400×400", size: 400, height: 400 },
+};
+const PRINT_BED_STORAGE_KEY = "ozisg_print_bed";
+const BED_FRAME_OK = 0x2d3340;
+const BED_FRAME_OUT = 0xd93025;
+let printBedKey = "u1";
+try { const k = localStorage.getItem(PRINT_BED_STORAGE_KEY); if (PRINT_BEDS[k]) printBedKey = k; } catch (_) { /* yok say */ }
+let printBed = null; // {group, frameMat, size, height}
+
+function buildPrintBed(key) {
+    const { size, height } = PRINT_BEDS[key];
+    const half = size / 2;
+    const group = new THREE.Group();
+    group.name = "PrintBed";
+
+    // Tabla zemini (hafif dolgu) — çizgilerin/objelerin altında
+    const fill = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0xcdd5e3, transparent: true, opacity: 0.22, depthWrite: false })
+    );
+    fill.position.y = -0.04;
+    fill.renderOrder = -2;
+    group.add(fill);
+
+    // Izgara çizgileri (merkezden dışa; tabla sınırını aşmaz)
+    const gridLines = (step, color, opacity, skip) => {
+        const pts = [];
+        const y = 0.005;
+        for (let k = 0; k * step < half - 1e-6; k++) {
+            for (const sign of (k === 0 ? [1] : [1, -1])) {
+                const v = sign * k * step;
+                if (skip && skip(v)) continue;
+                pts.push(new THREE.Vector3(v, y, -half), new THREE.Vector3(v, y, half),
+                         new THREE.Vector3(-half, y, v), new THREE.Vector3(half, y, v));
+            }
+        }
+        const lines = new THREE.LineSegments(
+            new THREE.BufferGeometry().setFromPoints(pts),
+            new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false })
+        );
+        lines.renderOrder = -1;
+        group.add(lines);
+    };
+    gridLines(10, 0x7b8598, 0.28, (v) => Math.abs(v % 50) < 1e-6);  // ara hatlar: her 10 mm
+    gridLines(50, 0x4b5563, 0.65);                                    // ana hatlar: her 50 mm
+
+    // Kalın dış çerçeve (3 mm) — WebGL çizgi kalınlığı 1px ile sınırlı olduğundan düz bir halka mesh
+    const o = half + 3;
+    const shape = new THREE.Shape();
+    shape.moveTo(-o, -o); shape.lineTo(o, -o); shape.lineTo(o, o); shape.lineTo(-o, o); shape.closePath();
+    const hole = new THREE.Path();
+    hole.moveTo(-half, -half); hole.lineTo(-half, half); hole.lineTo(half, half); hole.lineTo(half, -half); hole.closePath();
+    shape.holes.push(hole);
+    const frameMat = new THREE.MeshBasicMaterial({ color: BED_FRAME_OK, side: THREE.DoubleSide });
+    const frame = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2), frameMat);
+    frame.position.y = 0.02;
+    frame.renderOrder = 1;
+    group.add(frame);
+
+    // Boyut etiketi (ön kenarın önünde)
+    const cv = document.createElement("canvas");
+    cv.width = 512; cv.height = 96;
+    const ctx = cv.getContext("2d");
+    ctx.font = "bold 44px Arial, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(`${size} × ${size} mm`, 256, 48);
+    const tex = new THREE.CanvasTexture(cv);
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    label.scale.set(64, 12, 1);
+    label.position.set(0, 0.5, half + 14);
+    group.add(label);
+
+    return { group, frameMat, size, height };
+}
+
+function disposePrintBed(bed) {
+    if (!bed) return;
+    scene.remove(bed.group);
+    bed.group.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+    });
+}
+
+window.setPrintBedSize = function (key) {
+    if (!PRINT_BEDS[key]) return;
+    printBedKey = key;
+    try { localStorage.setItem(PRINT_BED_STORAGE_KEY, key); } catch (_) { /* yok say */ }
+    disposePrintBed(printBed);
+    printBed = buildPrintBed(key);
+    scene.add(printBed.group);
+    const sel = document.getElementById("bed-size-select");
+    if (sel && sel.value !== key) sel.value = key;
+    updateHUD();
+    document.getElementById("status-msg").innerText = `Yazıcı tablası: ${PRINT_BEDS[key].label} (${PRINT_BEDS[key].size}×${PRINT_BEDS[key].size}×${PRINT_BEDS[key].height} mm).`;
+};
+
+// Sonuç modeli tabla dışına (XZ) taşıyor ya da yazdırma yüksekliğini aşıyor mu? Çerçeve rengini
+// günceller ve durumu döndürür.
+function updatePrintBedStatus() {
+    if (!printBed) return false;
+    let outside = false;
+    if (resultMesh) {
+        const box = new THREE.Box3().setFromObject(resultMesh);
+        if (!box.isEmpty()) {
+            const half = printBed.size / 2 + 0.05;
+            outside = box.min.x < -half || box.max.x > half || box.min.z < -half || box.max.z > half
+                || box.max.y > printBed.height + 0.05;
+        }
+    }
+    printBed.frameMat.color.setHex(outside ? BED_FRAME_OUT : BED_FRAME_OK);
+    return outside;
+}
+
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
+    syncHoleGhosts();
     renderer.render(scene, camera);
     updateMeasureLabelPosition();
     updateViewCube();
@@ -2804,8 +2988,14 @@ function recompute() {
 
 function updateHUD() {
     const hud = document.getElementById("hud-stats");
+    const outside = updatePrintBedStatus();
+    const bedInfo = printBed
+        ? (outside
+            ? `<br><span style="color:#ff6b5e; font-weight:700;">⚠ Tabla dışında (${printBed.size}×${printBed.size}×${printBed.height})</span>`
+            : `<br>Tabla: ${printBed.size}×${printBed.size}×${printBed.height} mm`)
+        : "";
     if (!resultMesh) {
-        hud.innerHTML = "Model: Yüklenmedi<br>Üçgen: 0";
+        hud.innerHTML = "Model: Yüklenmedi<br>Üçgen: 0" + bedInfo;
         return;
     }
     const triCount = resultMesh.geometry.index
@@ -2813,7 +3003,7 @@ function updateHUD() {
         : resultMesh.geometry.attributes.position.count / 3;
     const box = new THREE.Box3().setFromObject(resultMesh);
     const size = box.getSize(new THREE.Vector3());
-    hud.innerHTML = `Model: ${visibleCsgChildren().length} parça<br>Üçgen: ${Math.round(triCount)}<br>Boyut: ${formatLength(size.x)} × ${formatLength(size.y)} × ${formatLength(size.z)}`;
+    hud.innerHTML = `Model: ${visibleCsgChildren().length} parça<br>Üçgen: ${Math.round(triCount)}<br>Boyut: ${formatLength(size.x)} × ${formatLength(size.y)} × ${formatLength(size.z)}${bedInfo}`;
 }
 
 // ═══════════════════════════════════════════════════════════════

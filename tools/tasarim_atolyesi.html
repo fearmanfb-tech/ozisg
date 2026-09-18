@@ -474,6 +474,7 @@
           <button class="qv-btn" title="İzometrik Gör" onclick="window.setQuickView('iso')"><i data-lucide="box"></i> İzo</button>
           <span class="status-sep"></span>
           <button class="qv-btn" id="btn-unit-toggle" title="Izgara/HUD birimi (mm↔cm) — düzenleme alanları her zaman mm kalır" onclick="window.toggleUnit()">mm</button>
+          <select id="bed-size-select" class="qv-btn" title="Yazıcı tablası (yazdırma alanı) — model dışına taşarsa çerçeve kırmızı olur" onchange="window.setPrintBedSize(this.value)" style="max-width:190px;"></select>
       </div>
       <div id="status-msg">Hazır. Araç çubuğundan bir şekil ekleyin veya AI'ya tarif edin.</div>
       <div class="status-version">ozisg.com AR-GE v6.0 (Ribbon UI + Lucide İkonlar + Kilit/Gizle)</div>
