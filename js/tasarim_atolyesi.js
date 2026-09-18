@@ -79,10 +79,45 @@ function applyRotationSnap() {
     const snap = shiftHeldForScale && currentTransformMode === "rotate";
     transformControls.setRotationSnap(snap ? THREE.MathUtils.degToRad(45) : null);
 }
-document.addEventListener("keydown", (e) => { if (e.key === "Shift") { shiftHeldForScale = true; applyRotationSnap(); } });
-document.addEventListener("keyup", (e) => { if (e.key === "Shift") { shiftHeldForScale = false; applyRotationSnap(); } });
-// Pencere odağı kaybolursa (Alt+Tab vb.) keyup hiç gelmez — Shift takılı kalmasın.
-window.addEventListener("blur", () => { shiftHeldForScale = false; applyRotationSnap(); });
+// Alt (Mac'te Option) basılı mı — Alt+sürükle ile hızlı çoğaltma için. Gizmo'nun
+// "mouseDown" olayı ham DOM olayını taşımadığından (bkz. yukarıdaki Shift notu)
+// burada ayrıca izleniyor.
+let altHeld = false;
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Shift") { shiftHeldForScale = true; applyRotationSnap(); }
+    if (e.key === "Alt") altHeld = true;
+});
+document.addEventListener("keyup", (e) => {
+    if (e.key === "Shift") { shiftHeldForScale = false; applyRotationSnap(); }
+    if (e.key === "Alt") altHeld = false;
+});
+// Pencere odağı kaybolursa (Alt+Tab vb.) keyup hiç gelmez — Shift/Alt takılı kalmasın.
+window.addEventListener("blur", () => { shiftHeldForScale = false; altHeld = false; applyRotationSnap(); });
+
+// Etkileşimli Yüzüstü Yatır (Orca tarzı) modu: F ile girilir, seçili objenin bir
+// yüzeyine tıklanınca o yüzey zemine bakacak şekilde yatırılır (bkz. layFlatSelected).
+let layFlatMode = false;
+
+// Alt+sürükle ile hızlı çoğaltma (Tinkercad): sürükleme başında oluşturulan kopyalar.
+// {originals:[Brush], clones:[Brush]} — sürükleme bitince tek bir undo adımı olarak
+// sahneye işlenir; iptal edilirse (Esc/araç değişimi) kopyalar silinir.
+let altDup = null;
+
+// Eşzamanlı (senkron) klon: pointermove/mouseDown içinde `await` kullanılamayacağı için
+// createBrush() yerine geometri+materyal doğrudan klonlanır. Material.clone() renk,
+// polygonOffset (Inlay) ve userData.extruder'ı da taşır; params kopyası inlay/extruder
+// bayraklarını korur.
+function cloneBrushSync(brush) {
+    const clone = new Brush(brush.geometry.clone(), brush.material.clone());
+    clone.name = `${brush.name} (kopya)`;
+    clone.operation = brush.operation;
+    clone.userData = { id: `node_${++idCounter}`, type: brush.userData.type, params: { ...brush.userData.params } };
+    clone.position.copy(brush.position);
+    clone.quaternion.copy(brush.quaternion);
+    clone.scale.copy(brush.scale);
+    clone.updateMatrixWorld(true);
+    return clone;
+}
 
 // init3D() içinde atanır (sürükleme durumu o closure'da yaşıyor): devam eden
 // gizmo/serbest gövde/çerçeve sürüklemesini İPTAL edip sahneyi temizler.
@@ -189,6 +224,17 @@ function init3D() {
     transformControls.addEventListener("mouseDown", () => {
         controls.enabled = false;
         if (!selected) return;
+        // Alt+sürükle (Taşı aracı): orijinal yerinde kalır, gizmo AYNI konumdaki yeni bir
+        // kopyaya devredilir ve sürükleme onunla sürer. Kopya, mouseUp'ta tek undo
+        // adımı olarak eklenir (bkz. aşağısı).
+        altDup = null;
+        if (altHeld && currentTransformMode === "translate" && !selected.userData.locked) {
+            const original = selected;
+            const clone = cloneBrushSync(original);
+            csgRoot.add(clone);
+            altDup = { originals: [original], clones: [clone] };
+            selectNode(clone); // gizmo'yu kopyaya bağlar (sürükleme başlangıç değerleri aynı)
+        }
         dragStartState = {
             position: selected.position.toArray(),
             rotation: [selected.rotation.x, selected.rotation.y, selected.rotation.z],
@@ -256,6 +302,22 @@ function init3D() {
             scale: brush.scale.toArray(),
         };
         dragStartState = null;
+
+        // Alt+sürükle ile oluşturulan kopya: taşıma + ekleme TEK undo adımı olarak
+        // işlenir (geri alınca kopya tamamen kalkar). Kopya zaten sahnede (mouseDown'da
+        // eklendi); redo'da son konumuyla geri eklenir.
+        if (altDup) {
+            const dup = altDup;
+            altDup = null;
+            await execute({
+                do() { dup.clones.forEach((c) => { if (!c.parent) csgRoot.add(c); }); },
+                undo() { dup.clones.forEach((c) => csgRoot.remove(c)); },
+            });
+            recompute();
+            renderOutliner();
+            renderInspector();
+            return;
+        }
 
         const changed = JSON.stringify(before) !== JSON.stringify(after);
         if (changed) {
@@ -335,6 +397,15 @@ function init3D() {
     // OrbitControls kapalı kalır ("hayalet obje"). Burada mouseUp'ın yaptığı
     // temizliği elle yapıp objeyi sürükleme öncesi konumuna geri alıyoruz
     // (undo geçmişine bir şey yazılmaz — iptal edilen hareket hiç olmamış sayılır).
+    // Alt+sürükle iptal edilirse geçici kopyaları sahneden sil, seçimi orijinallere iade et.
+    function discardAltDuplicates() {
+        if (!altDup) return;
+        const { originals, clones } = altDup;
+        altDup = null;
+        clones.forEach((c) => csgRoot.remove(c));
+        if (originals.length > 1) selectMultiple(originals); else selectNode(originals[0]);
+    }
+
     cancelActiveDrag = function () {
         let cancelled = false;
 
@@ -343,6 +414,7 @@ function init3D() {
             if (dragGroupStart) {
                 dragGroupStart.forEach(({ brush, position }) => { brush.position.fromArray(position); brush.updateMatrixWorld(); });
             }
+            discardAltDuplicates();
             isBodyDragging = false;
             dragGroup = null;
             dragGroupStart = null;
@@ -353,6 +425,7 @@ function init3D() {
 
         // 2) Gizmo (ok/halka/küp tutamacı) sürüklemesi
         if (transformControls.dragging) {
+            discardAltDuplicates();
             if (selected && dragStartState) {
                 selected.position.fromArray(dragStartState.position);
                 selected.rotation.set(...dragStartState.rotation);
@@ -457,6 +530,17 @@ function init3D() {
                 if (selected !== dragCandidate) selectNode(dragCandidate);
                 dragGroup = [dragCandidate];
             }
+            // Alt+sürükle: orijinaller yerinde kalır, sürükleme AYNI konumdaki kopyalar
+            // üzerinden devam eder (Tinkercad "hızlı çoğaltma").
+            if (e.altKey || altHeld) {
+                const originals = dragGroup;
+                const clones = originals.map(cloneBrushSync);
+                clones.forEach((c) => csgRoot.add(c));
+                dragCandidate = clones[originals.indexOf(dragCandidate)];
+                dragGroup = clones;
+                altDup = { originals, clones };
+                if (clones.length > 1) selectMultiple(clones); else selectNode(clones[0]);
+            }
             dragGroupStart = dragGroup.map((b) => ({ brush: b, position: b.position.toArray() }));
             dragStartObjPos = dragCandidate.position.clone();
             dragStartWorldPoint = raycastGroundAt(e, dragStartObjPos.y);
@@ -523,7 +607,17 @@ function init3D() {
             dragCandidate = null;
             const changed = before.some((b, i) => b.position[0] !== after[i].position[0] || b.position[2] !== after[i].position[2]);
 
-            if (changed) {
+            if (altDup) {
+                // Alt+sürükle: kopyalar (mouseDown'daki gibi) TEK undo adımıyla işlenir.
+                const dup = altDup;
+                altDup = null;
+                await execute({
+                    do() { dup.clones.forEach((c) => { if (!c.parent) csgRoot.add(c); }); },
+                    undo() { dup.clones.forEach((c) => csgRoot.remove(c)); },
+                });
+                recompute();
+                renderOutliner();
+            } else if (changed) {
                 await execute({
                     do() { after.forEach(({ brush, position }) => { brush.position.fromArray(position); brush.updateMatrixWorld(); }); },
                     undo() { before.forEach(({ brush, position }) => { brush.position.fromArray(position); brush.updateMatrixWorld(); }); },
@@ -545,6 +639,22 @@ function init3D() {
         if (moved > 5) return; // sürükleyerek kamera döndürme, tıklama değil
 
         raycaster.setFromCamera(ndcFromEvent(e), camera);
+
+        // ── Etkileşimli Yüzüstü Yatır: tıklanan yüzey zemine bakacak ──
+        // Sadece SEÇİLİ objelere ışın atılır (öndeki başka bir obje engellemesin).
+        if (layFlatMode) {
+            const hit = raycaster.intersectObjects(activeSelectionList(), false)[0];
+            if (hit && hit.face) {
+                const worldNormal = hit.face.normal.clone()
+                    .applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld))
+                    .normalize();
+                window.exitLayFlatMode(true);
+                await window.layFlatToWorldNormal(worldNormal);
+            } else {
+                document.getElementById("status-msg").innerText = "Seçili objenin bir yüzeyine tıklayın (Esc: iptal).";
+            }
+            return;
+        }
 
         // ── Hızlı Metin Düzenleme (Faz 8): bir CAD.text objesine ÇİFT
         // TIKLAMA tespiti — Ölçüm modu HARİÇ (orada iki tıklama zaten "A/B
@@ -973,6 +1083,7 @@ window.setTransformMode = function (mode) {
     // Devam eden bir sürükleme varken araç değişirse (Q/G/S/R/H... kısayolu),
     // detach() "mouseUp"ı yutacağı için önce sürüklemeyi iptal edip sahneyi temizle.
     cancelActiveDrag();
+    window.exitLayFlatMode(true); // araç değişince "yüzüstü yatır" seçim modundan çık
     if (currentTransformMode === "measure" && mode !== "measure") clearMeasurement();
     // Orbit/Pan modu BIRAKILIYORSA: SOL tık'ı bizim seçim mantığımıza iade et
     // (mouseButtons.LEFT'i geçici ROTATE/PAN atamasından null'a geri çevir).
@@ -1031,6 +1142,7 @@ document.addEventListener("keydown", function (e) {
         e.preventDefault();
         const helpOverlay = document.getElementById("help-modal-overlay");
         if (helpOverlay && helpOverlay.classList.contains("open")) { window.toggleHelpModal(false); return; }
+        if (window.exitLayFlatMode()) return; // önce yüzüstü yatırma modunu iptal et
         if (cancelActiveDrag()) return;
         selectNode(null);
     }
@@ -1047,6 +1159,8 @@ document.addEventListener("keydown", function (e) {
     if (e.key.toLowerCase() === "h") { e.preventDefault(); window.setTransformMode("pan"); }
     // D: Üstüne Oturt / Zemine Düşür (Drop) — Tinkercad tarzı hızlı yerleştirme.
     if (e.key.toLowerCase() === "d") { e.preventDefault(); window.dropSelectedToSurface(); }
+    // C: Merkeze Al (X/Z orijin + zemine oturt).
+    if (e.key.toLowerCase() === "c") { e.preventDefault(); window.centerSelectedToOrigin(); }
     // K: Katı ⇄ Delik (Kesici) geçişi.
     if (e.key.toLowerCase() === "k") { e.preventDefault(); window.toggleHoleSelected(); }
     // L: Kilitle / Kilidi Aç — V: Gizle / Göster (Faz 7, Fusion360 tarzı).
@@ -1367,6 +1481,17 @@ async function createBrush(type, params, name) {
     // ait olduğunu materyalden okuyabilir (bkz. build3MFModelXML).
     const extruder = Number(params.extruder) === 2 ? 2 : 1;
     material.userData.extruder = extruder;
+    // Inlay dolgusu, oyuk açan orijinalle (SUBTRACTION) BİREBİR aynı yüzeylere sahip;
+    // düzenleme görünümünde (csgRoot ham parçalar) ikisi aynı derinlikte çizilip
+    // titreşirdi (Z-fighting). Dolgu materyaline hafif negatif polygonOffset vererek
+    // dolgunun her zaman öne çıkmasını sağlıyoruz. createBrush her yolun (ekleme,
+    // çoğaltma, yapıştırma, kayıttan yükleme) ortak noktası olduğu için bayrak
+    // bunların hepsinde otomatik korunur.
+    if (params.inlay === true) {
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1;
+        material.polygonOffsetUnits = -1;
+    }
     const brush = new Brush(geo, material);
     brush.name = name || `${labelFor(type)} ${++idCounter}`;
     brush.operation = ADDITION;
@@ -1583,10 +1708,13 @@ window.copySelected = function () {
     if (list.length === 0) return;
     clipboard = list.map((b) => ({
         type: b.userData.type,
+        // params kopyası color/extruder/inlay bayraklarını da taşır (createBrush hepsini
+        // korur) — Inlay dolgusu yapıştırılınca yine Inlay + Extruder 2 kalır.
         params: { ...b.userData.params },
         operation: b.operation,
         position: b.position.toArray(),
         rotation: [b.rotation.x, b.rotation.y, b.rotation.z],
+        scale: b.scale.toArray(), // S aracı / "0.4mm'ye İncelt" / aynalama (negatif ölçek) korunsun
     }));
     document.getElementById("status-msg").innerText = `${clipboard.length} parça kopyalandı (Ctrl+V ile yapıştırın).`;
 };
@@ -1600,6 +1728,7 @@ window.pasteClipboard = async function () {
         clone.operation = entry.operation;
         clone.position.set(entry.position[0] + OFFSET, entry.position[1], entry.position[2] + OFFSET);
         clone.rotation.set(entry.rotation[0], entry.rotation[1], entry.rotation[2]);
+        if (Array.isArray(entry.scale)) clone.scale.fromArray(entry.scale);
         clone.updateMatrixWorld();
         clones.push(clone);
     }
@@ -1725,6 +1854,37 @@ window.dropSelectedToSurface = async function () {
     document.getElementById("status-msg").innerText = `${moves.length} parça yüzeye/zemine oturtuldu.`;
 };
 
+// ── Merkeze Al / Center to Origin (C) ────────────────────────────────────
+// Kaybolan/uzağa giden objeleri sahne merkezine (X=0, Z=0) getirir, sonra
+// dropSelectedToSurface() ile zemine indirir. Seçim (tekil ya da çoklu) TEK bir
+// grup olarak ele alınır: ORTAK sınır kutusunun merkezi (X,Z) orijine taşınır —
+// böylece çoklu seçimde parçalar üst üste yığılmaz, göreli dizilimleri korunur;
+// tekil objede (geometriler merkezli kurulduğu için) position.x/z = 0 ile aynı
+// sonucu verir, ama döndürülmüş/merkezi kaymış objelerde de GÖRSEL merkezi orijine oturtur.
+window.centerSelectedToOrigin = async function () {
+    const list = activeSelectionList().filter((b) => !b.userData.locked);
+    if (list.length === 0) return;
+    csgRoot.children.forEach((c) => c.updateMatrixWorld(true));
+
+    const combined = new THREE.Box3();
+    list.forEach((b) => combined.union(new THREE.Box3().setFromObject(b)));
+    if (combined.isEmpty()) return;
+    const center = combined.getCenter(new THREE.Vector3());
+    const dx = -center.x, dz = -center.z;
+
+    if (Math.abs(dx) > 0.001 || Math.abs(dz) > 0.001) {
+        const moves = list.map((brush) => ({ brush, oldX: brush.position.x, oldZ: brush.position.z, newX: brush.position.x + dx, newZ: brush.position.z + dz }));
+        await execute({
+            do() { moves.forEach(({ brush, newX, newZ }) => { brush.position.x = newX; brush.position.z = newZ; brush.updateMatrixWorld(); }); },
+            undo() { moves.forEach(({ brush, oldX, oldZ }) => { brush.position.x = oldX; brush.position.z = oldZ; brush.updateMatrixWorld(); }); },
+        });
+        recompute();
+        renderInspector();
+    }
+    await window.dropSelectedToSurface();
+    document.getElementById("status-msg").innerText = `${list.length} parça merkeze alındı ve zemine oturtuldu.`;
+};
+
 // ── Yüzüstü Yatır / Lay on Face (F — Orca Slicer tarzı) ─────────────────
 // Her seçili şeklin dünya-uzayı sınır kutusuna (Box3) bakar; EN KISA kenar
 // hangi eksendeyse onu Y (yukarı) eksenine çevirecek 90°'lik bir dünya
@@ -1734,8 +1894,73 @@ window.dropSelectedToSurface = async function () {
 // ile zemine/altındaki yüzeye oturtulur. NOT: kutu dünya-uzayı AABB olduğu
 // için rastgele açıyla dönmüş bir şekilde "en kısa kenar" yaklaşık bir tahmindir;
 // eksen-hizalı şekillerde ve 90° katlarında tam sonuç verir.
+// ── Etkileşimli mod (Orca "Lay on Face") ────────────────────────────────
+// F → `layFlatMode`a girilir (imleç artı işaretine döner); kullanıcı objenin bir
+// yüzeyine tıklayınca o üçgenin normali (dünya uzayında) alınır, obje o normal
+// tam AŞAĞI (0,-1,0) bakacak şekilde döndürülür, dropSelectedToSurface() ile
+// zemine oturtulur ve moddan çıkılır. Esc / başka araç seçimi = iptal. Mod
+// açıkken F'ye tekrar basmak eski OTOMATİK davranışı (en kısa kenar yukarı) çalıştırır.
+function canvasElement() { return document.querySelector("#canvas-container canvas"); }
+
+window.exitLayFlatMode = function (silent) {
+    if (!layFlatMode) return false;
+    layFlatMode = false;
+    const c = canvasElement();
+    if (c) c.style.cursor = "";
+    if (!silent) document.getElementById("status-msg").innerText = "Yüzüstü yatırma iptal edildi.";
+    return true;
+};
+
+window.layFlatSelected = function () {
+    if (layFlatMode) { window.exitLayFlatMode(true); return window.layFlatAuto(); }
+    const list = activeSelectionList().filter((b) => !b.userData.locked);
+    if (list.length === 0) {
+        document.getElementById("status-msg").innerText = "Yatırmak için önce bir obje seçin (kilitli objeler yatırılamaz).";
+        return;
+    }
+    layFlatMode = true;
+    const c = canvasElement();
+    if (c) c.style.cursor = "crosshair";
+    document.getElementById("status-msg").innerText = "Yüzüstü Yatır: zemine gelecek YÜZEYE tıklayın (Esc: iptal, F: otomatik).";
+};
+
+// Verilen dünya-uzayı yüz normali aşağı bakacak şekilde seçimi döndürür + zemine oturtur.
+// Çoklu seçimde grup, ORTAK sınır kutusunun merkezi etrafında TEK bir dönüşle çevrilir
+// (parçaların göreli konumları bozulmaz).
+window.layFlatToWorldNormal = async function (worldNormal) {
+    const list = activeSelectionList().filter((b) => !b.userData.locked);
+    if (list.length === 0) return;
+    csgRoot.children.forEach((c) => c.updateMatrixWorld(true));
+
+    const q = new THREE.Quaternion().setFromUnitVectors(worldNormal.clone().normalize(), new THREE.Vector3(0, -1, 0));
+    const alreadyDown = q.angleTo(new THREE.Quaternion()) < 1e-4;
+
+    if (!alreadyDown) {
+        const combined = new THREE.Box3();
+        list.forEach((b) => combined.union(new THREE.Box3().setFromObject(b)));
+        const center = combined.getCenter(new THREE.Vector3());
+        const before = list.map((brush) => ({ brush, pos: brush.position.clone(), quat: brush.quaternion.clone() }));
+        const after = list.map((brush) => ({
+            brush,
+            pos: brush.position.clone().sub(center).applyQuaternion(q).add(center),
+            quat: brush.quaternion.clone().premultiply(q),
+        }));
+        await execute({
+            do() { after.forEach(({ brush, pos, quat }) => { brush.position.copy(pos); brush.quaternion.copy(quat); brush.updateMatrixWorld(); }); },
+            undo() { before.forEach(({ brush, pos, quat }) => { brush.position.copy(pos); brush.quaternion.copy(quat); brush.updateMatrixWorld(); }); },
+        });
+        recompute();
+        renderInspector();
+    }
+    await window.dropSelectedToSurface();
+    document.getElementById("status-msg").innerText = alreadyDown
+        ? "Bu yüzey zaten zemine bakıyor."
+        : `${list.length} parça seçilen yüzeyi zemine bakacak şekilde yatırıldı.`;
+};
+
+// ESKİ otomatik davranış: en kısa kenarı Y'ye çeviren 90°'lik dönüş (F'ye ikinci basış).
 const LAY_FLAT_EPS = 0.001; // mm — "boyutlar eşit" sayılacak tolerans
-window.layFlatSelected = async function () {
+window.layFlatAuto = async function () {
     const list = activeSelectionList().filter((b) => !b.userData.locked);
     if (list.length === 0) return;
 
@@ -2254,6 +2479,14 @@ function renderInspector() {
             <button class="btn btn-sm icon-btn-row" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-color);" title="İçini Boşalt" onclick="window.shellSelected()"><i data-lucide="package-open"></i> Boşalt</button>
         `;
         group.appendChild(row1);
+
+        const rowCenter = document.createElement("div");
+        rowCenter.style.cssText = "display:flex; gap:6px;";
+        rowCenter.innerHTML = `
+            <button class="btn btn-sm icon-btn-row" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-color);" title="Merkeze Al (C) — X/Z orijine getirir ve zemine oturtur" onclick="window.centerSelectedToOrigin()"><i data-lucide="crosshair"></i> Merkeze Al</button>
+            <button class="btn btn-sm icon-btn-row" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-color);" title="Yüzüstü Yatır (F) — zemine gelecek yüzeye tıklayın" onclick="window.layFlatSelected()"><i data-lucide="layers"></i> Yüzüstü Yatır</button>
+        `;
+        group.appendChild(rowCenter);
 
         const row3 = document.createElement("div");
         row3.style.cssText = "display:flex; gap:6px;";
