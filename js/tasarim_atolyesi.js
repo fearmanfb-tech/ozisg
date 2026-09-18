@@ -65,7 +65,7 @@ let selectionHelpers = [];
 let measurePointA = null;
 let measureLine = null;
 let measureMarker = null;
-let dragStartState = null; // {position, rotation, scale} — sürükleme başında yakalanır, undo için
+let dragStartState = null; // {position, quaternion, scale} — sürükleme başında yakalanır, undo/iptal için
 // Shift+sürükle (Ölçekle aracında) orantılı kilit için global tuş durumu —
 // transformControls'un "objectChange" olayı ham DOM olayını taşımadığından
 // (sadece "bir şey değişti" der) shift'in o an basılı olup olmadığını ayrıca
@@ -103,20 +103,263 @@ let layFlatMode = false;
 // sahneye işlenir; iptal edilirse (Esc/araç değişimi) kopyalar silinir.
 let altDup = null;
 
+// Çoklu/grup seçimde gizmo sürüklemesi: birincil parçanın başlangıç matrisi + diğer üyelerin
+// başlangıç dönüşümleri. objectChange her karede (birincilin matrisi × başlangıcın tersi)
+// delta'sını üyelere uygular → taşı/döndür/ölçekle hepsi birlikte, göreli düzen korunarak.
+let gizmoGroup = null;
+
 // Eşzamanlı (senkron) klon: pointermove/mouseDown içinde `await` kullanılamayacağı için
 // createBrush() yerine geometri+materyal doğrudan klonlanır. Material.clone() renk,
 // polygonOffset (Inlay) ve userData.extruder'ı da taşır; params kopyası inlay/extruder
 // bayraklarını korur.
-function cloneBrushSync(brush) {
+function cloneBrushSync(brush, nameOverride) {
     const clone = new Brush(brush.geometry.clone(), brush.material.clone());
-    clone.name = `${brush.name} (kopya)`;
+    clone.name = nameOverride || `${String(brush.name).replace(/( \((kopya|yapıştırıldı)\))+$/, "")} (kopya)`;
     clone.operation = brush.operation;
-    clone.userData = { id: `node_${++idCounter}`, type: brush.userData.type, params: { ...brush.userData.params } };
+    clone.userData = {
+        id: `node_${++idCounter}`,
+        type: brush.userData.type,
+        params: { ...brush.userData.params },
+        groupId: brush.userData.groupId || null, // toplu klonlamada remapGroupIds() yeniden eşler
+    };
     clone.position.copy(brush.position);
     clone.quaternion.copy(brush.quaternion);
     clone.scale.copy(brush.scale);
     clone.updateMatrixWorld(true);
     return clone;
+}
+
+// ── Gruplama (Ctrl+G / Ctrl+Shift+G) ─────────────────────────────────────
+// Grup = userData.groupId'yi paylaşan parçalar (iç içe grup yok). CSG katlaması,
+// kayıt ve Outliner grubu görmezden gelir; sadece SEÇİM ve TAŞIMA davranışı grup-bilinçlidir:
+// gruptan birine tıklamak grubun tamamını (multiSelected) seçer, sürükleme/gizmo hepsini taşır.
+let groupCounter = 0;
+function newGroupId() { return `grp_${Date.now().toString(36)}_${++groupCounter}`; }
+
+function groupMembers(brush) {
+    const g = brush && brush.userData.groupId;
+    return g ? csgRoot.children.filter((c) => c.userData.groupId === g) : [brush];
+}
+
+// Verilen parçaların bulunduğu TÜM grupları tamamlar (kısmen seçili grup → tam grup).
+function expandWithGroups(list) {
+    const out = [];
+    const seen = new Set();
+    list.forEach((b) => groupMembers(b).forEach((m) => { if (!seen.has(m) && m.visible !== false) { seen.add(m); out.push(m); } }));
+    // Tıklanan/verilen ilk parça birincil (gizmo'nun bağlanacağı) parça kalsın.
+    if (list.length && seen.has(list[0])) { out.splice(out.indexOf(list[0]), 1); out.unshift(list[0]); }
+    return out;
+}
+
+// Tekil tıklama seçimi: parça bir gruptaysa grubun TAMAMI seçilir.
+function selectWithGroup(brush) {
+    if (!brush) return selectNode(null);
+    const members = expandWithGroups([brush]);
+    if (members.length > 1) selectMultiple(members); else selectNode(brush);
+}
+
+// Toplu klonlarda grup kimliklerini yeniden eşler: orijinal grubun TÜM üyeleri klonlandıysa
+// klonlar YENİ ortak bir gruba girer (orijinal grup bozulmaz, klonlar ona karışmaz);
+// grup kısmen klonlandıysa klonlar grupsuz kalır.
+function remapGroupIds(originals, clones) {
+    const map = new Map();
+    originals.forEach((o, i) => {
+        const g = o.userData.groupId;
+        if (!g) { clones[i].userData.groupId = null; return; }
+        const total = csgRoot.children.filter((c) => c.userData.groupId === g).length;
+        const copied = originals.filter((x) => x.userData.groupId === g).length;
+        if (copied < total) { clones[i].userData.groupId = null; return; }
+        if (!map.has(g)) map.set(g, newGroupId());
+        clones[i].userData.groupId = map.get(g);
+    });
+    return clones;
+}
+
+function cloneBrushesSync(list, nameFn) {
+    const clones = list.map((b) => cloneBrushSync(b, nameFn ? nameFn(b) : undefined));
+    return remapGroupIds(list, clones);
+}
+
+// ── Akıllı Kılavuzlar (Smart Guides) ─────────────────────────────────────
+// Serbest gövde sürüklemesinde sürüklenen grubun sınır kutusunun min/orta/maks
+// değerleri, sahnedeki DİĞER parçaların aynı değerlerine ekran-pikseli eşiği (≈8px)
+// içinde yaklaşınca X/Z'de o değere yapışır ve geçici kesik çizgi çizilir. Ctrl basılıyken
+// kapalıdır (CAD standardı: "yapışmayı geçici devre dışı bırak").
+const SMART_GUIDE_PX = 8;
+let smartGuideLines = [];
+let dragStaticBoxes = null; // sürükleme başında bir kez hesaplanır: sabit parçaların Box3'leri
+
+function clearSmartGuides() {
+    smartGuideLines.forEach((l) => { scene.remove(l); l.geometry.dispose(); l.material.dispose(); });
+    smartGuideLines = [];
+}
+
+function addGuideLine(from, to, color) {
+    const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+    const mat = new THREE.LineDashedMaterial({ color, dashSize: 3, gapSize: 2, depthTest: false, transparent: true, opacity: 0.95 });
+    const line = new THREE.Line(geo, mat);
+    line.computeLineDistances();
+    line.renderOrder = 999;
+    scene.add(line);
+    smartGuideLines.push(line);
+}
+
+function unionBox(list) {
+    const box = new THREE.Box3();
+    list.forEach((b) => { b.updateMatrixWorld(true); box.union(new THREE.Box3().setFromObject(b)); });
+    return box;
+}
+
+// Hareketli kutunun min/orta/maks değerlerinden sabit kutularınkine en yakın eşleşmeyi
+// (eşik içindeyse) döndürür: {delta, target, other}. Eksen: "x" | "z".
+function findAxisSnap(moving, statics, axis, threshold) {
+    const mv = [moving.min[axis], (moving.min[axis] + moving.max[axis]) / 2, moving.max[axis]];
+    let best = null;
+    for (const s of statics) {
+        const sv = [s.min[axis], (s.min[axis] + s.max[axis]) / 2, s.max[axis]];
+        for (const m of mv) for (const t of sv) {
+            const d = t - m;
+            if (Math.abs(d) <= threshold && (!best || Math.abs(d) < Math.abs(best.delta))) best = { delta: d, target: t, other: s };
+        }
+    }
+    return best;
+}
+
+// Sürüklenen grubu (dragList) gerekirse yapıştırır + kılavuz çizgilerini günceller.
+// Yapışmadan sonraki gerçek (dx, dz) ötelemesini döndürür.
+function applySmartGuides(dragList, startPositions) {
+    clearSmartGuides();
+    if (!dragStaticBoxes || dragStaticBoxes.length === 0) return;
+    const moving = unionBox(dragList);
+    if (moving.isEmpty()) return;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    const dist = camera.position.distanceTo(moving.getCenter(new THREE.Vector3()));
+    const worldPerPx = (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / Math.max(1, rect.height);
+    const threshold = THREE.MathUtils.clamp(SMART_GUIDE_PX * worldPerPx, 0.3, 8);
+
+    const sx = findAxisSnap(moving, dragStaticBoxes, "x", threshold);
+    const sz = findAxisSnap(moving, dragStaticBoxes, "z", threshold);
+    if (sx || sz) {
+        dragList.forEach((b) => {
+            if (sx) b.position.x += sx.delta;
+            if (sz) b.position.z += sz.delta;
+            b.updateMatrixWorld();
+        });
+        if (sx) { moving.min.x += sx.delta; moving.max.x += sx.delta; }
+        if (sz) { moving.min.z += sz.delta; moving.max.z += sz.delta; }
+    }
+    const y = moving.min.y + 0.2;
+    if (sx) {
+        const z0 = Math.min(moving.min.z, sx.other.min.z) - 4, z1 = Math.max(moving.max.z, sx.other.max.z) + 4;
+        addGuideLine(new THREE.Vector3(sx.target, y, z0), new THREE.Vector3(sx.target, y, z1), 0xff2d95);
+    }
+    if (sz) {
+        const x0 = Math.min(moving.min.x, sz.other.min.x) - 4, x1 = Math.max(moving.max.x, sz.other.max.x) + 4;
+        addGuideLine(new THREE.Vector3(x0, y, sz.target), new THREE.Vector3(x1, y, sz.target), 0x00b8ff);
+    }
+}
+
+// ── Yüzüstü Yatır: hover vurgusu ─────────────────────────────────────────
+// layFlatMode'da imlecin altındaki YÜZEY (birbirine bağlı, aynı yöne bakan üçgenler
+// = düz bir yüz) şeffaf sarı bir mesh ile vurgulanır; kullanıcı tıklamadan önce hangi
+// yüzün zemine geleceğini görür. Komşuluk tablosu geometri başına bir kez çıkarılıp
+// önbelleğe alınır, böylece hover başına maliyet sadece bölgenin büyüklüğüdür.
+let layFlatHighlight = null;
+let layFlatHoverKey = null;
+const triAdjacencyCache = new WeakMap();
+
+function triIndices(geometry, t) {
+    const idx = geometry.index;
+    return idx ? [idx.getX(t * 3), idx.getX(t * 3 + 1), idx.getX(t * 3 + 2)] : [t * 3, t * 3 + 1, t * 3 + 2];
+}
+
+function getTriAdjacency(geometry) {
+    let adj = triAdjacencyCache.get(geometry);
+    if (adj) return adj;
+    const pos = geometry.attributes.position;
+    const triCount = (geometry.index ? geometry.index.count : pos.count) / 3;
+    const key = (i) => `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+    const normals = new Float32Array(triCount * 3);
+    const edgeMap = new Map();
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    for (let t = 0; t < triCount; t++) {
+        const [i0, i1, i2] = triIndices(geometry, t);
+        a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+        const n = new THREE.Vector3().subVectors(c, b).cross(new THREE.Vector3().subVectors(a, b)).normalize();
+        normals.set([n.x, n.y, n.z], t * 3);
+        const k = [key(i0), key(i1), key(i2)];
+        [[0, 1], [1, 2], [2, 0]].forEach(([p, q]) => {
+            const ek = k[p] < k[q] ? `${k[p]}|${k[q]}` : `${k[q]}|${k[p]}`;
+            if (!edgeMap.has(ek)) edgeMap.set(ek, []);
+            edgeMap.get(ek).push(t);
+        });
+    }
+    const neighbors = Array.from({ length: triCount }, () => []);
+    edgeMap.forEach((tris) => {
+        for (let x = 0; x < tris.length; x++) for (let y = 0; y < tris.length; y++) if (x !== y) neighbors[tris[x]].push(tris[y]);
+    });
+    adj = { triCount, normals, neighbors };
+    triAdjacencyCache.set(geometry, adj);
+    return adj;
+}
+
+// Başlangıç üçgeninden komşuluk boyunca, normali ~1.1° içinde aynı olan üçgenleri toplar.
+function coplanarRegion(geometry, startTri) {
+    const { normals, neighbors } = getTriAdjacency(geometry);
+    const n0 = [normals[startTri * 3], normals[startTri * 3 + 1], normals[startTri * 3 + 2]];
+    const seen = new Set([startTri]);
+    const queue = [startTri];
+    while (queue.length) {
+        const t = queue.pop();
+        for (const nb of neighbors[t]) {
+            if (seen.has(nb)) continue;
+            const dot = normals[nb * 3] * n0[0] + normals[nb * 3 + 1] * n0[1] + normals[nb * 3 + 2] * n0[2];
+            if (dot > 0.9998) { seen.add(nb); queue.push(nb); }
+        }
+    }
+    return [...seen];
+}
+
+function hideLayFlatHighlight() {
+    if (layFlatHighlight) {
+        scene.remove(layFlatHighlight);
+        layFlatHighlight.geometry.dispose();
+        layFlatHighlight.material.dispose();
+        layFlatHighlight = null;
+    }
+    layFlatHoverKey = null;
+}
+
+function showLayFlatHighlight(brush, faceIndex) {
+    const region = coplanarRegion(brush.geometry, faceIndex);
+    const key = `${brush.uuid}:${Math.min(...region)}:${region.length}`;
+    if (key === layFlatHoverKey && layFlatHighlight) return; // aynı yüz — yeniden kurma
+    hideLayFlatHighlight();
+    layFlatHoverKey = key;
+
+    brush.updateMatrixWorld(true);
+    const pos = brush.geometry.attributes.position;
+    const verts = [];
+    const v = new THREE.Vector3();
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(brush.matrixWorld);
+    const { normals } = getTriAdjacency(brush.geometry);
+    const nLocal = new THREE.Vector3(normals[faceIndex * 3], normals[faceIndex * 3 + 1], normals[faceIndex * 3 + 2]);
+    const lift = nLocal.applyNormalMatrix(normalMatrix).normalize().multiplyScalar(0.05); // yüzeyle titreşmesin
+    region.forEach((t) => triIndices(brush.geometry, t).forEach((i) => {
+        v.fromBufferAttribute(pos, i).applyMatrix4(brush.matrixWorld).add(lift);
+        verts.push(v.x, v.y, v.z);
+    }));
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xffd200, transparent: true, opacity: 0.55, side: THREE.DoubleSide,
+        depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    layFlatHighlight = new THREE.Mesh(geo, mat);
+    layFlatHighlight.renderOrder = 998;
+    layFlatHighlight.userData.isHelper = true;
+    scene.add(layFlatHighlight);
 }
 
 // init3D() içinde atanır (sürükleme durumu o closure'da yaşıyor): devam eden
@@ -228,18 +471,34 @@ function init3D() {
         // kopyaya devredilir ve sürükleme onunla sürer. Kopya, mouseUp'ta tek undo
         // adımı olarak eklenir (bkz. aşağısı).
         altDup = null;
+        gizmoGroup = null;
+        // Çoklu/grup seçimde gizmo yalnızca BİRİNCİL parçaya bağlıdır; diğer üyeler onun
+        // dönüşümünü (taşı/döndür/ölçekle) birlikte izler (bkz. objectChange).
+        const inMulti = multiSelected.length > 1 && multiSelected.includes(selected);
         if (altHeld && currentTransformMode === "translate" && !selected.userData.locked) {
-            const original = selected;
-            const clone = cloneBrushSync(original);
-            csgRoot.add(clone);
-            altDup = { originals: [original], clones: [clone] };
-            selectNode(clone); // gizmo'yu kopyaya bağlar (sürükleme başlangıç değerleri aynı)
+            const originals = inMulti
+                ? [selected, ...multiSelected.filter((b) => b !== selected && !b.userData.locked)]
+                : [selected];
+            const clones = cloneBrushesSync(originals); // clones[0] = birincil parçanın kopyası
+            clones.forEach((c) => csgRoot.add(c));
+            altDup = { originals, clones };
+            if (clones.length > 1) selectMultiple(clones); else selectNode(clones[0]); // gizmo kopyaya geçer
         }
         dragStartState = {
             position: selected.position.toArray(),
-            rotation: [selected.rotation.x, selected.rotation.y, selected.rotation.z],
+            quaternion: selected.quaternion.toArray(),
             scale: selected.scale.toArray(),
         };
+        if (multiSelected.length > 1 && multiSelected.includes(selected)) {
+            selected.updateMatrix();
+            gizmoGroup = {
+                primaryInv: selected.matrix.clone().invert(),
+                members: multiSelected.filter((b) => b !== selected && !b.userData.locked).map((b) => {
+                    b.updateMatrix();
+                    return { brush: b, matrix: b.matrix.clone(), position: b.position.clone(), quaternion: b.quaternion.clone(), scale: b.scale.clone() };
+                }),
+            };
+        }
         resultMesh.visible = false;
         csgRoot.visible = true; // sürüklerken ham parçaları göster (ucuz, CSG yok)
     });
@@ -283,6 +542,16 @@ function init3D() {
                 selected.updateMatrixWorld();
             }
         }
+        // Grup/çoklu seçim: birincil parçanın matris değişimini (yeni × başlangıcın tersi)
+        // diğer üyelerin başlangıç matrislerine uygula → hepsi birlikte taşınır/döner/ölçeklenir.
+        if (gizmoGroup) {
+            selected.updateMatrix();
+            const delta = selected.matrix.clone().multiply(gizmoGroup.primaryInv);
+            gizmoGroup.members.forEach((m) => {
+                delta.clone().multiply(m.matrix).decompose(m.brush.position, m.brush.quaternion, m.brush.scale);
+                m.brush.updateMatrixWorld();
+            });
+        }
         // Sadece sarı tel-kafes takip etsin — ne CSG (pahalı) ne de Inspector'ı
         // yeniden çizmek (odak kaybı + gereksiz DOM churn) her karede yapılmaz;
         // Inspector sürükleme bitince (mouseUp) bir kez güncellenir.
@@ -292,16 +561,18 @@ function init3D() {
     transformControls.addEventListener("mouseUp", async () => {
         controls.enabled = true;
         csgRoot.visible = false;
-        if (!selected || !dragStartState) { recompute(); return; }
+        if (!selected || !dragStartState) { gizmoGroup = null; recompute(); return; }
 
         const brush = selected;
         const before = dragStartState;
         const after = {
             position: brush.position.toArray(),
-            rotation: [brush.rotation.x, brush.rotation.y, brush.rotation.z],
+            quaternion: brush.quaternion.toArray(),
             scale: brush.scale.toArray(),
         };
         dragStartState = null;
+        const group = gizmoGroup;
+        gizmoGroup = null;
 
         // Alt+sürükle ile oluşturulan kopya: taşıma + ekleme TEK undo adımı olarak
         // işlenir (geri alınca kopya tamamen kalkar). Kopya zaten sahnede (mouseDown'da
@@ -319,11 +590,21 @@ function init3D() {
             return;
         }
 
-        const changed = JSON.stringify(before) !== JSON.stringify(after);
+        // Birincil + (varsa) grup üyeleri için tek undo adımı.
+        const records = [{ brush, before, after }];
+        if (group) {
+            group.members.forEach((m) => records.push({
+                brush: m.brush,
+                before: { position: m.position.toArray(), quaternion: m.quaternion.toArray(), scale: m.scale.toArray() },
+                after: { position: m.brush.position.toArray(), quaternion: m.brush.quaternion.toArray(), scale: m.brush.scale.toArray() },
+            }));
+        }
+        const apply = (r, s) => { r.brush.position.fromArray(s.position); r.brush.quaternion.fromArray(s.quaternion); r.brush.scale.fromArray(s.scale); r.brush.updateMatrixWorld(); };
+        const changed = records.some((r) => JSON.stringify(r.before) !== JSON.stringify(r.after));
         if (changed) {
             await execute({
-                do() { brush.position.fromArray(after.position); brush.rotation.set(...after.rotation); brush.scale.fromArray(after.scale); brush.updateMatrixWorld(); },
-                undo() { brush.position.fromArray(before.position); brush.rotation.set(...before.rotation); brush.scale.fromArray(before.scale); brush.updateMatrixWorld(); },
+                do() { records.forEach((r) => apply(r, r.after)); },
+                undo() { records.forEach((r) => apply(r, r.before)); },
             });
         }
         recompute();
@@ -419,19 +700,33 @@ function init3D() {
             dragGroup = null;
             dragGroupStart = null;
             hideDragTooltip();
+            clearSmartGuides();
+            dragStaticBoxes = null;
             cancelled = true;
         }
         dragCandidate = null;
 
         // 2) Gizmo (ok/halka/küp tutamacı) sürüklemesi
         if (transformControls.dragging) {
+            const hadAltDup = !!altDup;
             discardAltDuplicates();
             if (selected && dragStartState) {
                 selected.position.fromArray(dragStartState.position);
-                selected.rotation.set(...dragStartState.rotation);
+                selected.quaternion.fromArray(dragStartState.quaternion);
                 selected.scale.fromArray(dragStartState.scale);
                 selected.updateMatrixWorld();
             }
+            // Grup üyeleri de sürükleme öncesi dönüşümlerine döner (Alt+sürükle'de üyeler
+            // zaten silinen kopyalardı — orijinallere dokunulmadı).
+            if (gizmoGroup && !hadAltDup) {
+                gizmoGroup.members.forEach((m) => {
+                    m.brush.position.copy(m.position);
+                    m.brush.quaternion.copy(m.quaternion);
+                    m.brush.scale.copy(m.scale);
+                    m.brush.updateMatrixWorld();
+                });
+            }
+            gizmoGroup = null;
             dragStartState = null;
             transformControls.dragging = false;
             transformControls.axis = null;
@@ -488,8 +783,17 @@ function init3D() {
         }
     });
 
+    // Yüzüstü Yatır hover vurgusu: imlecin altındaki SEÇİLİ objenin düz yüzünü sarı ile boyar.
+    function updateLayFlatHover(e) {
+        raycaster.setFromCamera(ndcFromEvent(e), camera);
+        const hit = raycaster.intersectObjects(activeSelectionList(), false)[0];
+        if (hit && hit.faceIndex != null) showLayFlatHighlight(hit.object, hit.faceIndex);
+        else hideLayFlatHighlight();
+    }
+
     renderer.domElement.addEventListener("pointermove", (e) => {
         lastPointerClient = { clientX: e.clientX, clientY: e.clientY };
+        if (layFlatMode) { updateLayFlatHover(e); return; }
         // ── Çerçeveyle çoklu seçim ──
         if (marqueeCandidate) {
             const moved = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
@@ -527,14 +831,15 @@ function init3D() {
             if (multiSelected.length > 1 && multiSelected.includes(dragCandidate)) {
                 dragGroup = multiSelected.filter((b) => !b.userData.locked);
             } else {
-                if (selected !== dragCandidate) selectNode(dragCandidate);
-                dragGroup = [dragCandidate];
+                // Parça bir gruptaysa grubun TAMAMI seçilir ve birlikte sürüklenir.
+                selectWithGroup(dragCandidate);
+                dragGroup = multiSelected.length > 1 ? multiSelected.filter((b) => !b.userData.locked) : [dragCandidate];
             }
             // Alt+sürükle: orijinaller yerinde kalır, sürükleme AYNI konumdaki kopyalar
-            // üzerinden devam eder (Tinkercad "hızlı çoğaltma").
+            // üzerinden devam eder (Tinkercad "hızlı çoğaltma"). Grup kimlikleri yeniden eşlenir.
             if (e.altKey || altHeld) {
                 const originals = dragGroup;
-                const clones = originals.map(cloneBrushSync);
+                const clones = cloneBrushesSync(originals);
                 clones.forEach((c) => csgRoot.add(c));
                 dragCandidate = clones[originals.indexOf(dragCandidate)];
                 dragGroup = clones;
@@ -544,6 +849,10 @@ function init3D() {
             dragGroupStart = dragGroup.map((b) => ({ brush: b, position: b.position.toArray() }));
             dragStartObjPos = dragCandidate.position.clone();
             dragStartWorldPoint = raycastGroundAt(e, dragStartObjPos.y);
+            // Akıllı kılavuzlar için sabit parçaların sınır kutuları (sürüklenenler hariç).
+            dragStaticBoxes = visibleCsgChildren()
+                .filter((c) => !dragGroup.includes(c))
+                .map((c) => { c.updateMatrixWorld(true); return new THREE.Box3().setFromObject(c); });
             resultMesh.visible = false;
             csgRoot.visible = true;
             showDragTooltip();
@@ -558,8 +867,14 @@ function init3D() {
             brush.position.z = snapValue(position[2] + dz);
             brush.updateMatrixWorld();
         });
+        // Akıllı kılavuzlar: yakınlaşınca diğer parçaların kenar/merkezine yapış + çizgi çiz.
+        // Ctrl basılıyken yapışma yok.
+        if (e.ctrlKey || e.metaKey) clearSmartGuides();
+        else applySmartGuides(dragGroup, dragGroupStart);
         updateSelectionHelper();
-        updateDragTooltip(e, dx, dz);
+        // Tooltip yapışma SONRASI gerçek ötelemeyi göstersin.
+        const ref = dragGroupStart[0];
+        updateDragTooltip(e, ref.brush.position.x - ref.position[0], ref.brush.position.z - ref.position[2]);
     });
 
     renderer.domElement.addEventListener("pointerup", async (e) => {
@@ -586,8 +901,10 @@ function init3D() {
                 const p = worldToScreen(new THREE.Box3().setFromObject(b).getCenter(new THREE.Vector3()));
                 return p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
             });
-            if (inside.length > 1) selectMultiple(inside);
-            else if (inside.length === 1) selectNode(inside[0]);
+            // Çerçeve bir gruptan en az bir parçaya değdiyse grubun TAMAMI seçilir.
+            const picked = expandWithGroups(inside);
+            if (picked.length > 1) selectMultiple(picked);
+            else if (picked.length === 1) selectNode(picked[0]);
             else selectNode(null);
             return;
         }
@@ -599,6 +916,8 @@ function init3D() {
             controls.enabled = true;
             csgRoot.visible = false;
             hideDragTooltip();
+            clearSmartGuides(); // mouse bırakılınca kılavuz çizgileri silinir
+            dragStaticBoxes = null;
 
             const before = dragGroupStart;
             const after = before.map(({ brush }) => ({ brush, position: brush.position.toArray() }));
@@ -707,9 +1026,10 @@ function init3D() {
             return;
         }
         if (hits.length > 0) {
-            selectNode(hits[0].object);
-            // Metin nesnesi seçildiyse Inspector'daki "Metin" kutusuna doğrudan odaklan.
-            if (hits[0].object.userData.type === "text") focusInspectorTextInput();
+            // Gruptan bir parçaya tıklamak grubun TAMAMINI seçer (Tinkercad/Fusion).
+            selectWithGroup(hits[0].object);
+            // Tekil metin nesnesi seçildiyse Inspector'daki "Metin" kutusuna doğrudan odaklan.
+            if (multiSelected.length <= 1 && hits[0].object.userData.type === "text") focusInspectorTextInput();
         } else selectNode(null);
     });
 
@@ -1124,6 +1444,9 @@ document.addEventListener("keydown", function (e) {
     // çok kez yapıştırılabilir.
     if (e.ctrlKey && e.key.toLowerCase() === "c" && !typing) { e.preventDefault(); window.copySelected(); return; }
     if (e.ctrlKey && e.key.toLowerCase() === "v" && !typing) { e.preventDefault(); window.pasteClipboard(); return; }
+    // Ctrl+G: Grupla — Ctrl+Shift+G: Grubu Çöz (Tinkercad/Fusion kısayolları). Tarayıcının
+    // "sonrakini bul" kısayolunu bilerek eziyoruz.
+    if (e.ctrlKey && e.key.toLowerCase() === "g" && !typing) { e.preventDefault(); if (e.shiftKey) window.ungroupSelected(); else window.groupSelected(); return; }
     if (typing) return;
     // KRİTİK: Ctrl/Cmd/Alt basılıyken hiçbir tek-tuş kısayolumuz ateşlenmesin —
     // aksi halde Ctrl+R (yenile), Ctrl+Shift+R (sert yenile), Ctrl+F (bul),
@@ -1190,6 +1513,17 @@ async function execute(cmd) {
     history.stack.push(cmd);
     history.pointer++;
     refreshUndoRedoButtons();
+    scheduleRecoveryBackup(); // her geçmiş adımında otomatik yedek (bkz. "Çökme Kurtarma")
+}
+
+// Undo/Redo bir parçayı sahneden kaldırmış olabilir (eklemeyi geri alma vb.): artık sahnede
+// olmayan parçaların seçili kalması Inspector'da hayalet bir nesne göstermesin.
+function sanitizeSelection() {
+    const alive = (b) => b && b.parent === csgRoot;
+    if (multiSelected.length > 0) multiSelected = multiSelected.filter(alive);
+    if (!alive(selected)) selected = multiSelected[0] || null;
+    if (!selected) transformControls.detach();
+    else if (multiSelected.length === 1) multiSelected = [];
 }
 
 window.undo = async function () {
@@ -1197,9 +1531,11 @@ window.undo = async function () {
     await history.stack[history.pointer].undo();
     history.pointer--;
     refreshUndoRedoButtons();
+    sanitizeSelection();
     recompute();
     renderOutliner();
     renderInspector();
+    scheduleRecoveryBackup();
 };
 
 window.redo = async function () {
@@ -1207,10 +1543,91 @@ window.redo = async function () {
     history.pointer++;
     await history.stack[history.pointer].do();
     refreshUndoRedoButtons();
+    sanitizeSelection();
     recompute();
     renderOutliner();
     renderInspector();
+    scheduleRecoveryBackup();
 };
+
+// ── Çökme Kurtarma (Auto-Save Backup) ────────────────────────────────────
+// Her geçmiş adımından (execute/undo/redo) sonra sahne, serializeSceneToNodes() çıktısıyla
+// localStorage'a yazılır (300 ms debounce; sayfa kapanırken/yenilenirken anında flush).
+// Sayfa açılışında yedek varsa kullanıcıya sorulur (bkz. checkRecoveryBackup). Kayıtlı
+// tasarım (Firestore) başarıyla kaydedilince yedek silinir. NOT: sadece parametrik şekiller
+// yedeklenir — STL/SVG/Fotoğraf içe aktarımlar ham mesh olduğu için yedeğe GİRMEZ (yedek
+// bunu `skipped` sayısıyla not eder ve geri yükleme sorusunda kullanıcıyı uyarır).
+const RECOVERY_KEY = "ozisg_recovery_backup";
+let recoveryTimer = null;
+
+function saveRecoveryBackupNow() {
+    recoveryTimer = null;
+    try {
+        if (csgRoot.children.length === 0) { localStorage.removeItem(RECOVERY_KEY); return; }
+        const nodes = serializeSceneToNodes();
+        if (nodes.length === 0) { localStorage.removeItem(RECOVERY_KEY); return; }
+        localStorage.setItem(RECOVERY_KEY, JSON.stringify({
+            v: 1,
+            ts: Date.now(),
+            nodes,
+            skipped: csgRoot.children.length - nodes.length,
+            designId: currentDesignId || null,
+        }));
+    } catch (err) {
+        console.warn("Otomatik yedek yazılamadı (depolama dolu/kapalı olabilir):", err);
+    }
+}
+
+function scheduleRecoveryBackup() {
+    if (recoveryTimer) clearTimeout(recoveryTimer);
+    recoveryTimer = setTimeout(saveRecoveryBackupNow, 300);
+}
+
+function flushRecoveryBackup() {
+    if (recoveryTimer) { clearTimeout(recoveryTimer); saveRecoveryBackupNow(); }
+}
+window.addEventListener("pagehide", flushRecoveryBackup);
+window.addEventListener("beforeunload", flushRecoveryBackup);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushRecoveryBackup(); });
+
+function clearRecoveryBackup() {
+    if (recoveryTimer) { clearTimeout(recoveryTimer); recoveryTimer = null; }
+    try { localStorage.removeItem(RECOVERY_KEY); } catch (_) { /* yok say */ }
+}
+
+// Sayfa açılışında çağrılır (init3D SONRASI — sahne hazır olmalı).
+async function checkRecoveryBackup() {
+    let backup = null;
+    try {
+        const raw = localStorage.getItem(RECOVERY_KEY);
+        backup = raw ? JSON.parse(raw) : null;
+    } catch (err) {
+        console.warn("Yedek okunamadı (bozuk veri), siliniyor:", err);
+        clearRecoveryBackup();
+        return;
+    }
+    if (!backup) return;
+    if (!Array.isArray(backup.nodes) || backup.nodes.length === 0) { clearRecoveryBackup(); return; }
+    if (csgRoot.children.length > 0) return; // sahne zaten dolu (beklenmez) — üzerine yazma
+
+    const when = backup.ts ? new Date(backup.ts).toLocaleString("tr-TR") : "bilinmeyen zaman";
+    const skippedNote = backup.skipped > 0 ? `\n(${backup.skipped} içe aktarılmış STL/SVG/Fotoğraf parçası yedeklenemez, gelmeyecek.)` : "";
+    if (!confirm(`Yarım kalan bir tasarım bulundu (${backup.nodes.length} parça, ${when}).\nYarım kalan tasarım yüklensin mi?${skippedNote}`)) {
+        clearRecoveryBackup();
+        return;
+    }
+    try {
+        const nodes = validateAndConvertNodes(backup.nodes, 300);
+        clearRecoveryBackup(); // yüklendikten sonra execute() güncel durumu yeniden yedekler
+        currentDesignId = backup.designId || null;
+        await addValidatedNodesAsGroup(nodes);
+        window.resetCamera();
+        document.getElementById("status-msg").innerText = `Yarım kalan tasarım geri yüklendi (${nodes.length} parça).`;
+    } catch (err) {
+        console.error("checkRecoveryBackup:", err);
+        alert("Yedek geri yüklenirken hata oluştu: " + err.message);
+    }
+}
 
 function refreshUndoRedoButtons() {
     document.getElementById("btn-undo").disabled = history.pointer < 0;
@@ -1414,9 +1831,12 @@ function buildGeometry(type, params) {
             // Dış silindir - iç silindir: gerçek CSG ile TEK SEFERLİK "pişirilir"
             // (evaluator zaten modül seviyesinde mevcut) — sonuç tek bir düz
             // geometri, sahnedeki diğer CSG işlemlerinden bağımsız.
+            // Savunma: iç yarıçap dıştan büyük/eşitse (eski kayıt, AI çıktısı) negatif hacim oluşup şekil
+            // kaybolmasın — bkz. reconcileCrossParams (Inspector/doğrulama aynı kuralı uygular).
+            const innerR = Math.min(params.innerRadius, params.outerRadius - CROSS_GAP);
             const outer = new Brush(new THREE.CylinderGeometry(params.outerRadius, params.outerRadius, params.height, SEG.cylinder));
             outer.updateMatrixWorld();
-            const inner = new Brush(new THREE.CylinderGeometry(params.innerRadius, params.innerRadius, params.height + 2, SEG.cylinder));
+            const inner = new Brush(new THREE.CylinderGeometry(innerR, innerR, params.height + 2, SEG.cylinder));
             inner.updateMatrixWorld();
             const result = evaluator.evaluate(outer, inner, SUBTRACTION);
             outer.geometry.dispose(); inner.geometry.dispose();
@@ -1666,23 +2086,11 @@ window.duplicateSelected = async function () {
     if (list.length === 0) return;
     const OFFSET = 10; // mm — kopyanın orijinalin üzerine tam binmemesi için
 
-    const clones = [];
-    for (const brush of list) {
-        let clone;
-        if (isNonParametricType(brush.userData.type)) {
-            clone = new Brush(brush.geometry.clone(), brush.material.clone());
-            clone.name = `${brush.name} (kopya)`;
-            clone.userData = { id: `node_${++idCounter}`, type: brush.userData.type, params: {} };
-        } else {
-            clone = await createBrush(brush.userData.type, { ...brush.userData.params }, `${brush.name} (kopya)`);
-        }
-        clone.operation = brush.operation;
-        clone.position.set(brush.position.x + OFFSET, brush.position.y, brush.position.z + OFFSET);
-        clone.rotation.copy(brush.rotation);
-        clone.scale.copy(brush.scale);
-        clone.updateMatrixWorld();
-        clones.push(clone);
-    }
+    // Yeniden ÜRETMEK yerine orijinalin geometri+materyal+dönüşüm klonu alınır: inceltilmiş,
+    // ölçeklenmiş, aynalanmış, inlay/extruder ayarlı parçalar birebir aynı kopyalanır.
+    // Tam grup çoğaltılırsa kopyalar YENİ bir gruba girer.
+    const clones = cloneBrushesSync(list);
+    clones.forEach((c) => { c.position.x += OFFSET; c.position.z += OFFSET; c.updateMatrixWorld(true); });
 
     await execute({
         do() { clones.forEach((c) => csgRoot.add(c)); },
@@ -1701,37 +2109,36 @@ window.duplicateSelected = async function () {
 // kadar farklı zamanda Yapıştır'a basılarak tekrar eklenebilir. STL/SVG/
 // Fotoğraf gibi parametrik olmayan tipler kopyalanamaz (Çoğalt/Kaydet ile
 // aynı kısıt — ham mesh verisi düz node formatına sığmıyor).
-let clipboard = [];
+// GÜNCEL: pano artık parametre özeti değil, kopyalama ANINDAKİ objelerin bağımsız
+// (sahnede olmayan) Brush SNAPSHOT'larını tutar; yapıştırma bunların cloneBrushSync()
+// klonunu alır — createBrush ile yeniden üretmek yerine geometri/ölçek/renk/extruder/inlay
+// birebir taşınır. Snapshot (referans değil) olmasının sebebi: kopyalandıktan sonra
+// orijinal değiştirilse ya da silinse bile yapıştırılan, KOPYALANDIĞI andaki hâlidir.
+// Bu sayede STL/SVG/Fotoğraf gibi içe aktarılan parçalar da kopyalanabilir.
+let clipboard = { snapshots: [], pasteCount: 0 };
+
+function disposeClipboard() {
+    clipboard.snapshots.forEach((s) => { s.geometry.dispose(); s.material.dispose(); });
+    clipboard = { snapshots: [], pasteCount: 0 };
+}
 
 window.copySelected = function () {
-    const list = activeSelectionList().filter((b) => !isNonParametricType(b.userData.type));
+    const list = activeSelectionList();
     if (list.length === 0) return;
-    clipboard = list.map((b) => ({
-        type: b.userData.type,
-        // params kopyası color/extruder/inlay bayraklarını da taşır (createBrush hepsini
-        // korur) — Inlay dolgusu yapıştırılınca yine Inlay + Extruder 2 kalır.
-        params: { ...b.userData.params },
-        operation: b.operation,
-        position: b.position.toArray(),
-        rotation: [b.rotation.x, b.rotation.y, b.rotation.z],
-        scale: b.scale.toArray(), // S aracı / "0.4mm'ye İncelt" / aynalama (negatif ölçek) korunsun
-    }));
-    document.getElementById("status-msg").innerText = `${clipboard.length} parça kopyalandı (Ctrl+V ile yapıştırın).`;
+    disposeClipboard();
+    const snaps = list.map((b) => cloneBrushSync(b, b.name)); // ad korunur, "(kopya)" eklenmez
+    remapGroupIds(list, snaps); // tam grup → snapshot'lar kendi grubunda; kısmi grup → grupsuz
+    clipboard.snapshots = snaps;
+    document.getElementById("status-msg").innerText = `${snaps.length} parça kopyalandı (Ctrl+V ile yapıştırın).`;
 };
 
 window.pasteClipboard = async function () {
-    if (clipboard.length === 0) return;
-    const OFFSET = 10; // mm — yapıştırılan kopyanın orijinalin üzerine tam binmemesi için
-    const clones = [];
-    for (const entry of clipboard) {
-        const clone = await createBrush(entry.type, { ...entry.params }, `${labelFor(entry.type)} (yapıştırıldı)`);
-        clone.operation = entry.operation;
-        clone.position.set(entry.position[0] + OFFSET, entry.position[1], entry.position[2] + OFFSET);
-        clone.rotation.set(entry.rotation[0], entry.rotation[1], entry.rotation[2]);
-        if (Array.isArray(entry.scale)) clone.scale.fromArray(entry.scale);
-        clone.updateMatrixWorld();
-        clones.push(clone);
-    }
+    if (clipboard.snapshots.length === 0) return;
+    // Her yapıştırma bir öncekinden 10mm daha ileri (X+10,Z+10 → +20,+20 …) — arka arkaya
+    // yapıştırılan kopyalar aynı noktada üst üste yığılmasın.
+    const OFFSET = 10 * ++clipboard.pasteCount;
+    const clones = cloneBrushesSync(clipboard.snapshots, (s) => `${s.name} (yapıştırıldı)`);
+    clones.forEach((c) => { c.position.x += OFFSET; c.position.z += OFFSET; c.updateMatrixWorld(true); });
 
     await execute({
         do() { clones.forEach((c) => csgRoot.add(c)); },
@@ -1760,6 +2167,44 @@ window.mirrorSelected = async function (axis) {
     recompute();
     renderInspector();
     document.getElementById("status-msg").innerText = `${list.length} parça ${axis.toUpperCase()} ekseninde aynalandı.`;
+};
+
+// ── Grupla / Grubu Çöz (Ctrl+G / Ctrl+Shift+G) ───────────────────────────
+// Seçili parçalar (ve içinde bulundukları mevcut grupların TÜM üyeleri) tek bir yeni gruba
+// alınır. Grup sadece seçim/taşıma davranışıdır (bkz. selectWithGroup): CSG sonucunu
+// değiştirmez, Outliner'da hâlâ tek tek görünür ve oradan tek tek seçilebilir.
+window.groupSelected = async function () {
+    const list = expandWithGroups(activeSelectionList());
+    if (list.length < 2) {
+        document.getElementById("status-msg").innerText = "Gruplamak için en az 2 parça seçin.";
+        return;
+    }
+    const before = list.map((brush) => ({ brush, g: brush.userData.groupId || null }));
+    const gid = newGroupId();
+    await execute({
+        do() { list.forEach((b) => { b.userData.groupId = gid; }); },
+        undo() { before.forEach(({ brush, g }) => { brush.userData.groupId = g; }); },
+    });
+    selectMultiple(list);
+    renderOutliner();
+    document.getElementById("status-msg").innerText = `${list.length} parça gruplandı (Ctrl+Shift+G: çöz).`;
+};
+
+window.ungroupSelected = async function () {
+    const list = activeSelectionList();
+    const ids = new Set(list.map((b) => b.userData.groupId).filter(Boolean));
+    if (ids.size === 0) {
+        document.getElementById("status-msg").innerText = "Seçimde grup yok.";
+        return;
+    }
+    const members = csgRoot.children.filter((c) => ids.has(c.userData.groupId));
+    const before = members.map((brush) => ({ brush, g: brush.userData.groupId }));
+    await execute({
+        do() { members.forEach((b) => { b.userData.groupId = null; }); },
+        undo() { before.forEach(({ brush, g }) => { brush.userData.groupId = g; }); },
+    });
+    renderOutliner();
+    document.getElementById("status-msg").innerText = `${ids.size} grup çözüldü (${members.length} parça).`;
 };
 
 // ── Gelişmiş Hizala (Align 2.0 — Faz 8, Tinkercad stili) ─────────────────
@@ -1810,6 +2255,11 @@ window.alignSelectedAdvanced = async function (axis, mode) {
 // yapılır (kayan-nokta payı EPS ile), en yüksek uygun tavan seçilir — asla
 // objeyi YUKARI itmez, sadece aşağı indirir.
 const DROP_SURFACE_EPS = 0.05; // mm — "temas halinde" sayılacak tolerans
+// Z-fighting önleyici mikro pay: obje zemine/yüzeye TAM temas yerine 0.01 mm üstüne oturur;
+// üst üste binen eş-düzlem yüzeyler (zemin ızgarası, alttaki objenin tavanı) ekranda titremez.
+// Idempotent: zaten bu payla oturan obje için delta ≈ 0 çıkar ("Zaten yüzeye oturuyor").
+// Dışa aktarımda zemin seviyesindeki bu pay otomatik alınır (bkz. prepareGeometryForExport).
+const DROP_PAD = 0.01; // mm
 window.dropSelectedToSurface = async function () {
     // NOT: STL/SVG/Fotoğraf gibi içe aktarılan (parametrik olmayan) parçalar
     // da sadece KONUM değiştiği için sorunsuz düşürülebilir — filtre gerekmiyor.
@@ -1836,7 +2286,7 @@ window.dropSelectedToSurface = async function () {
                 restY = obox.max.y;
             }
         });
-        const delta = restY - selfMinY;
+        const delta = restY + DROP_PAD - selfMinY;
         if (Math.abs(delta) > 0.001) moves.push({ brush, delta, oldY: brush.position.y, newY: brush.position.y + delta });
     });
 
@@ -1905,6 +2355,7 @@ function canvasElement() { return document.querySelector("#canvas-container canv
 window.exitLayFlatMode = function (silent) {
     if (!layFlatMode) return false;
     layFlatMode = false;
+    hideLayFlatHighlight(); // hover vurgusunu sahneden kaldır + dispose et
     const c = canvasElement();
     if (c) c.style.cursor = "";
     if (!silent) document.getElementById("status-msg").innerText = "Yüzüstü yatırma iptal edildi.";
@@ -2374,7 +2825,11 @@ function selectMultiple(brushes) {
 // activeSelectionList() üzerinden okuyor, ayrı bir kod yolu gerekmiyor.
 function toggleSelection(brush) {
     const current = activeSelectionList();
-    const next = current.includes(brush) ? current.filter((b) => b !== brush) : [...current, brush];
+    // Gruptaki bir parça toggle edilince grubun TAMAMI eklenir/çıkarılır.
+    const members = expandWithGroups([brush]);
+    const next = current.includes(brush)
+        ? current.filter((b) => !members.includes(b))
+        : [...current, ...members.filter((m) => !current.includes(m))];
     if (next.length === 0) selectNode(null);
     else if (next.length === 1) selectNode(next[0]);
     else selectMultiple(next);
@@ -2409,13 +2864,22 @@ function renderOutliner() {
         return;
     }
     const activeList = activeSelectionList();
+    // Grup rozeti: aynı groupId'yi paylaşan satırlar aynı numarayı (G1, G2…) alır.
+    const groupNumbers = new Map();
+    csgRoot.children.forEach((b) => {
+        const g = b.userData.groupId;
+        if (g && !groupNumbers.has(g)) groupNumbers.set(g, groupNumbers.size + 1);
+    });
     csgRoot.children.forEach((brush) => {
         const row = document.createElement("li");
         const isLocked = !!brush.userData.locked;
         const isHidden = brush.visible === false;
         row.className = "outliner-row" + (activeList.includes(brush) ? " selected" : "") + (isHidden ? " row-hidden" : "");
+        const groupBadge = brush.userData.groupId
+            ? `<span title="Grup ${groupNumbers.get(brush.userData.groupId)} — Ctrl+Shift+G ile çözülür" style="font-size:0.68rem; font-weight:700; padding:1px 5px; margin-right:4px; border-radius:6px; background:var(--accent-primary); color:#fff;">G${groupNumbers.get(brush.userData.groupId)}</span>`
+            : "";
         row.innerHTML = `
-            <span class="row-name">${labelFor(brush.userData.type)}: ${brush.name}</span>
+            <span class="row-name">${groupBadge}${labelFor(brush.userData.type)}: ${escapeHtml(brush.name)}</span>
             <select data-op>${OP_OPTIONS.map(o => `<option value="${o.value}" ${o.value === brush.operation ? "selected" : ""}>${o.label}</option>`).join("")}</select>
             <button data-lock class="${isLocked ? "is-on" : ""}" title="${isLocked ? "Kilidi Aç" : "Kilitle"} (L)"><i data-lucide="${isLocked ? "lock" : "lock-open"}"></i></button>
             <button data-hide class="${isHidden ? "is-on" : ""}" title="${isHidden ? "Göster" : "Gizle"} (V)"><i data-lucide="${isHidden ? "eye-off" : "eye"}"></i></button>
@@ -2597,7 +3061,20 @@ function renderInspector() {
                 else if (isText) newVal = input.value.trim() || oldVal;
                 else if (isMaxWidth) { const n = parseFloat(input.value); newVal = Number.isFinite(n) && n > 0 ? Math.min(n, 500) : 0; }
                 else newVal = parseFloat(input.value) || oldVal;
-                if (newVal === oldVal) return;
+
+                // Çapraz doğrulama (tüp: iç < dış, simit: tüp < yarıçap): hatalı girişi engellemek
+                // yerine geçerli sınıra çeker — şekil CSG'de asla yok olmaz.
+                if (!isFont && !isText && !isMaxWidth) {
+                    const trial = { ...brush.userData.params, [key]: newVal };
+                    const adjusted = reconcileCrossParams(brush.userData.type, trial, key);
+                    if (adjusted) {
+                        newVal = trial[adjusted];
+                        const msg = `${paramLabel(adjusted)} geçerli aralığa çekildi: ${newVal} mm (iç değer dıştan küçük olmalı).`;
+                        document.getElementById("status-msg").innerText = msg;
+                        showToast(msg, "warning");
+                    }
+                }
+                if (newVal === oldVal) { renderInspector(); return; } // girilen geçersiz değeri alandan sil
                 await execute({
                     async do() { brush.userData.params[key] = newVal; await regenerateGeometry(brush); },
                     async undo() { brush.userData.params[key] = oldVal; await regenerateGeometry(brush); },
@@ -3352,9 +3829,22 @@ function validateOneNode(raw, i) {
     params.extruder = Number(rawParams.extruder) === 2 ? 2 : 1;
     if (rawParams.inlay === true) params.inlay = true;
 
+    // Çapraz doğrulama: iç/dış yarıçap ilişkisi bozuksa şekil CSG'de yok olur (negatif hacim).
+    // Bkz. reconcileCrossParams — Inspector ile AYNI kural (iç ≤ dış−0.1).
+    reconcileCrossParams(type, params, null);
+
     const position = Array.isArray(raw.position) ? raw.position : [0, 0, 0];
     const rotation = Array.isArray(raw.rotation) ? raw.rotation : [0, 0, 0];
     const operation = OP_NAME_TO_CONST[raw.operation] ?? ADDITION;
+    // Ölçek (opsiyonel; eski kayıtlarda yok → [1,1,1]). 0 ölçek şekli yok eder — sıfıra çok yakın
+    // değerler ±0.01'e çekilir; aşırı büyük değerler kırpılır.
+    const rawScale = Array.isArray(raw.scale) ? raw.scale : [1, 1, 1];
+    const scale = [0, 1, 2].map((k) => {
+        const s = clampFinite(rawScale[k], 1, -50, 50);
+        return Math.abs(s) < 0.01 ? (s < 0 ? -0.01 : 0.01) : s;
+    });
+    const name = typeof raw.name === "string" ? raw.name.replace(/[<>"&]/g, "").trim().slice(0, 60) : "";
+    const groupId = typeof raw.groupId === "string" && /^[\w-]{1,60}$/.test(raw.groupId) ? raw.groupId : null;
 
     return {
         type,
@@ -3362,7 +3852,38 @@ function validateOneNode(raw, i) {
         position: [0, 1, 2].map((k) => clampFinite(position[k], 0, -400, 400)),
         rotation: [0, 1, 2].map((k) => clampFinite(rotation[k], 0, -360, 360)),
         operation,
+        scale,
+        name,
+        groupId,
     };
+}
+
+// Birbirine bağlı parametre çiftlerini tutarlı tutar (Inspector + validateOneNode ortak kuralı):
+//  • tube : innerRadius < outerRadius (aksi halde CSG 'subtract' negatif hacim üretir, şekil kaybolur)
+//  • torus: tube < radius (aksi halde halka kendi içine geçer — geçersiz/manifold olmayan ağ)
+// `changedKey` verilirse SADECE o alan uyarlanır (kullanıcının az önce girdiği değer):
+//   iç ≥ dış → iç = dış − 0.1 ; dış ≤ iç → dış = iç + 0.1. `null` ise (doğrulama) iç/tube kısılır.
+// Değiştirilen alan adını (ya da null) döndürür.
+const CROSS_GAP = 0.1; // mm
+function reconcileCrossParams(type, params, changedKey) {
+    const round2 = (v) => Math.round(v * 100) / 100;
+    if (type === "tube") {
+        if (changedKey === "outerRadius" && params.outerRadius <= params.innerRadius) {
+            params.outerRadius = round2(params.innerRadius + CROSS_GAP); return "outerRadius";
+        }
+        if (params.innerRadius >= params.outerRadius) {
+            params.innerRadius = round2(params.outerRadius - CROSS_GAP); return "innerRadius";
+        }
+    }
+    if (type === "torus") {
+        if (changedKey === "radius" && params.radius <= params.tube) {
+            params.radius = round2(params.tube + CROSS_GAP); return "radius";
+        }
+        if (params.tube >= params.radius) {
+            params.tube = round2(params.radius - CROSS_GAP); return "tube";
+        }
+    }
+    return null;
 }
 
 // Sandbox'tan dönen HAM veriyi asla güvenilir kabul etme: her alanı whitelist'e
@@ -3371,10 +3892,12 @@ function validateOneNode(raw, i) {
 // içinde throw) TÜM AI üretimini iptal ediyordu. Artık her node KENDİ
 // try/catch'i içinde doğrulanıyor — bozuk/tanınmayan bir şekil varsa SADECE O
 // ATLANIYOR, geri kalan geçerli şekiller kullanıcıya YİNE DE ulaşıyor.
-function validateAndConvertNodes(rawNodes) {
+// `maxCount`: AI üretimi için 20 (varsayılan); kayıtlı tasarım / favori / çökme yedeği yüklemede
+// 300 kullanılır — eskiden 20'den fazla şekilli kayıtlı bir tasarım HİÇ geri yüklenemiyordu.
+function validateAndConvertNodes(rawNodes, maxCount = 20) {
     if (!Array.isArray(rawNodes)) throw new Error("AI çıktısı beklenmeyen formatta.");
     if (rawNodes.length === 0) throw new Error("AI hiçbir şekil üretmedi.");
-    if (rawNodes.length > 20) throw new Error("AI çok fazla şekil üretti (maks. 20).");
+    if (rawNodes.length > maxCount) throw new Error(`Çok fazla şekil (${rawNodes.length}, maks. ${maxCount}).`);
 
     const validNodes = [];
     rawNodes.forEach((raw, i) => {
@@ -3409,6 +3932,9 @@ function validateAndConvertNodes(rawNodes) {
 // adımıyla sahneye ekler (kullanıcı tek Ctrl+Z ile tüm AI üretimini geri alabilir).
 async function addValidatedNodesAsGroup(nodes) {
     const brushes = [];
+    // Kayıtlı grup kimlikleri sahnede zaten var olan gruplarla ÇAKIŞMASIN diye her dosya
+    // grubuna bu yüklemeye özel YENİ bir kimlik verilir.
+    const groupMap = new Map();
     for (const n of nodes) {
         // Faz 9 — AGRESİF HATA TOLERANSI: bir şeklin geometrisi kurulamazsa
         // (ör. font ağdan yüklenemedi, beklenmedik bir kenar durumu) TÜM AI
@@ -3423,6 +3949,12 @@ async function addValidatedNodesAsGroup(nodes) {
                 THREE.MathUtils.degToRad(n.rotation[1]),
                 THREE.MathUtils.degToRad(n.rotation[2])
             );
+            if (Array.isArray(n.scale)) brush.scale.set(n.scale[0], n.scale[1], n.scale[2]);
+            if (n.name) brush.name = n.name;
+            if (n.groupId) {
+                if (!groupMap.has(n.groupId)) groupMap.set(n.groupId, newGroupId());
+                brush.userData.groupId = groupMap.get(n.groupId);
+            }
             brush.updateMatrixWorld();
             brushes.push(brush);
         } catch (err) {
@@ -3534,7 +4066,26 @@ window.runAICode = async function () {
 function prepareGeometryForExport(sourceGeometry) {
     const geo = mergeVertices(sourceGeometry.clone());
     geo.computeVertexNormals();
+    // Zemine oturtma payı (DROP_PAD = 0.01 mm) sadece ekran içindir: modelin tabanı yatak
+    // seviyesinin hemen üstündeyse (0 < minY ≤ pay) dilimleyicide havada kalmasın diye
+    // tabana indirilir. Başka bir yüzeyin üstüne oturan (yatak dışı) modellere dokunulmaz.
+    geo.computeBoundingBox();
+    const minY = geo.boundingBox.min.y;
+    if (minY > 0 && minY <= DROP_PAD + 0.005) geo.translate(0, -minY, 0);
     return geo;
+}
+
+// Akıllı dışa aktarım adı: sahnede metin (type="text") varsa ilkinin değeri → "Ozisg_Ahmet".
+// Tercih sırası: görünür + katı (ADDITION) + inlay olmayan metin, yoksa herhangi bir metin.
+// Dosya sisteminden bağımsız güvenli ad için Türkçe harfler ASCII'ye çevrilir, kalan özel
+// karakterler "_" olur (Orca/SD kart/FAT uyumu). Metin yoksa eski varsayılan ad korunur.
+function exportBaseName() {
+    const texts = csgRoot.children.filter((b) => b.userData.type === "text");
+    const pick = texts.find((b) => b.visible !== false && b.operation === ADDITION && !(b.userData.params && b.userData.params.inlay))
+        || texts.find((b) => b.visible !== false) || texts[0];
+    const raw = pick && pick.userData.params && pick.userData.params.value;
+    const safe = turkishToAscii(String(raw || "")).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+    return safe ? `Ozisg_${safe}` : "ozisg_tasarim";
 }
 
 window.exportSTL = function () {
@@ -3550,12 +4101,13 @@ window.exportSTL = function () {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "ozisg_tasarim.stl";
+    const fileName = `${exportBaseName()}.stl`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    document.getElementById("status-msg").innerText = "STL dosyası indirildi (gerçek CSG geometrisi, taze normaller — Orca Slicer'da açılabilir).";
+    document.getElementById("status-msg").innerText = `${fileName} indirildi (gerçek CSG geometrisi, taze normaller — Orca Slicer'da açılabilir).`;
 };
 
 // Minimal ama 3MF Core Spec'e uygun bir "3D/3dmodel.model" XML'i üretir.
@@ -3716,12 +4268,13 @@ window.export3MF = function () {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "ozisg_tasarim.3mf";
+    const fileName = `${exportBaseName()}.3mf`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    document.getElementById("status-msg").innerText = "3MF dosyası indirildi (Snapmaker Orca Slicer'da açılabilir).";
+    document.getElementById("status-msg").innerText = `${fileName} indirildi (Snapmaker Orca Slicer'da açılabilir).`;
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -3771,6 +4324,12 @@ function serializeBrushesToNodes(list) {
                 THREE.MathUtils.radToDeg(b.rotation.z),
             ],
             operation: OP_CONST_TO_NAME[b.operation] || "union",
+            // Ölçek (S aracı, "0.4mm'ye İncelt" küre/simit yedeği, aynalama = negatif ölçek),
+            // ad ve grup kimliği de saklanır — aksi halde kayıt/yedek/favori geri yüklemede
+            // inceltilmiş/aynalanmış parçalar eski hâline dönüyordu.
+            scale: b.scale.toArray(),
+            name: b.name,
+            groupId: b.userData.groupId || null,
         }));
 }
 
@@ -3862,7 +4421,7 @@ window.addFavoriteToScene = async function (id) {
     const fav = favorites.find((f) => f.id === id);
     if (!fav) return;
     try {
-        const nodes = validateAndConvertNodes(fav.nodes);
+        const nodes = validateAndConvertNodes(fav.nodes, 300);
         await addValidatedNodesAsGroup(nodes);
         document.getElementById("status-msg").innerText = `"${fav.name}" sahneye eklendi.`;
     } catch (err) {
@@ -3930,6 +4489,7 @@ window.saveDesign = async function () {
             createdAt: serverTimestamp(),
         });
         currentDesignId = docRef.id;
+        clearRecoveryBackup(); // tasarım güvenle kaydedildi — otomatik yedek artık gereksiz
         showToast(`"${name}" kaydedildi.`, "success");
         nameInput.value = "";
         document.getElementById("status-msg").innerText = `"${name}" ERP'ye kaydedildi.`;
@@ -3995,7 +4555,7 @@ window.loadDesign = async function (id) {
         const snap = await getDoc(doc(db, "tool_3d_designs", id));
         if (!snap.exists()) return alert("Tasarım bulunamadı (silinmiş olabilir).");
         const data = snap.data();
-        const nodes = validateAndConvertNodes(data.nodes || []);
+        const nodes = validateAndConvertNodes(data.nodes || [], 300);
 
         clearScene();
         currentDesignId = id;
@@ -4043,4 +4603,7 @@ window.addEventListener("load", async () => {
     // renderInspector/loadDesignsList) kendi refreshIcons() çağrılarını zaten
     // yapıyor; bu, İLK yüklemedeki geri kalan HER ŞEYİ kapsıyor.
     refreshIcons();
+
+    // Çökme kurtarma: sayfa yenilenmeden/çökmeden önceki yarım tasarım varsa sor (sahne hazır).
+    try { await checkRecoveryBackup(); } catch (err) { console.warn("Yedek kontrolü başarısız:", err); }
 });
