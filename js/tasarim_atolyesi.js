@@ -330,9 +330,11 @@ function addCornerMarker(point) {
 // Sadece `axes` içindeki eksenlerde öteleme üretir; kimseyi taşımaz → çağıran uygular. Yoksa null.
 function snapMovingBox(moving, axes) {
     clearSmartGuides();
-    if (!dragStaticBoxes || dragStaticBoxes.length === 0 || moving.isEmpty() || axes.length === 0) return null;
+    const statics = dragStaticBoxes || [];
+    // Statik parça yoksa da Y'de zemin hedefi vardır (bkz. aşağısı).
+    if ((statics.length === 0 && !axes.includes("y")) || moving.isEmpty() || axes.length === 0) return null;
 
-    const corner = findCornerSnap(moving, dragStaticBoxes, axes, cornerSnapThreshold(moving));
+    const corner = findCornerSnap(moving, statics, axes, cornerSnapThreshold(moving));
     if (corner) {
         addCornerMarker(corner.point);
         return corner.delta;
@@ -342,7 +344,15 @@ function snapMovingBox(moving, axes) {
     const delta = new THREE.Vector3();
     const snaps = [];
     axes.forEach((a) => {
-        const s = findAxisSnap(moving, dragStaticBoxes, a, threshold);
+        let s = findAxisSnap(moving, statics, a, threshold);
+        // Zemin (Y=0): dikey taşımada hareketli kutunun tabanı zemine de yapışır (yalnız sahnede parça
+        // olmasına bağlı olmayan tek "sanal" hedef). Yakınsa diğer parçaların değerlerinden önceliklidir.
+        if (a === "y") {
+            const d = -moving.min.y;
+            if (Math.abs(d) <= threshold && (!s || Math.abs(d) < Math.abs(s.delta))) {
+                s = { delta: d, target: 0, other: moving }; // guide, hareketli kutunun kendi eni boyunca çizilir
+            }
+        }
         if (s) { delta[a] = s.delta; snaps.push([a, s]); }
     });
     if (snaps.length === 0) return null;
@@ -1918,7 +1928,7 @@ window.setTransformMode = function (mode) {
 };
 
 // ── Ok tuşlarıyla hassas kaydırma (Nudge) ─────────────────────────────────
-// Seçili obje(ler) X/Z düzleminde kaydırılır. Yönler EKRANA göredir (Tinkercad gibi): Yukarı = kameradan
+// Seçili obje(ler) X/Z düzleminde kaydırılır (PageUp/PageDown: Y — yukarı/aşağı). Yönler EKRANA göredir (Tinkercad gibi): Yukarı = kameradan
 // uzağa, Sağ = ekranda sağa; her biri en yakın dünya eksenine (X veya Z) oturtulur. Adım: Izgaraya
 // Yasla açıkken SNAP_SIZE (5 mm), kapalıyken 1 mm; Shift ile 10 mm. Kilitli parçalar hareket etmez.
 // Her basış tek bir execute() = tek Ctrl+Z adımıdır; ANCAK tuşa basılı tutulunca (otomatik tekrar)
@@ -1941,7 +1951,9 @@ function nudgeDirection(key) {
     const upSign = Math.sign(up[upAxis]) || 1;
     const rightSign = Math.sign(right[rightAxis]) || 1;
     const v = new THREE.Vector3();
-    if (key === "ArrowUp") v[upAxis] = upSign;
+    if (key === "PageUp") v.y = 1;
+    else if (key === "PageDown") v.y = -1;
+    else if (key === "ArrowUp") v[upAxis] = upSign;
     else if (key === "ArrowDown") v[upAxis] = -upSign;
     else if (key === "ArrowRight") v[rightAxis] = rightSign;
     else v[rightAxis] = -rightSign; // ArrowLeft
@@ -1984,7 +1996,7 @@ window.nudgeSelected = async function (key, large) {
     clearTimeout(nudgeRecomputeTimer);
     nudgeRecomputeTimer = setTimeout(() => recompute(), 80);
     const moved = lastNudge.records[0].to.clone().sub(lastNudge.records[0].from);
-    document.getElementById("status-msg").innerText = `Kaydırıldı: X ${moved.x.toFixed(1)} · Z ${moved.z.toFixed(1)} mm (Shift: ${NUDGE_LARGE} mm)`;
+    document.getElementById("status-msg").innerText = `Kaydırıldı: X ${moved.x.toFixed(1)} · Y ${moved.y.toFixed(1)} · Z ${moved.z.toFixed(1)} mm (Shift: ${NUDGE_LARGE} mm)`;
 };
 
 document.addEventListener("keydown", function (e) {
@@ -2004,10 +2016,18 @@ document.addEventListener("keydown", function (e) {
     // Ctrl+G: Grupla — Ctrl+Shift+G: Grubu Çöz (Tinkercad/Fusion kısayolları). Tarayıcının
     // "sonrakini bul" kısayolunu bilerek eziyoruz.
     if (e.ctrlKey && e.key.toLowerCase() === "g" && !typing) { e.preventDefault(); if (e.shiftKey) window.ungroupSelected(); else window.groupSelected(); return; }
+    // Ctrl/Cmd+A: sahnedeki görünür TÜM parçaları seç (gruplar zaten bütün gelir).
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !e.shiftKey && !e.altKey && !typing) {
+        e.preventDefault();
+        const all = visibleCsgChildren();
+        if (all.length > 1) selectMultiple(all);
+        else if (all.length === 1) selectNode(all[0]);
+        return;
+    }
     if (typing) return;
     // Ok tuşları: seçili obje(ler)i kaydır (Alt+Ok tarayıcıda "geri/ileri" olduğundan hariç).
     // Seçim yoksa varsayılan davranış (sayfa kaydırma) bozulmaz.
-    if (e.key.startsWith("Arrow") && !e.ctrlKey && !e.metaKey && !e.altKey && activeSelectionList().length > 0) {
+    if ((e.key.startsWith("Arrow") || e.key === "PageUp" || e.key === "PageDown") && !e.ctrlKey && !e.metaKey && !e.altKey && activeSelectionList().length > 0) {
         e.preventDefault();
         window.nudgeSelected(e.key, e.shiftKey);
         return;
