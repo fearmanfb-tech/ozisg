@@ -1846,6 +1846,8 @@ const SHAPE_LIBRARY = [
     { type: "cone", icon: "cone", label: "Koni" },
     { type: "pyramid", icon: "pyramid", label: "Piramit" },
     { type: "triprism", icon: "triangle", label: "Üçgen Prizma" },
+    { type: "wedge", icon: "triangle-right", label: "Takoz" },
+    { type: "halfcylinder", icon: "contrast", label: "Yarım Silindir" },
     { type: "hexprism", icon: "hexagon", label: "Altıgen Prizma" },
     { type: "torus", icon: "donut", label: "Simit" },
     { type: "tube", icon: "circle-dashed", label: "Tüp/Halka" },
@@ -2284,6 +2286,8 @@ const DEFAULT_PARAMS = {
     star: { radius: 15, depth: 4 },
     heart: { size: 20, depth: 4 },
     roundedbox: { width: 30, height: 15, depth: 30, radius: 3 },
+    wedge: { width: 30, height: 20, depth: 20 },   // width: taban (X), height: dik kenar (Y), depth: kalınlık (Z)
+    halfcylinder: { radius: 15, depth: 30 },       // radius: yarım daire (Y = radius), depth: silindir ekseni boyu (Z)
 };
 // Renk (Faz 5): TÜM şekil tiplerine ortak bir "color" alanı ekleniyor.
 // Bilerek literal içine değil, tek bir döngüyle sonradan ekleniyor — 15
@@ -2462,6 +2466,35 @@ function buildGeometry(type, params) {
             outer.geometry.dispose(); inner.geometry.dispose();
             return result.geometry;
         }
+        case "wedge": {
+            // Takoz (dik üçgen prizma): dik açı sol-altta, eğim sağa iner. 2D dik üçgeni (XY) Z'ye
+            // ekstrüde ederiz → ExtrudeGeometry kapaklı ve kapalı (watertight) bir mesh üretir
+            // (CSG için uygun); ardından sınır kutusu merkeze alınır (kutu gibi: X/Y/Z merkezli).
+            const shape = new THREE.Shape();
+            shape.moveTo(0, 0);
+            shape.lineTo(params.width, 0);
+            shape.lineTo(0, params.height);
+            shape.closePath();
+            const geo = new THREE.ExtrudeGeometry(shape, { depth: params.depth, bevelEnabled: false });
+            geo.clearGroups(); // tek materyal: kapak/yan yüz grupları CSG'de materyal dizini karışıklığı yaratmasın
+            geo.translate(-params.width / 2, -params.height / 2, -params.depth / 2);
+            return geo;
+        }
+        case "halfcylinder": {
+            // Yarım silindir: CylinderGeometry'nin thetaLength=π hali AÇIK bir yüzey olurdu (kesit
+            // düzlemi kapaksız → CSG'de non-manifold). Bunun yerine YARIM DAİRE profilini (düz kenarı
+            // altta) Z ekseninde ekstrüde ediyoruz: düz taban + iki yarım daire kapak dahil KAPALI mesh.
+            // Yarım daire 16 dilimli (tam silindirle aynı çözünürlük: SEG.cylinder / 2).
+            const r = params.radius;
+            const shape = new THREE.Shape();
+            shape.moveTo(-r, 0);
+            shape.absarc(0, 0, r, Math.PI, 0, true); // saat yönünde, üst yarım daire (−r,0) → (r,0)
+            shape.closePath();
+            const geo = new THREE.ExtrudeGeometry(shape, { depth: params.depth, bevelEnabled: false, curveSegments: SEG.cylinder / 2 });
+            geo.clearGroups();
+            geo.translate(0, 0, -params.depth / 2);
+            return geo;
+        }
         case "star": return flattenAndCenter(new THREE.ExtrudeGeometry(buildStarShape(params.radius, params.radius * 0.45), { depth: params.depth, bevelEnabled: false }));
         case "heart": {
             const geo = new THREE.ExtrudeGeometry(buildHeartShape(), { depth: params.depth, bevelEnabled: false });
@@ -2551,7 +2584,7 @@ function labelFor(type) {
         box: "Küp", cylinder: "Silindir", sphere: "Küre", text: "Metin",
         cone: "Koni", pyramid: "Piramit", triprism: "Üçgen Prizma", hexprism: "Altıgen Prizma",
         torus: "Simit", tube: "Tüp/Halka", dome: "Kubbe", icosahedron: "İkosahedron",
-        star: "Yıldız", heart: "Kalp", roundedbox: "Yuvarlak Köşeli Küp",
+        star: "Yıldız", heart: "Kalp", roundedbox: "Yuvarlak Köşeli Küp", wedge: "Takoz", halfcylinder: "Yarım Silindir",
         "stl-import": "STL", "svg-import": "SVG", "photo-relief": "Fotoğraf Kabartma",
     }[type] || "Şekil";
 }
@@ -3328,7 +3361,7 @@ function estimateSceneTriangles() {
 // üstel/karesel patlıyor (bizzat test edilip doğrulandı: 15 çakışan eğrisel
 // şekil, TOPLAM üçgen sayısı eşiğin altında kalsa bile dakikalarca kilitlendi).
 // Bu yüzden 2+ eğrisel şekil varsa üçgen toplamına KARESEL bir "ceza" ekliyoruz.
-const CURVED_SHAPE_TYPES = new Set(["sphere", "cone", "cylinder", "torus", "tube", "dome", "icosahedron", "roundedbox", "text"]);
+const CURVED_SHAPE_TYPES = new Set(["sphere", "cone", "cylinder", "torus", "tube", "dome", "icosahedron", "roundedbox", "text", "halfcylinder"]);
 function estimateSceneRisk() {
     let triangleSum = 0;
     let curvedCount = 0;
@@ -3963,6 +3996,7 @@ function paramLabel(key, type) {
     // Prizma/piramit/ikosahedron "yarıçapı" KÖŞE mesafesidir (çevrel çember) — düz kenar
     // genişliği bundan küçüktür (altıgen: 2r yerine ≈1.73r).
     if (key === "radius" && ["triprism", "hexprism", "pyramid", "icosahedron"].includes(type)) return "Yarıçap (köşeye)";
+    if (key === "depth" && type === "halfcylinder") return "Uzunluk (eksen boyu)";
     return {
         width: "Genişlik", height: "Yükseklik", depth: "Kalınlık/Derinlik", radius: "Yarıçap",
         value: "Metin", size: "Punto/Boyut", tube: "Tüp Kalınlığı",
@@ -3982,7 +4016,7 @@ const STAMP_THICKNESS = 0.4; // mm
 const STAMP_THICKNESS_PARAM = {
     text: "depth", star: "depth", heart: "depth",
     box: "height", roundedbox: "height", cylinder: "height", cone: "height",
-    pyramid: "height", triprism: "height", hexprism: "height", tube: "height",
+    pyramid: "height", triprism: "height", hexprism: "height", tube: "height", wedge: "height",
 };
 
 window.thinSelectedToStamp = async function () {
@@ -4457,7 +4491,7 @@ const SANDBOX_SRCDOC = `<!DOCTYPE html><html><head><meta charset="utf-8">
 </head><body><script>
 (function () {
   "use strict";
-  var ALLOWED_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox"];
+  var ALLOWED_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox", "wedge", "halfcylinder"];
   var CAD = { _nodes: [] };
 
   function makeNode(type, params) {
@@ -4558,7 +4592,7 @@ function runSandboxed(code) {
 }
 
 const OP_NAME_TO_CONST = { union: ADDITION, subtract: SUBTRACTION, intersect: INTERSECTION };
-const ALL_SHAPE_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox"];
+const ALL_SHAPE_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox", "wedge", "halfcylinder"];
 // NOT: "height" alt sınırları 1 → 0.2 mm'ye indirildi: "0.4mm'ye İncelt" (damga)
 // makrosu kaydedilip yeniden yüklenince 1 mm'ye geri KIRPILMASIN.
 const NODE_PARAM_LIMITS = {
@@ -4577,6 +4611,8 @@ const NODE_PARAM_LIMITS = {
     star: { radius: [1, 200], depth: [0.2, 60] },
     heart: { size: [1, 200], depth: [0.2, 60] },
     roundedbox: { width: [2, 300], height: [0.2, 300], depth: [2, 300], radius: [0.1, 50] },
+    wedge: { width: [1, 300], height: [0.2, 300], depth: [0.2, 300] },
+    halfcylinder: { radius: [0.5, 200], depth: [0.2, 300] },
 };
 
 // NOT (Faz 9 — sertleştirme): `n === null` iken `Number(null)` === 0 döner ve

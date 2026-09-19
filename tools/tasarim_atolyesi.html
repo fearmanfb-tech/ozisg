@@ -380,6 +380,7 @@
                       <button class="tool-icon-btn" data-transform-mode="rotate" title="Döndür — nesneyi döndür" onclick="window.setTransformMode('rotate')"><i data-lucide="rotate-cw"></i></button>
                       <button class="tool-icon-btn" data-transform-mode="scale" title="Ölçekle (S) — Shift ile orantılı kilit" onclick="window.setTransformMode('scale')"><i data-lucide="scaling"></i></button>
                       <button class="tool-icon-btn" title="Aşağı Oturt (D) — altındaki yüzeye veya zemine indir" onclick="window.dropSelectedToSurface()"><i data-lucide="arrow-down-to-line"></i></button>
+                      <button class="tool-icon-btn" title="Yüzüstü Yatır (F) — zemine gelecek yüzeye tıklayın" onclick="window.layFlatSelected()"><i data-lucide="layers"></i></button>
                       <button class="tool-icon-btn" data-transform-mode="measure" title="Ölçüm — iki nokta tıkla" onclick="window.setTransformMode('measure')"><i data-lucide="ruler"></i></button>
                       <button class="tool-icon-btn" id="btn-snap" title="Izgaraya Yasla (5mm)" onclick="window.toggleSnap()"><i data-lucide="grid-3x3"></i></button>
                       <button class="tool-icon-btn" id="btn-magnetic-snap" title="Manyetik Yüzey Kenetlenmesi (M) — Taşırken altındaki yüzeye otursun" onclick="window.toggleMagneticSnap()"><i data-lucide="magnet"></i></button>
@@ -396,7 +397,6 @@
                       <button class="tool-icon-btn" data-transform-mode="pan" title="Pan Modu (H) — sol tıkla kaydır" onclick="window.setTransformMode('pan')"><i data-lucide="hand"></i></button>
                       <button class="tool-icon-btn" title="Ana Ekran Görüntüsü (Home)" onclick="window.resetCamera()"><i data-lucide="home"></i></button>
                       <button class="tool-icon-btn" title="Seçiliye Odaklan (Shift+F)" onclick="window.focusSelected()"><i data-lucide="target"></i></button>
-                      <button class="tool-icon-btn" title="Yüzüstü Yatır (F) — zemine gelecek yüzeye tıklayın" onclick="window.layFlatSelected()"><i data-lucide="layers"></i></button>
                   </div>
                   <div class="toolbar-sep tb-sep"></div>
                   <button class="tool-icon-btn" style="color:var(--accent-primary);" title="AI Tasarım Asistanı" onclick="window.toggleAIModal()"><i data-lucide="sparkles"></i></button>
