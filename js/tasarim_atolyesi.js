@@ -5077,8 +5077,8 @@ window.exportSTL = function () {
 // materyalin userData.extruder alanından okunur (bkz. createBrush / buildColorField;
 // CSG sonucu materyal örneklerini koruduğu için birleştirme sonrası da erişilebilir).
 // İsteğe bağlı `outInfo` dizisine her <object> için {objId, extruder, hex, triCount}
-// eklenir — export3MF bununla dilimleyiciye özel `Slic3r_PE_model.config` dosyasını
-// (nesne/parça bazında `extruder` metadata'sı) üretir.
+// eklenir (+ `outInfo.assemblyId`: parçaları saran "Tasarım" nesnesinin kimliği) — export3MF bununla
+// Orca'nın `Metadata/model_settings.config` dosyasını (parça bazında `extruder`) üretir.
 function build3MFModelXML(geometry, material, outInfo) {
     const materials = Array.isArray(material) ? material : [material];
     const groups = (geometry.groups && geometry.groups.length > 0)
@@ -5140,40 +5140,61 @@ function build3MFModelXML(geometry, material, outInfo) {
         };
     });
 
-    const itemLines = objectBlocks.map((o) => `<item objectid="${o.objId}"/>`).join("");
+    // Renk parçaları TEK bir "Tasarım" nesnesinin bileşenleri (components) olur: Orca/Bambu'da çok renkli
+    // bir model, her parçası ayrı ekstrudere atanmış tek nesne + çok parçadır (bkz. Metadata/
+    // model_settings.config, build3MFConfigXML). Ayrı üst-düzey nesneler dilimleyicide birbirinden
+    // bağımsız nesneler sayılırdı. Bileşen nesne kimliği = model_settings.config'teki part id.
+    const assemblyId = nextId++;
+    if (Array.isArray(outInfo)) outInfo.assemblyId = assemblyId;
+    const componentLines = objectBlocks.map((o) => `<component objectid="${o.objId}"/>`).join("");
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="tr-TR" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+  <metadata name="Application">ozisg.com 3D Tasarim Atolyesi</metadata>
   <resources>
     <basematerials id="1">
       ${baseLines.join("\n      ")}
     </basematerials>
     ${objectBlocks.map((o) => o.xml).join("\n    ")}
+    <object id="${assemblyId}" type="model">
+      <components>${componentLines}</components>
+    </object>
   </resources>
   <build>
-    ${itemLines}
+    <item objectid="${assemblyId}" printable="1"/>
   </build>
 </model>`;
 }
 
-// Prusa/Orca uyumlu `Metadata/Slic3r_PE_model.config`: her <object> için (ve tek
-// hacmi için) `extruder` metadata'sı — dilimleyici böylece "Kafa 2" parçayı 2.
-// filament/extruder'a atanmış olarak açar (renk eşleştirmeye güvenmek yerine
-// doğrudan atama). Standart 3MF okuyucular bu dosyayı yok sayar.
-function build3MFConfigXML(objectInfos) {
-    const objects = objectInfos.map((o) => {
-        const name = `Kafa ${o.extruder} - #${o.hex.toUpperCase()}`;
-        return ` <object id="${o.objId}" instances_count="1">
-  <metadata type="object" key="name" value="${name}"/>
-  <metadata type="object" key="extruder" value="${o.extruder}"/>
-  <volume firstid="0" lastid="${Math.max(0, o.triCount - 1)}">
-   <metadata type="volume" key="name" value="${name}"/>
-   <metadata type="volume" key="volume_type" value="ModelPart"/>
-   <metadata type="volume" key="extruder" value="${o.extruder}"/>
-  </volume>
- </object>`;
+// Orca / Bambu / Snapmaker Orca `Metadata/model_settings.config` (kaynak: Orca'nın 3MF içe aktarıcısı ve
+// gerçek bir Orca proje dosyası). Nesne = "Tasarım" (assemblyId); her renk kovası bir PART'tır ve part id'si
+// model dosyasındaki bileşen nesnesinin kimliğine eşittir. `extruder` her parçaya yazılır: Kafa 2'deki parça
+// Orca'da 2. filament/ekstruder olarak açılır. NOT: Orca renk bilgisini nesnede/parçada SAKLAMAZ — parçanın rengi,
+// atandığı filament yuvasının (Filament 1, 2 …) rengidir; bu yüzden parça adına tasarım rengi yazılır
+// ("Kafa 2 - #E53935") ve dilimleyicide o yuvanın rengi buna göre ayarlanmalıdır.
+// (Eski `Slic3r_PE_model.config` yalnızca PrusaSlicer okurdu, Orca hiç okumuyordu; kaldırıldı.)
+function xmlEscape(str) {
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function build3MFConfigXML(objectInfos, assemblyId, designName) {
+    const identity = "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1";
+    const parts = objectInfos.map((o) => {
+        const name = xmlEscape(`Kafa ${o.extruder} - #${o.hex.toUpperCase()}`);
+        return `    <part id="${o.objId}" subtype="normal_part">
+      <metadata key="name" value="${name}"/>
+      <metadata key="matrix" value="${identity}"/>
+      <metadata key="extruder" value="${o.extruder}"/>
+    </part>`;
     }).join("\n");
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<config>\n${objects}\n</config>`;
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <object id="${assemblyId}">
+    <metadata key="name" value="${xmlEscape(designName)}"/>
+    <metadata key="extruder" value="1"/>
+${parts}
+  </object>
+</config>`;
 }
 
 window.export3MF = function () {
@@ -5183,7 +5204,7 @@ window.export3MF = function () {
     const objectInfos = [];
     const modelXML = build3MFModelXML(exportGeo, resultMesh.material, objectInfos);
     exportGeo.dispose();
-    const configXML = build3MFConfigXML(objectInfos);
+    const configXML = build3MFConfigXML(objectInfos, objectInfos.assemblyId, exportBaseName());
 
     const contentTypesXML = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -5207,7 +5228,7 @@ window.export3MF = function () {
         "[Content_Types].xml": strToU8(contentTypesXML),
         "_rels/.rels": strToU8(relsXML),
         "3D/3dmodel.model": strToU8(modelXML),
-        "Metadata/Slic3r_PE_model.config": strToU8(configXML),
+        "Metadata/model_settings.config": strToU8(configXML),
     });
 
     const blob = new Blob([zipped], { type: "application/vnd.ms-package.3dmanufacturing-3dmodel+xml" });
