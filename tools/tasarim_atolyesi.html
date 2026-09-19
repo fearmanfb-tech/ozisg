@@ -73,13 +73,19 @@
     .toolbar-dropdown .dropdown-item { white-space: nowrap; font-size: 0.82rem; display: flex; align-items: center; gap: 8px; }
 
     /* Sağ Panel (Faz 6'da yer değiştirdi — kullanıcı talebiyle SOLA
-       geçen Şekil Kütüphanesi'yle yerini takas etti): AI Kodu, Kayıtlı
-       Tasarımlar, Model Ağacı, Inspector. ARTIK SAĞDA duruyor — aşağıdaki
+       geçen Şekil Kütüphanesi'yle yerini takas etti): Model Ağacı + Inspector
+       (AI Asistan ve Kayıtlı Tasarımlar araç çubuğundaki modallara taşındı). ARTIK SAĞDA duruyor — aşağıdaki
        kenarlık/gölge/toggle-tab yönleri buna göre AYNALANDI (border-left,
        gölge sola düşer, tab `right` ekseninde konumlanır). */
     .sidebar-panel { width: 320px; background: var(--bg-surface); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; z-index: 10; flex-shrink: 0; box-shadow: -2px 0 10px rgba(0,0,0,0.02); overflow-y: auto; overflow-x: hidden; transition: width 0.2s ease, min-width 0.2s ease, opacity 0.15s ease; }
     .sidebar-panel.collapsed { width: 0; min-width: 0; border-left: none; opacity: 0; pointer-events: none; }
     .sidebar-panel > * { width: 320px; flex-shrink: 0; } /* daralırken içerik sıkışmasın, olduğu gibi kaysın */
+    /* Sağ panel = Model Ağacı (üstte, en çok ~%30 / 300px) + Nesne Özellikleri (kalan TÜM boşluk).
+       Panel kendi içinde kaymaz; her bölüm kendi içinde kayar → bir şekli düzenlerken ayarlar
+       aşağı kayıp kaybolmaz. (Çok küçük ekranda inspector en az 160px kalır, panel kayar.) */
+    .sidebar-panel > .outliner-section { display: flex; flex-direction: column; max-height: min(300px, 30vh); }
+    .sidebar-panel > .inspector-section { display: flex; flex-direction: column; flex: 1 1 0; min-height: 160px; overflow-y: auto; }
+    .outliner-section > .panel-header, .inspector-section > .panel-header { position: sticky; top: 0; z-index: 2; flex-shrink: 0; }
     .sidebar-toggle-tab { position: absolute; top: 12px; right: 320px; z-index: 15; width: 22px; height: 40px; border: 1px solid var(--border-color); border-right: none; background: var(--bg-surface); color: var(--text-secondary); border-radius: 8px 0 0 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; box-shadow: -2px 0 6px rgba(0,0,0,0.06); transition: right 0.2s ease; }
     .sidebar-toggle-tab:hover { background: var(--bg-surface-2); color: var(--accent-primary); }
     .studio-layout.sidebar-collapsed .sidebar-toggle-tab { right: 0; }
@@ -113,7 +119,7 @@
 
     @media (prefers-color-scheme: dark) { .viewport-panel { background: #0f172a; } }
 
-    .prompt-box { padding: 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-2); }
+    .prompt-box { padding: 12px 0 0; }
     .prompt-input { width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 0.9rem; resize: vertical; min-height: 70px; box-sizing: border-box; outline: none; transition: border-color 0.2s; }
     .prompt-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(46, 108, 209, 0.1); }
     .prompt-input:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -122,7 +128,7 @@
     #btn-generate { display: flex; align-items: center; justify-content: center; gap: 6px; }
 
     /* AI Kodu (düzenlenebilir, sandbox'ta çalıştırılır) */
-    #ai-code-panel { display: none; border-bottom: 1px solid var(--border-subtle); }
+    #ai-code-panel { display: none; margin-top: 16px; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
     #ai-code { width: 100%; min-height: 130px; border: none; background: #1e1e1e; color: #d4d4d4; font-family: 'Fira Code', monospace; font-size: 12px; padding: 12px 16px; box-sizing: border-box; resize: vertical; outline: none; line-height: 1.5; display: block; }
     .ai-code-actions { display: flex; gap: 8px; padding: 10px 16px; background: var(--bg-surface-2); }
     .ai-code-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; }
@@ -135,10 +141,10 @@
     .panel-header-action:hover { color: var(--accent-primary); }
 
     /* Kayıtlı Tasarımlar (Firestore ERP geçmişi) */
-    #save-box { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface); display: flex; gap: 8px; }
+    #save-box { padding: 12px 0; display: flex; gap: 8px; }
     #design-name { flex: 1; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.82rem; background: var(--bg-surface); color: var(--text-primary); }
     #save-box button { display: flex; align-items: center; gap: 6px; }
-    #designs-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+    #designs-list { list-style: none; margin: 0; padding: 8px 0; display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
     #designs-list .empty-hint { padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
     .design-row { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; border: 1px solid var(--border-subtle); }
     .design-row .d-info { flex-grow: 1; overflow: hidden; }
@@ -149,7 +155,7 @@
     .design-row .d-del:hover { color: var(--accent-danger); }
 
     /* Model Ağacı (Outliner) */
-    #outliner-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+    #outliner-list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
     #outliner-list .empty-hint { padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
     .outliner-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
     .outliner-row:hover { background: var(--bg-surface-2); }
@@ -223,6 +229,10 @@
     .help-modal-close { background: none; border: none; cursor: pointer; color: var(--text-secondary); width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .help-modal-close:hover { background: var(--bg-surface-2); color: var(--accent-danger); }
     .help-modal-body { padding: 8px 20px 20px; }
+    .help-modal.modal-wide { width: min(640px, 100%); max-height: 90vh; }
+    .designs-toolbar { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+    #designs-search { flex: 1; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.82rem; background: var(--bg-surface); color: var(--text-primary); }
+    #designs-count { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
     .help-modal-body section { margin-top: 16px; }
     .help-modal-body h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 0 0 8px; }
     .help-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -342,6 +352,7 @@
                           </div>
                       </div>
                       <button class="tool-icon-btn" style="color:var(--accent-success);" title="ERP'ye Kaydet" onclick="window.saveDesign()"><i data-lucide="save"></i></button>
+                      <button class="tool-icon-btn" title="Kayıtlı Tasarımlar" onclick="window.toggleDesignsModal()"><i data-lucide="folder-open"></i></button>
                   </div>
                   <div class="toolbar-sep tb-sep"></div>
 
@@ -388,6 +399,7 @@
                       <button class="tool-icon-btn" title="Yüzüstü Yatır (F) — zemine gelecek yüzeye tıklayın" onclick="window.layFlatSelected()"><i data-lucide="layers"></i></button>
                   </div>
                   <div class="toolbar-sep tb-sep"></div>
+                  <button class="tool-icon-btn" style="color:var(--accent-primary);" title="AI Tasarım Asistanı" onclick="window.toggleAIModal()"><i data-lucide="sparkles"></i></button>
                   <button class="tool-icon-btn" title="Yardım ve Kısayollar" onclick="window.toggleHelpModal()"><i data-lucide="circle-help"></i></button>
               </div>
           </div>
@@ -418,48 +430,17 @@
 
       <button class="sidebar-toggle-tab" id="sidebar-toggle" title="Paneli Gizle/Göster (\\)">▶</button>
 
-      <!-- Sağ Panel (Faz 6): AI Tasarım Asistanı, Kayıtlı Tasarımlar, AI Kodu,
-           Model Ağacı, Inspector — kullanıcı talebiyle Şekil Kütüphanesi'yle
-           (artık solda) yer değiştirdi. -->
+      <!-- Sağ Panel: sadece Model Ağacı + Nesne Özellikleri. AI Tasarım Asistanı ve Kayıtlı
+           Tasarımlar artık araç çubuğundaki butonlardan açılan modallardadır (sayfanın altı). -->
       <aside class="sidebar-panel">
-          <div class="prompt-box">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                  <label style="font-weight:700; font-size:0.9rem; color:var(--text-primary); display:flex; align-items:center; gap:6px;"><i data-lucide="sparkles"></i> AI Tasarım Asistanı <span class="sandbox-badge"><i data-lucide="shield-check"></i> Sandbox'ta çalışır</span></label>
-              </div>
-              <textarea id="ai-prompt" class="prompt-input" placeholder="Ne üretmek istersiniz? Örn: Kenarında asma deliği olan, üzerinde 'İznik' yazılı bir anahtarlık tasarla..."></textarea>
-              <div style="display:flex; gap:8px; margin-top:12px;">
-                  <button onclick="window.generateWithAI()" id="btn-generate" class="btn btn-primary" style="flex:1; padding:10px;"><i data-lucide="wand-2"></i> Üret</button>
-              </div>
-          </div>
-
-          <!-- Kayıtlı Tasarımlar (Faz 4: Firestore ERP geçmişi/versiyonlama) -->
-          <div id="save-box">
-              <input type="text" id="design-name" placeholder="Tasarım adı (boş bırakılırsa otomatik)">
-              <button class="btn btn-sm btn-primary" style="padding:8px 14px;" onclick="window.saveDesign()"><i data-lucide="save"></i> Kaydet</button>
-          </div>
-          <div class="panel-section">
-              <div class="panel-header"><span class="panel-header-title"><i data-lucide="folder-open"></i> Kayıtlı Tasarımlar</span> <span id="designs-refresh" class="panel-header-action" onclick="window.loadDesignsList()" title="Yenile"><i data-lucide="refresh-cw"></i></span></div>
-              <ul id="designs-list"><li class="empty-hint">Henüz kayıtlı tasarım yok.</li></ul>
-          </div>
-
-          <!-- AI Kodu: üretilen/düzenlenen JS-CAD DSL kodu, HER ZAMAN izole sandbox'ta çalıştırılır -->
-          <div id="ai-code-panel">
-              <div class="panel-header"><span class="panel-header-title"><i data-lucide="file-code-2"></i> AI Kodu (düzenlenebilir)</span></div>
-              <textarea id="ai-code" spellcheck="false"></textarea>
-              <div class="ai-code-actions">
-                  <button class="btn btn-sm" style="background:var(--bg-surface); border:1px solid var(--border-color); flex:1;" onclick="window.runAICode()"><i data-lucide="play"></i> Kodu Çalıştır</button>
-              </div>
-              <div class="ai-status-line" id="ai-status-line"></div>
-          </div>
-
           <!-- Model Ağacı (Outliner) -->
-          <div class="panel-section">
+          <div class="panel-section outliner-section">
               <div class="panel-header"><span class="panel-header-title"><i data-lucide="list-tree"></i> Model Ağacı</span></div>
               <ul id="outliner-list"><li class="empty-hint">Henüz şekil eklenmedi. Üstteki araç çubuğundan bir şekil ekleyin.</li></ul>
           </div>
 
           <!-- Inspector: Seçili Nesne Özellikleri -->
-          <div class="panel-section" style="flex-grow:1; display:flex; flex-direction:column; overflow-y:auto;">
+          <div class="panel-section inspector-section">
               <div class="panel-header"><span class="panel-header-title"><i data-lucide="sliders-horizontal"></i> Nesne Özellikleri</span></div>
               <div id="inspector-empty">Bir nesne seçmediniz.<br>Model ağacından veya sahneden bir parça seçin.</div>
               <div id="inspector-body"></div>
@@ -481,6 +462,58 @@
   </div>
 
   </div><!-- /#main-content -->
+
+  <!-- AI Tasarım Asistanı Modalı (eskiden sağ panelde) — yardım modalıyla aynı yapı/sınıflar -->
+  <div class="help-modal-overlay" id="ai-modal-overlay" onclick="if(event.target===this) window.toggleAIModal(false)">
+    <div class="help-modal modal-wide">
+      <div class="help-modal-header">
+        <h3><i data-lucide="sparkles"></i> AI Tasarım Asistanı <span class="sandbox-badge"><i data-lucide="shield-check"></i> Sandbox'ta çalışır</span></h3>
+        <button class="help-modal-close" onclick="window.toggleAIModal(false)" title="Kapat (Esc)"><i data-lucide="x"></i></button>
+      </div>
+      <div class="help-modal-body">
+        <div class="prompt-box">
+            <textarea id="ai-prompt" class="prompt-input" placeholder="Ne üretmek istersiniz? Örn: Kenarında asma deliği olan, üzerinde 'İznik' yazılı bir anahtarlık tasarla..."></textarea>
+            <div style="display:flex; gap:8px; margin-top:12px;">
+                <button onclick="window.generateWithAI()" id="btn-generate" class="btn btn-primary" style="flex:1; padding:10px;"><i data-lucide="wand-2"></i> Üret</button>
+            </div>
+        </div>
+
+        <!-- AI Kodu: üretilen/düzenlenen JS-CAD DSL kodu, HER ZAMAN izole sandbox'ta çalıştırılır -->
+        <div id="ai-code-panel">
+            <div class="panel-header"><span class="panel-header-title"><i data-lucide="file-code-2"></i> AI Kodu (düzenlenebilir)</span></div>
+            <textarea id="ai-code" spellcheck="false"></textarea>
+            <div class="ai-code-actions">
+                <button class="btn btn-sm" style="background:var(--bg-surface); border:1px solid var(--border-color); flex:1;" onclick="window.runAICode()"><i data-lucide="play"></i> Kodu Çalıştır</button>
+            </div>
+            <div class="ai-status-line" id="ai-status-line"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kayıtlı Tasarımlar Modalı (eskiden sağ panelde; Firestore ERP geçmişi/versiyonlama) -->
+  <div class="help-modal-overlay" id="designs-modal-overlay" onclick="if(event.target===this) window.toggleDesignsModal(false)">
+    <div class="help-modal modal-wide">
+      <div class="help-modal-header">
+        <h3><i data-lucide="folder-open"></i> Kayıtlı Tasarımlar</h3>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <button class="help-modal-close" id="designs-refresh" onclick="window.loadDesignsList()" title="Listeyi yenile"><i data-lucide="refresh-cw"></i></button>
+          <button class="help-modal-close" onclick="window.toggleDesignsModal(false)" title="Kapat (Esc)"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <div class="help-modal-body">
+        <div id="save-box">
+            <input type="text" id="design-name" placeholder="Tasarım adı (boş bırakılırsa otomatik)">
+            <button class="btn btn-sm btn-primary" style="padding:8px 14px;" onclick="window.saveDesign()"><i data-lucide="save"></i> Kaydet</button>
+        </div>
+        <div class="designs-toolbar">
+            <input type="search" id="designs-search" placeholder="Tasarımlarda ara..." oninput="window.filterDesignsList()">
+            <span id="designs-count"></span>
+        </div>
+        <ul id="designs-list"><li class="empty-hint">Henüz kayıtlı tasarım yok.</li></ul>
+      </div>
+    </div>
+  </div>
 
   <!-- Faz 7 — Yardım / Kısayollar Modalı -->
   <div class="help-modal-overlay" id="help-modal-overlay" onclick="if(event.target===this) window.toggleHelpModal(false)">

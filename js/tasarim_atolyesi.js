@@ -1625,11 +1625,37 @@ window.toggleToolbarMobile = function () {
 // çevirir (toolbar butonu ve `?` kısayolu için); açık/kapalı state'i CSS
 // `.open` sınıfıyla yönetilir (overlay zaten `display:none` varsayılan).
 window.toggleHelpModal = function (show) {
-    const overlay = document.getElementById("help-modal-overlay");
-    if (!overlay) return;
+    return toggleModal("help-modal-overlay", show);
+};
+
+// Ortak modal aç/kapat (Yardım, AI Asistan, Kayıtlı Tasarımlar aynı `.help-modal-overlay` yapısını
+// kullanır). Dönüş: modal şu an açık mı.
+const MODAL_IDS = ["help-modal-overlay", "ai-modal-overlay", "designs-modal-overlay"];
+function toggleModal(id, show) {
+    const overlay = document.getElementById(id);
+    if (!overlay) return false;
     const willShow = typeof show === "boolean" ? show : !overlay.classList.contains("open");
+    if (willShow) MODAL_IDS.forEach((other) => { if (other !== id) document.getElementById(other)?.classList.remove("open"); }); // tek seferde tek modal
     overlay.classList.toggle("open", willShow);
     if (willShow) refreshIcons();
+    return willShow;
+}
+
+function openModalId() {
+    return MODAL_IDS.find((id) => document.getElementById(id)?.classList.contains("open")) || null;
+}
+
+// AI Tasarım Asistanı modalı: açılınca tarif kutusuna odaklanır.
+window.toggleAIModal = function (show) {
+    if (toggleModal("ai-modal-overlay", show)) setTimeout(() => document.getElementById("ai-prompt")?.focus(), 30);
+};
+
+// Kayıtlı Tasarımlar modalı: açılınca liste tazelenir (sağ panelde sürekli görünmediği için her açılışta).
+window.toggleDesignsModal = function (show) {
+    if (toggleModal("designs-modal-overlay", show)) {
+        window.loadDesignsList();
+        setTimeout(() => document.getElementById("designs-search")?.focus(), 30);
+    }
 };
 
 // Sürüklerken canlı mm okuması — Tinkercad'in sürükleme sırasında gösterdiği
@@ -2002,6 +2028,16 @@ window.nudgeSelected = async function (key, large) {
 document.addEventListener("keydown", function (e) {
     const tag = document.activeElement ? document.activeElement.tagName : "";
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+    // Bir modal (Yardım / AI / Kayıtlı Tasarımlar) açıkken sahne kısayolları (Delete, ok tuşları, Ctrl+Z,
+    // G/S/F...) çalışmaz — aksi halde modalda bir butona odaklıyken Delete arkadaki seçili nesneyi
+    // silerdi. Sadece Esc modalı kapatır ("?" yardım modalını kapatır); yazı alanlarında da Esc çalışır.
+    const openModal = openModalId();
+    if (openModal) {
+        if (e.key === "Escape") { e.preventDefault(); toggleModal(openModal, false); }
+        else if (e.key === "?" && openModal === "help-modal-overlay" && !typing) { e.preventDefault(); toggleModal(openModal, false); }
+        return;
+    }
 
     if (e.ctrlKey && e.key.toLowerCase() === "z" && !typing) { e.preventDefault(); window.undo(); return; }
     if (e.ctrlKey && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z")) && !typing) { e.preventDefault(); window.redo(); return; }
@@ -4807,10 +4843,13 @@ window.runAICode = async function () {
         const brushes = await addValidatedNodesAsGroup(nodes);
         setAIStatus(`${brushes.length} şekil sahneye eklendi.`);
         statusMsg.innerText = `AI: ${brushes.length} şekil eklendi.`;
+        window.toggleAIModal(false); // sonuç sahnede görünsün; kod/tarif modalda saklı kalır, yeniden açılınca düzenlenebilir
+        return true;
     } catch (e) {
         console.error("AI-CAD hatası:", e);
-        setAIStatus(e.message, true);
+        setAIStatus(e.message, true); // hata modalda görünür (modal açık kalır)
         statusMsg.innerText = "AI kodu çalıştırılamadı.";
+        return false;
     }
 };
 
@@ -5278,6 +5317,49 @@ window.saveDesign = async function () {
     }
 };
 
+// Kayıtlı Tasarımlar listesi: Firestore'dan bir kez çekilip `designsCache`te tutulur; arama kutusu
+// (filterDesignsList) sunucuya gitmeden bu önbellek üzerinde süzer. Liste kendi içinde kayar
+// (#designs-list max-height: 60vh). En yeni 200 tasarım getirilir.
+const DESIGNS_LIST_LIMIT = 200;
+let designsCache = [];
+
+function renderDesignsList() {
+    const list = document.getElementById("designs-list");
+    const countEl = document.getElementById("designs-count");
+    const term = (document.getElementById("designs-search")?.value || "").trim().toLocaleLowerCase("tr-TR");
+    const rows = term ? designsCache.filter((x) => String(x.data.name || "Adsız").toLocaleLowerCase("tr-TR").includes(term)) : designsCache;
+    if (countEl) countEl.textContent = designsCache.length ? (term ? `${rows.length} / ${designsCache.length}` : `${designsCache.length} tasarım`) : "";
+    if (designsCache.length === 0) {
+        list.innerHTML = `<li class="empty-hint">Henüz kayıtlı tasarım yok.</li>`;
+        return;
+    }
+    if (rows.length === 0) {
+        list.innerHTML = `<li class="empty-hint">Aramayla eşleşen tasarım yok.</li>`;
+        return;
+    }
+    list.innerHTML = "";
+    rows.forEach(({ id, data: d }) => {
+        const when = d.createdAt && d.createdAt.toDate ? d.createdAt.toDate().toLocaleString("tr-TR") : "—";
+        const size = d.boundingSize ? `${d.boundingSize.x}×${d.boundingSize.y}×${d.boundingSize.z}mm` : "";
+        const row = document.createElement("li");
+        row.className = "design-row";
+        row.innerHTML = `
+            <div class="d-info">
+                <div class="d-name">${escapeHtml(d.name || "Adsız")}</div>
+                <div class="d-meta">${when} · ${d.triangleCount || 0} üçgen · ${size}</div>
+            </div>
+            <button class="d-load" title="Sahneye Yükle"><i data-lucide="folder-open"></i></button>
+            <button class="d-del" title="Sil"><i data-lucide="trash-2"></i></button>
+        `;
+        row.querySelector(".d-load").addEventListener("click", () => window.loadDesign(id));
+        row.querySelector(".d-del").addEventListener("click", () => window.deleteDesignRecord(id, d.name));
+        list.appendChild(row);
+    });
+    refreshIcons();
+}
+
+window.filterDesignsList = function () { renderDesignsList(); };
+
 window.loadDesignsList = async function () {
     const list = document.getElementById("designs-list");
     if (!currentUser) {
@@ -5290,33 +5372,11 @@ window.loadDesignsList = async function () {
             collection(db, "tool_3d_designs"),
             where("userId", "==", currentUser.uid),
             orderBy("createdAt", "desc"),
-            limit(30)
+            limit(DESIGNS_LIST_LIMIT)
         );
         const snap = await getDocs(q);
-        if (snap.empty) {
-            list.innerHTML = `<li class="empty-hint">Henüz kayıtlı tasarım yok.</li>`;
-            return;
-        }
-        list.innerHTML = "";
-        snap.forEach((docSnap) => {
-            const d = docSnap.data();
-            const when = d.createdAt && d.createdAt.toDate ? d.createdAt.toDate().toLocaleString("tr-TR") : "—";
-            const size = d.boundingSize ? `${d.boundingSize.x}×${d.boundingSize.y}×${d.boundingSize.z}mm` : "";
-            const row = document.createElement("li");
-            row.className = "design-row";
-            row.innerHTML = `
-                <div class="d-info">
-                    <div class="d-name">${escapeHtml(d.name || "Adsız")}</div>
-                    <div class="d-meta">${when} · ${d.triangleCount || 0} üçgen · ${size}</div>
-                </div>
-                <button class="d-load" title="Sahneye Yükle"><i data-lucide="folder-open"></i></button>
-                <button class="d-del" title="Sil"><i data-lucide="trash-2"></i></button>
-            `;
-            row.querySelector(".d-load").addEventListener("click", () => window.loadDesign(docSnap.id));
-            row.querySelector(".d-del").addEventListener("click", () => window.deleteDesignRecord(docSnap.id, d.name));
-            list.appendChild(row);
-        });
-        refreshIcons();
+        designsCache = snap.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
+        renderDesignsList();
     } catch (err) {
         console.error("loadDesignsList:", err);
         list.innerHTML = `<li class="empty-hint">Yüklenirken hata oluştu (konsola bakın).</li>`;
@@ -5339,6 +5399,7 @@ window.loadDesign = async function (id) {
         document.getElementById("design-name").value = data.name || "";
         document.getElementById("status-msg").innerText = `"${data.name || "Adsız"}" sahneye yüklendi.`;
         window.resetCamera();
+        window.toggleDesignsModal(false);
     } catch (err) {
         console.error("loadDesign:", err);
         alert("Yükleme sırasında hata oluştu: " + err.message);
@@ -5371,7 +5432,6 @@ window.addEventListener("load", async () => {
     renderOutliner();
     renderInspector();
     refreshUndoRedoButtons();
-    window.loadDesignsList();
     renderFavorites(); // Faz 8 — localStorage'daki Sık Kullanılanlar listesi
     // Faz 7 — sayfadaki TÜM statik <i data-lucide="..."> etiketlerini (ribbon
     // araç çubuğu, panel başlıkları, yardım modalı vb.) dönüştür. Dinamik
