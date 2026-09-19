@@ -928,7 +928,8 @@ function init3D() {
     let dragGroup = null;          // sürüklenen TÜM brush'lar (tekil veya çoklu seçim)
     let dragGroupStart = null;     // [{brush, position}] — undo için
     let dragStartWorldPoint = null;
-    let dragStartObjPos = null;
+    let dragPlaneY = 0;            // sürükleme düzleminin yüksekliği = tıklanan yüzey noktasının Y'si
+    let dragStartHit = null;       // pointerdown'da vurulan dünya noktası (sürüklemenin tutunma noktası)
     let marqueeCandidate = false;  // boş alanda basıldı, henüz eşik aşılmadı
     let isMarqueeSelecting = false;
     let marqueeStartScreen = null;
@@ -957,7 +958,12 @@ function init3D() {
     function raycastGroundAt(e, y) {
         groundPlane.set(new THREE.Vector3(0, 1, 0), -y);
         raycaster.setFromCamera(ndcFromEvent(e), camera);
-        return raycaster.ray.intersectPlane(groundPlane, planeHit) ? planeHit.clone() : null;
+        // Kamera yatay açıya yakınken (ışın düzleme neredeyse paralel) kesişim noktası sonsuza kaçar ve obje
+        // fırlardı; ~1°'nin altında ya da çok uzakta kesişim geçersiz sayılır (obje o karede yerinde kalır).
+        if (Math.abs(raycaster.ray.direction.y) < 0.02) return null;
+        if (!raycaster.ray.intersectPlane(groundPlane, planeHit)) return null;
+        if (planeHit.distanceTo(camera.position) > 20000) return null;
+        return planeHit.clone();
     }
     function worldToScreen(worldPos) {
         const v = worldPos.clone().project(camera);
@@ -1077,12 +1083,15 @@ function init3D() {
         isBodyDragging = false;
         marqueeCandidate = false;
         isMarqueeSelecting = false;
-        if (transformControls.axis) return; // gizmo tutamacı tıklandı, bize düşen iş yok
+        // ÖNCELİK: 1) gizmo tutamacı (axis dolu ya da gizmo sürükleniyor) → tamamen TransformControls'un işi;
+        // 2) obje gövdesi → serbest gövde sürükleme adayı; 3) boş alan → çerçeve seçimi.
+        if (transformControls.axis || transformControls.dragging) return;
 
         raycaster.setFromCamera(ndcFromEvent(e), camera);
         const hits = raycaster.intersectObjects(visibleCsgChildren(), false);
         if (hits.length > 0) {
             dragCandidate = hits[0].object;
+            dragStartHit = hits[0].point.clone();
         } else if (currentTransformMode !== "measure" && !layFlatMode) {
             // Boş alan → çerçeveyle (marquee) çoklu seçim adayı. Sadece Seç aracında değil, Taşı/
             // Döndür/Ölçekle araçlarındayken de çalışır (gizmo tutamacı tıklanmadıysa — yukarıda elenir).
@@ -1130,10 +1139,14 @@ function init3D() {
             return;
         }
 
-        // ── Serbest gövde sürükleme (sadece "Taşı" aracında) ──
-        // Kilitli bir şekil ASLA fareyle sürüklenemez — "TransformControls
-        // bağlanamaz" kuralının serbest-sürükleme karşılığı.
-        if (!dragCandidate || transformControls.axis || currentTransformMode !== "translate" || dragCandidate.userData.locked) return;
+        // ── Serbest gövde sürükleme ("Seç" VE "Taşı" araçlarında) ──
+        // Objenin gövdesinden tutup sürüklemek zemin (XZ) düzleminde taşır — Tinkercad/Fusion gibi, gizmo'nun
+        // düzlem karelerine (yatay kamera açısında tıklanamaz) mecbur kalmadan. Boş alandan sürükleme
+        // marquee'dir (dragCandidate yoktur). Gizmo tutamacı üstündeyken (axis) ya da gizmo sürüklenirken
+        // gövde sürükleme ASLA başlamaz — iki mekanizma birbirini ezmez.
+        // Kilitli bir şekil ASLA fareyle sürüklenemez — "TransformControls bağlanamaz" kuralının karşılığı.
+        const bodyDragTool = currentTransformMode === "select" || currentTransformMode === "translate";
+        if (!dragCandidate || transformControls.axis || transformControls.dragging || !bodyDragTool || dragCandidate.userData.locked) return;
         const moved = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
 
         if (!isBodyDragging) {
@@ -1163,8 +1176,12 @@ function init3D() {
                 if (clones.length > 1) selectMultiple(clones); else selectNode(clones[0]);
             }
             dragGroupStart = dragGroup.map((b) => ({ brush: b, position: b.position.toArray() }));
-            dragStartObjPos = dragCandidate.position.clone();
-            dragStartWorldPoint = raycastGroundAt(e, dragStartObjPos.y);
+            // Sürükleme düzlemi TIKLANAN YÜZEY NOKTASININ yüksekliğinde ve tutunma noktası da pointerdown'daki
+            // vuruş noktasıdır: obje imlecin altında kalır (uzun bir objenin tepesinden tutunca da) ve eşik
+            // (5 px) yüzünden imleçle obje arasında kalıcı bir sapma oluşmaz. Eskiden obje ORİJİNİNİN
+            // yüksekliğindeki düzlem + eşik anındaki nokta kullanılıyordu.
+            dragPlaneY = dragStartHit ? dragStartHit.y : dragCandidate.position.y;
+            dragStartWorldPoint = dragStartHit ? dragStartHit.clone() : raycastGroundAt(e, dragPlaneY);
             // Akıllı kılavuzlar için sabit parçaların sınır kutuları (sürüklenenler hariç).
             dragStaticBoxes = visibleCsgChildren()
                 .filter((c) => !dragGroup.includes(c))
@@ -1174,7 +1191,7 @@ function init3D() {
             showDragTooltip();
         }
 
-        const current = raycastGroundAt(e, dragStartObjPos.y);
+        const current = raycastGroundAt(e, dragPlaneY);
         if (!current || !dragStartWorldPoint) return;
         const dx = current.x - dragStartWorldPoint.x;
         const dz = current.z - dragStartWorldPoint.z;
@@ -1849,6 +1866,9 @@ const SHAPE_LIBRARY = [
     { type: "wedge", icon: "triangle-right", label: "Takoz" },
     { type: "halfcylinder", icon: "contrast", label: "Yarım Silindir" },
     { type: "hexprism", icon: "hexagon", label: "Altıgen Prizma" },
+    { type: "octprism", icon: "octagon", label: "Sekizgen Prizma" },
+    { type: "trapezoid", icon: "mountain", label: "Kesik Piramit" },
+    { type: "capsule", icon: "pill", label: "Kapsül" },
     { type: "torus", icon: "donut", label: "Simit" },
     { type: "tube", icon: "circle-dashed", label: "Tüp/Halka" },
     { type: "dome", icon: "moon", label: "Kubbe" },
@@ -2271,7 +2291,7 @@ function activeSelectionList() {
 }
 
 const DEFAULT_PARAMS = {
-    box: { width: 30, height: 15, depth: 30 },
+    box: { width: 20, height: 20, depth: 20 },
     cylinder: { radius: 15, height: 15 },
     sphere: { radius: 15 },
     text: { value: "OZI", size: 8, depth: 2, font: "roboto_bold", maxWidth: 0 }, // maxWidth (mm): 0 = sınırsız / otomatik sığdırma kapalı
@@ -2285,7 +2305,10 @@ const DEFAULT_PARAMS = {
     icosahedron: { radius: 15 },
     star: { radius: 15, depth: 4 },
     heart: { size: 20, depth: 4 },
-    roundedbox: { width: 30, height: 15, depth: 30, radius: 3 },
+    roundedbox: { width: 20, height: 20, depth: 20, radius: 3 },
+    capsule: { radius: 8, height: 30 },              // height = TOPLAM boy (iki yarım küre dahil), ≥ 2 × radius
+    octprism: { radius: 15, height: 20 },            // radius = köşe mesafesi (çevrel çember)
+    trapezoid: { bottomRadius: 15, topRadius: 8, height: 20 }, // 4 kenarlı kesik piramit; yarıçaplar köşeye
     wedge: { width: 30, height: 20, depth: 20 },   // width: taban (X), height: dik kenar (Y), depth: kalınlık (Z)
     halfcylinder: { radius: 15, depth: 30 },       // radius: yarım daire (Y = radius), depth: silindir ekseni boyu (Z)
 };
@@ -2466,6 +2489,21 @@ function buildGeometry(type, params) {
             outer.geometry.dispose(); inner.geometry.dispose();
             return result.geometry;
         }
+        case "capsule": {
+            // Kapsül: iki yarım küre + silindir gövde; height = TOPLAM boy. Yarıçap boyun yarısını aşamaz
+            // (reconcileCrossParams aynı kuralı uygular; burada da savunma amaçlı kırpılır).
+            const r = Math.min(params.radius, params.height / 2);
+            const mid = Math.max(0.001, params.height - 2 * r);
+            return new THREE.CapsuleGeometry(r, mid, 6, 24);
+        }
+        case "octprism": {
+            // 22.5° döndürülür: düz yüzeyler X/Z eksenlerine bakar (dur işareti gibi), köşe eksende değil.
+            return new THREE.CylinderGeometry(params.radius, params.radius, params.height, 8).rotateY(Math.PI / 8);
+        }
+        case "trapezoid": {
+            // 4 kenarlı silindir = kesik piramit; 45° döndürülür → kenarlar eksenlere paralel (kare taban/tepe).
+            return new THREE.CylinderGeometry(params.topRadius, params.bottomRadius, params.height, 4).rotateY(Math.PI / 4);
+        }
         case "wedge": {
             // Takoz (dik üçgen prizma): dik açı sol-altta, eğim sağa iner. 2D dik üçgeni (XY) Z'ye
             // ekstrüde ederiz → ExtrudeGeometry kapaklı ve kapalı (watertight) bir mesh üretir
@@ -2585,6 +2623,7 @@ function labelFor(type) {
         cone: "Koni", pyramid: "Piramit", triprism: "Üçgen Prizma", hexprism: "Altıgen Prizma",
         torus: "Simit", tube: "Tüp/Halka", dome: "Kubbe", icosahedron: "İkosahedron",
         star: "Yıldız", heart: "Kalp", roundedbox: "Yuvarlak Köşeli Küp", wedge: "Takoz", halfcylinder: "Yarım Silindir",
+        capsule: "Kapsül", octprism: "Sekizgen Prizma", trapezoid: "Kesik Piramit",
         "stl-import": "STL", "svg-import": "SVG", "photo-relief": "Fotoğraf Kabartma",
     }[type] || "Şekil";
 }
@@ -3361,7 +3400,7 @@ function estimateSceneTriangles() {
 // üstel/karesel patlıyor (bizzat test edilip doğrulandı: 15 çakışan eğrisel
 // şekil, TOPLAM üçgen sayısı eşiğin altında kalsa bile dakikalarca kilitlendi).
 // Bu yüzden 2+ eğrisel şekil varsa üçgen toplamına KARESEL bir "ceza" ekliyoruz.
-const CURVED_SHAPE_TYPES = new Set(["sphere", "cone", "cylinder", "torus", "tube", "dome", "icosahedron", "roundedbox", "text", "halfcylinder"]);
+const CURVED_SHAPE_TYPES = new Set(["sphere", "cone", "cylinder", "torus", "tube", "dome", "icosahedron", "roundedbox", "text", "halfcylinder", "capsule"]);
 function estimateSceneRisk() {
     let triangleSum = 0;
     let curvedCount = 0;
@@ -3806,7 +3845,8 @@ function renderInspector() {
                     const adjusted = reconcileCrossParams(brush.userData.type, trial, key);
                     if (adjusted) {
                         newVal = trial[adjusted];
-                        const msg = `${paramLabel(adjusted)} geçerli aralığa çekildi: ${newVal} mm (iç değer dıştan küçük olmalı).`;
+                        const why = brush.userData.type === "capsule" ? "toplam boy ≥ 2 × yarıçap olmalı" : "iç değer dıştan küçük olmalı";
+                        const msg = `${paramLabel(adjusted, brush.userData.type)} geçerli aralığa çekildi: ${newVal} mm (${why}).`;
                         document.getElementById("status-msg").innerText = msg;
                         showToast(msg, "warning");
                     }
@@ -3995,7 +4035,10 @@ window.resetScaleSelected = async function () {
 function paramLabel(key, type) {
     // Prizma/piramit/ikosahedron "yarıçapı" KÖŞE mesafesidir (çevrel çember) — düz kenar
     // genişliği bundan küçüktür (altıgen: 2r yerine ≈1.73r).
-    if (key === "radius" && ["triprism", "hexprism", "pyramid", "icosahedron"].includes(type)) return "Yarıçap (köşeye)";
+    if (key === "radius" && ["triprism", "hexprism", "octprism", "pyramid", "icosahedron"].includes(type)) return "Yarıçap (köşeye)";
+    if (key === "bottomRadius") return "Alt Yarıçap (köşeye)";
+    if (key === "topRadius") return "Üst Yarıçap (köşeye)";
+    if (key === "height" && type === "capsule") return "Toplam Boy";
     if (key === "depth" && type === "halfcylinder") return "Uzunluk (eksen boyu)";
     return {
         width: "Genişlik", height: "Yükseklik", depth: "Kalınlık/Derinlik", radius: "Yarıçap",
@@ -4016,7 +4059,7 @@ const STAMP_THICKNESS = 0.4; // mm
 const STAMP_THICKNESS_PARAM = {
     text: "depth", star: "depth", heart: "depth",
     box: "height", roundedbox: "height", cylinder: "height", cone: "height",
-    pyramid: "height", triprism: "height", hexprism: "height", tube: "height", wedge: "height",
+    pyramid: "height", triprism: "height", hexprism: "height", tube: "height", wedge: "height", octprism: "height", trapezoid: "height",
 };
 
 window.thinSelectedToStamp = async function () {
@@ -4491,7 +4534,7 @@ const SANDBOX_SRCDOC = `<!DOCTYPE html><html><head><meta charset="utf-8">
 </head><body><script>
 (function () {
   "use strict";
-  var ALLOWED_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox", "wedge", "halfcylinder"];
+  var ALLOWED_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox", "wedge", "halfcylinder", "capsule", "octprism", "trapezoid"];
   var CAD = { _nodes: [] };
 
   function makeNode(type, params) {
@@ -4592,7 +4635,7 @@ function runSandboxed(code) {
 }
 
 const OP_NAME_TO_CONST = { union: ADDITION, subtract: SUBTRACTION, intersect: INTERSECTION };
-const ALL_SHAPE_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox", "wedge", "halfcylinder"];
+const ALL_SHAPE_TYPES = ["box", "cylinder", "sphere", "text", "cone", "pyramid", "triprism", "hexprism", "torus", "tube", "dome", "icosahedron", "star", "heart", "roundedbox", "wedge", "halfcylinder", "capsule", "octprism", "trapezoid"];
 // NOT: "height" alt sınırları 1 → 0.2 mm'ye indirildi: "0.4mm'ye İncelt" (damga)
 // makrosu kaydedilip yeniden yüklenince 1 mm'ye geri KIRPILMASIN.
 const NODE_PARAM_LIMITS = {
@@ -4613,6 +4656,9 @@ const NODE_PARAM_LIMITS = {
     roundedbox: { width: [2, 300], height: [0.2, 300], depth: [2, 300], radius: [0.1, 50] },
     wedge: { width: [1, 300], height: [0.2, 300], depth: [0.2, 300] },
     halfcylinder: { radius: [0.5, 200], depth: [0.2, 300] },
+    capsule: { radius: [0.5, 100], height: [1, 400] },
+    octprism: { radius: [0.5, 200], height: [0.2, 300] },
+    trapezoid: { bottomRadius: [0.5, 200], topRadius: [0.1, 200], height: [0.2, 300] },
 };
 
 // NOT (Faz 9 — sertleştirme): `n === null` iken `Number(null)` === 0 döner ve
@@ -4712,6 +4758,14 @@ function reconcileCrossParams(type, params, changedKey) {
         }
         if (params.innerRadius >= params.outerRadius) {
             params.innerRadius = round2(params.outerRadius - CROSS_GAP); return "innerRadius";
+        }
+    }
+    if (type === "capsule") {
+        if (changedKey === "height" && params.height < params.radius * 2) {
+            params.height = round2(params.radius * 2); return "height";
+        }
+        if (params.radius * 2 > params.height) {
+            params.radius = round2(params.height / 2); return "radius";
         }
     }
     if (type === "torus") {
