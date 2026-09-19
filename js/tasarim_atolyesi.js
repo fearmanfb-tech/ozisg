@@ -4893,6 +4893,100 @@ window.runAICode = async function () {
 // 9. DIŞA AKTARIM VE ERP (Faz 1 kapsamı: gerçek STL / stub ERP)
 // ═══════════════════════════════════════════════════════════════
 
+// T-kesişim onarımı (dışa aktarım): CSG (three-bvh-csg) kesişimlerde bir yüzeyin kenarını böler,
+// komşusunu bölmez → komşu üçgenin kenarının ORTASINA başka bir üçgenin köşesi düşer ("T-kesişim").
+// Köşe paylaşımı indeksle yapıldığı için dilimleyici o kenarları AÇIK/manifold-olmayan sayar
+// (mergeVertices bunları çözemez: köşeler zaten aynı konumda değil, biri diğerinin kenarı üstünde).
+// Çözüm: açık kenarların üstünde (tolerans içinde) yatan köşeler bulunur ve o kenarın sahibi üçgen bu
+// köşelerden yelpaze şeklinde bölünür (sarım yönü korunur) → komşu kenarlarla birebir eşleşir.
+// Sadece AÇIK kenarlar taranır (sıralı-x ile aday daraltma); en çok TJ_MAX_PASSES turda yakınsar.
+// Grup (materyal) aralıkları korunur: bölünen üçgenin parçaları aynı gruba yazılır. Çok büyük açık kenar
+// sayısında (TJ_MAX_OPEN) atlanır (dışa aktarım donmasın). Döndürür: eklenen üçgen sayısı.
+const TJ_MAX_PASSES = 6;
+const TJ_MAX_OPEN = 60000;
+function repairTJunctions(geo, tol = 1e-3) {
+    const idx = geo.index;
+    if (!idx) return 0;
+    const pos = geo.attributes.position;
+    const N = pos.count;
+    const groups = geo.groups && geo.groups.length ? geo.groups : [{ start: 0, count: idx.count, materialIndex: 0 }];
+    let tris = [];
+    groups.forEach((g, gi) => {
+        for (let i = g.start; i < g.start + g.count; i += 3) tris.push([idx.getX(i), idx.getX(i + 1), idx.getX(i + 2), gi]);
+    });
+    const startCount = tris.length;
+    const ek = (u, v) => (u < v ? u * N + v : v * N + u);
+    const EDGES = [[0, 1], [1, 2], [2, 0]];
+
+    for (let pass = 0; pass < TJ_MAX_PASSES; pass++) {
+        const cnt = new Map();
+        tris.forEach((t) => EDGES.forEach(([p, q]) => {
+            if (t[p] === t[q]) return;
+            const k = ek(t[p], t[q]);
+            cnt.set(k, (cnt.get(k) || 0) + 1);
+        }));
+        const openVerts = new Set();
+        let openEdges = 0;
+        tris.forEach((t) => EDGES.forEach(([p, q]) => {
+            if (t[p] !== t[q] && cnt.get(ek(t[p], t[q])) === 1) { openVerts.add(t[p]); openVerts.add(t[q]); openEdges++; }
+        }));
+        if (openEdges === 0 || openEdges > TJ_MAX_OPEN) break;
+
+        const vs = [...openVerts].map((i) => ({ i, x: pos.getX(i), y: pos.getY(i), z: pos.getZ(i) })).sort((a, b) => a.x - b.x);
+        const lowerBound = (x) => { let lo = 0, hi = vs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (vs[m].x < x) lo = m + 1; else hi = m; } return lo; };
+
+        const next = [];
+        let changed = false;
+        for (const t of tris) {
+            let done = false;
+            for (const [p, q] of EDGES) {
+                const u = t[p], v = t[q];
+                if (u === v || cnt.get(ek(u, v)) !== 1) continue;
+                const ax = pos.getX(u), ay = pos.getY(u), az = pos.getZ(u);
+                const dx = pos.getX(v) - ax, dy = pos.getY(v) - ay, dz = pos.getZ(v) - az;
+                const len2 = dx * dx + dy * dy + dz * dz;
+                if (len2 < tol * tol * 4) continue;
+                const len = Math.sqrt(len2);
+                const found = [];
+                for (let k = lowerBound(Math.min(ax, ax + dx) - tol); k < vs.length && vs[k].x <= Math.max(ax, ax + dx) + tol; k++) {
+                    const c = vs[k];
+                    if (c.i === u || c.i === v) continue;
+                    const tt = ((c.x - ax) * dx + (c.y - ay) * dy + (c.z - az) * dz) / len2;
+                    if (tt * len <= tol || (1 - tt) * len <= tol) continue; // uçlara çok yakın: aynı köşe sayılır
+                    const ex = ax + tt * dx - c.x, ey = ay + tt * dy - c.y, ez = az + tt * dz - c.z;
+                    if (ex * ex + ey * ey + ez * ez <= tol * tol) found.push({ i: c.i, tt });
+                }
+                if (found.length === 0) continue;
+                found.sort((a, b) => a.tt - b.tt);
+                const w = t[(p + 2) % 3];
+                let prev = u;
+                found.forEach((f) => { next.push([prev, f.i, w, t[3]]); prev = f.i; });
+                next.push([prev, v, w, t[3]]);
+                changed = true;
+                done = true;
+                break; // bu turda üçgenin tek kenarı bölünür; kalan kenarlar sonraki turda
+            }
+            if (!done) next.push(t);
+        }
+        tris = next;
+        if (!changed) break;
+    }
+
+    if (tris.length === startCount) return 0;
+    // Gruplara göre yeniden diz: indeks aralıkları (start/count) tutarlı kalsın.
+    const order = [];
+    const newGroups = [];
+    groups.forEach((g, gi) => {
+        const start = order.length;
+        tris.forEach((t) => { if (t[3] === gi) order.push(t[0], t[1], t[2]); });
+        newGroups.push({ start, count: order.length - start, materialIndex: g.materialIndex });
+    });
+    geo.setIndex(order);
+    geo.clearGroups();
+    newGroups.forEach((g) => { if (g.count > 0) geo.addGroup(g.start, g.count, g.materialIndex); });
+    return tris.length - startCount;
+}
+
 // Faz 12 DÜZELTME (3MF/STL Vertex Normal Hatası): three-bvh-csg'nin evaluate()
 // çıktısı NON-INDEXED olabiliyor (her üçgen kendi 3 BAĞIMSIZ köşesine sahip —
 // geometrik olarak ÇAKIŞAN komşu üçgen köşeleri AYNI indeksi PAYLAŞMIYOR).
@@ -4916,6 +5010,7 @@ function prepareGeometryForExport(sourceGeometry) {
     const stripped = sourceGeometry.clone();
     Object.keys(stripped.attributes).forEach((name) => { if (name !== "position") stripped.deleteAttribute(name); });
     const geo = mergeVertices(stripped, 1e-3);
+    repairTJunctions(geo);
     geo.computeVertexNormals();
     // Zemine oturtma payı (DROP_PAD = 0.01 mm) sadece ekran içindir: modelin tabanı yatak
     // seviyesinin hemen üstündeyse (0 < minY ≤ pay) dilimleyicide havada kalmasın diye
